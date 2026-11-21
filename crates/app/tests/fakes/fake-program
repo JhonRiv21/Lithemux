@@ -1,0 +1,67 @@
+#!/bin/sh
+# Test double for whatever runs inside a terminal pane: never a login shell
+# and never `claude`.
+case "$1" in
+  greet)
+    printf 'ready\n'
+    exec cat
+    ;;
+  echo-lines)
+    printf 'ready\n'
+    while IFS= read -r line; do
+      printf 'got:%s\n' "$line"
+    done
+    ;;
+  report-size)
+    trap 'printf "size:%s\n" "$(stty size)"' WINCH
+    printf 'ready\n'
+    while :; do
+      sleep 0.05
+    done
+    ;;
+  show-input)
+    # Turns on bracketed paste and shows control characters as text.
+    printf '\033[?2004hready\n'
+    exec cat -v
+    ;;
+  sync-stall)
+    # Opens a synchronized update and never closes it.
+    printf '\033[?2026hframe'
+    sleep 1
+    printf 'prompt$'
+    exec cat
+    ;;
+  ignore-hup)
+    trap '' HUP
+    printf 'pid:%s:\n' "$$"
+    while :; do
+      sleep 0.05
+    done
+    ;;
+  raw-input)
+    # Shows exactly what the program receives, control characters as text.
+    stty -echo
+    printf '\033[?2004hready\n'
+    exec cat -v
+    ;;
+  app-cursor)
+    stty -echo
+    printf '\033[?1hready\n'
+    exec cat -v
+    ;;
+  focus-reports)
+    stty -echo
+    printf '\033[?1004hready\n'
+    exec cat -v
+    ;;
+  color-query)
+    # Sets its own background, then asks the terminal what it is.
+    stty -echo
+    printf '\033]11;#112233\033\\\033]11;?\033\\ready\n'
+    exec cat -v
+    ;;
+  environment)
+    printf 'term:%s color:%s\n' "$TERM" "$COLORTERM"
+    exec cat
+    ;;
+esac

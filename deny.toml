@@ -4,9 +4,18 @@
 
 [graph]
 all-features = true
+targets = ["aarch64-apple-darwin", "x86_64-apple-darwin"]
 
 [advisories]
 version = 2
+# Unmaintained crates that gpui pulls in at the pinned rev; none has a
+# vulnerability advisory. See docs/decisiones.md D-15. Review each one when the
+# gpui rev changes, and no later than the date in its reason.
+ignore = [
+    { id = "RUSTSEC-2026-0192", reason = "ttf-parser: font parsing inside gpui, no replacement at this rev; review by 2027-02-21" },
+    { id = "RUSTSEC-2026-0206", reason = "rustybuzz: text shaping via resvg/usvg inside gpui; review by 2027-02-21" },
+    { id = "RUSTSEC-2026-0543", reason = "chrono: gpui dependency, no network or parsing of untrusted input; review by 2027-02-21" },
+]
 
 [licenses]
 version = 2
@@ -17,6 +26,8 @@ allow = [
     "Unicode-3.0",
     "Zlib",
     "MPL-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
 ]
 
 [bans]
@@ -61,8 +72,22 @@ deny = [
     { crate = "surf" },
     { crate = "curl" },
     { crate = "attohttpc" },
+    { crate = "tungstenite" },
+    # TLS: nothing here opens a connection, so nothing needs it.
+    { crate = "rustls" },
+    { crate = "native-tls" },
+    # Zed's own telemetry and network crates, one `git` dependency away.
+    { crate = "telemetry" },
+    { crate = "telemetry_events" },
+    { crate = "reqwest_client" },
+    { crate = "client" },
 ]
 
 [sources]
 unknown-registry = "deny"
 unknown-git = "deny"
+# gpui is not usable from crates.io; pinned by rev in Cargo.toml (D-14).
+allow-git = [
+    "https://github.com/zed-industries/zed",
+    "https://github.com/zed-industries/font-kit",
+]

@@ -6,9 +6,14 @@ use std::path::{Path, PathBuf};
 
 const REAL_SHELLS: [&str; 3] = ["/bin/sh", "/bin/zsh", "/bin/bash"];
 
+/// Looked up through the PATH, any of these is the machine's real shell.
+const SHELL_NAMES: [&str; 4] = ["zsh", "bash", "sh", "fish"];
+
 /// A test file that mentions any of these can start a process.
-const PROCESS_MARKERS: [&str; 6] = [
+const PROCESS_MARKERS: [&str; 8] = [
     "Command",
+    "ShellCommand",
+    "TerminalSession",
     "cargo_bin",
     "LoginShellProbe",
     "TerminalSessionRunner",
@@ -89,8 +94,14 @@ fn check_text(file: &str, text: &str, out: &mut Vec<Violation>) {
         };
         // A real shell rebuilds the PATH from the machine's profile and finds
         // the real `claude`, so it is banned even as plain test data.
-        if REAL_SHELLS.iter().any(|shell| line.contains(shell)) {
+        let real_shell = REAL_SHELLS.iter().any(|shell| line.contains(shell));
+        if real_shell {
             report("real-shell");
+        }
+        // Where processes can start, a shell named without its path (or run
+        // through `env`) is still the real one.
+        if can_start_processes && !real_shell && string_literals(line).any(names_a_shell) {
+            report("shell-by-name");
         }
         if line.contains("\"SHELL\"") && !line.contains("fake") {
             report("shell-env");
@@ -100,4 +111,44 @@ fn check_text(file: &str, text: &str, out: &mut Vec<Violation>) {
             report("real-claude");
         }
     }
+}
+
+/// The contents of the string literals on a line, escapes left as written.
+fn string_literals(line: &str) -> impl Iterator<Item = &str> {
+    let mut literals = Vec::new();
+    let mut start = None;
+    let mut escaped = false;
+    for (index, c) in line.char_indices() {
+        match (start, c) {
+            (Some(_), _) if escaped => escaped = false,
+            (Some(_), '\\') => escaped = true,
+            (Some(from), '"') => {
+                literals.push(&line[from..index]);
+                start = None;
+            }
+            (None, '"') => start = Some(index + 1),
+            _ => {}
+        }
+    }
+    literals.into_iter()
+}
+
+/// `zsh`, `bash -l`, `/opt/homebrew/bin/fish`, `/usr/bin/env bash`: a program
+/// that is a shell. Anything with `fake` in its path is a test double.
+fn names_a_shell(literal: &str) -> bool {
+    let is_shell = |word: &str| {
+        let name = word.rsplit('/').next().unwrap_or(word);
+        SHELL_NAMES.contains(&name)
+    };
+    let mut words = literal.split_whitespace();
+    let Some(program) = words.next() else {
+        return false;
+    };
+    if program.contains("fake") {
+        return false;
+    }
+    if is_shell(program) {
+        return true;
+    }
+    program.rsplit('/').next() == Some("env") && words.any(is_shell)
 }

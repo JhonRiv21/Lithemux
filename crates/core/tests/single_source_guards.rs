@@ -118,7 +118,7 @@ const TELEMETRY_PREFIXES: [&str; 11] = [
     "dogstatsd",
     "tracing-opentelemetry",
 ];
-const HTTP_CLIENTS: [&str; 9] = [
+const HTTP_CLIENTS: [&str; 16] = [
     "reqwest",
     "hyper",
     "hyper-util",
@@ -128,6 +128,14 @@ const HTTP_CLIENTS: [&str; 9] = [
     "curl",
     "attohttpc",
     "h2",
+    "tungstenite",
+    "rustls",
+    "native-tls",
+    // Zed's own telemetry and network crates.
+    "telemetry",
+    "telemetry_events",
+    "reqwest_client",
+    "client",
 ];
 
 fn forbidden_packages(lock: &str) -> Vec<String> {
@@ -147,10 +155,17 @@ fn forbidden_packages(lock: &str) -> Vec<String> {
 // The guard itself.
 #[test]
 fn the_dependency_guard_recognizes_telemetry_and_http_clients() {
-    let lock = "[[package]]\nname = \"serde\"\n\n[[package]]\nname = \"sentry-core\"\n\n[[package]]\nname = \"reqwest\"\n\n[[package]]\nname = \"posthog-rs\"\n\n[[package]]\nname = \"hyperfine-like\"\n";
+    let lock = "[[package]]\nname = \"serde\"\n\n[[package]]\nname = \"sentry-core\"\n\n[[package]]\nname = \"reqwest\"\n\n[[package]]\nname = \"posthog-rs\"\n\n[[package]]\nname = \"hyperfine-like\"\n\n[[package]]\nname = \"http_client\"\n\n[[package]]\nname = \"telemetry_events\"\n\n[[package]]\nname = \"rustls\"\n\n[[package]]\nname = \"client\"\n";
     assert_eq!(
         forbidden_packages(lock),
-        vec!["sentry-core", "reqwest", "posthog-rs"]
+        vec![
+            "sentry-core",
+            "reqwest",
+            "posthog-rs",
+            "telemetry_events",
+            "rustls",
+            "client"
+        ]
     );
 }
 
@@ -218,7 +233,7 @@ fn the_real_programs_guard_flags_real_shells_and_the_real_claude() {
     let rules: BTreeSet<&str> = violations.iter().map(|v| v.rule).collect();
     assert_eq!(
         rules,
-        BTreeSet::from(["real-claude", "real-shell", "shell-env"])
+        BTreeSet::from(["real-claude", "real-shell", "shell-by-name", "shell-env"])
     );
 }
 

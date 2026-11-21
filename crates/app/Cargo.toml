@@ -1,0 +1,39 @@
+[package]
+name = "lithemux-app"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Native lithemux window (gpui spike)"
+publish = false
+
+[lib]
+name = "lithemux_app"
+path = "src/lib.rs"
+
+[[bin]]
+name = "lithemux-app"
+path = "src/main.rs"
+
+[[test]]
+name = "integration"
+path = "tests/integration/main.rs"
+
+[dependencies]
+alacritty_terminal.workspace = true
+anyhow.workspace = true
+async-channel.workspace = true
+gpui.workspace = true
+gpui_platform.workspace = true
+portable-pty.workspace = true
+rustix.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+async-channel.workspace = true
+rustix.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true

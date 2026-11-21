@@ -275,11 +275,111 @@ Informe en `docs/fases/F1-reporte.md` con la tabla de resultados.
 
 **Detente y reporta.** La decisión la toma Jhon con la planificadora.
 
+**Decisión (21-nov-2026): GO.**
+- Jhon vio el TUI de Claude completo, con colores y bordes.
+- Los acentos y la ñ funcionan en el prompt.
+- Los dos paneles funcionan.
+- Quedan para la aceptación de la Fase 2: shift+enter, el pegado malicioso, el menú de acentos y el cierre con cmd+q.
+
 ---
 
 ## Fase 2 — App MVP
 
 Se ejecuta con la tecnología que salga de la Fase 1. Las subfases se describen para gpui.
+
+### 2.0 Correcciones de la auditoría de la Fase 0 (antes de cualquier otra cosa)
+
+La auditoría independiente del commit `ac69f71` encontró estos fallos.
+
+- Cada bug se corrige con un test que lo reproduce primero.
+- Los bugs 1, 2, 3 y 5 se vuelven reglas `H-00N` cuando sean verificables desde el código, o tests de integración cuando no.
+- Esta subfase cierra con su propio checklist y un commit aparte, antes de la §2.1.
+
+**Bugs (los tres primeros los reprodujo la auditoría):**
+1. **`resolve_claude` puede colgarse.**
+   - Dónde: `platform/process/capture.rs`.
+   - Qué pasa: el plazo solo cubre el `try_wait`. Si el `.zshrc` deja un proceso en segundo plano que hereda el stdout, el `read_to_string` se bloquea. La auditoría midió 20 s con un `sleep 10 &`.
+   - Arreglo:
+     - leer el stdout en un hilo, con plazo;
+     - lanzar el shell en su propio grupo de procesos y matar el grupo entero (`killpg`) al vencer;
+     - devolver `None`.
+   - Test: un fake-shell con `sleep 30 &` hace que `open` y `doctor` terminen en menos de 7 s.
+2. **Migraciones con dos procesos a la vez.**
+   - Dónde: `platform/store/migrations.rs`.
+   - Qué pasa: 8 procesos sobre un home vacío fallaron en 12 de 20 rondas con `table already exists`.
+   - Arreglo: `BEGIN IMMEDIATE`, volver a leer `user_version` dentro de la transacción y migrar solo si sigue atrasada.
+   - Test: N procesos en paralelo sobre un `LITHEMUX_HOME` vacío; todos terminan con exit 0.
+3. **`SessionStart` con `source=compact` pasa la sesión a `idle` en pleno turno,** y también borra `waiting`.
+   - Arreglo: con `compact`, no tocar `state`; solo actualizar la actividad y devolver el contexto.
+4. **`waiting` no vuelve a `working` tras aprobar el permiso.**
+   - Arreglo:
+     - agregar el evento `PostToolUse` al hook (sexto binding, timeout 2 s, o con `async` si está documentado en la versión instalada) con una sola transición: `waiting` → `working`, sin tocar ningún otro estado;
+     - medir que el p95 del hook siga por debajo de 20 ms;
+     - documentarlo como decisión.
+5. **Comprobación de tiempo contra uso (TOCTOU) en `open`:** el plan se decide antes de tomar el candado.
+   - Arreglo: tomar el candado **antes** de `plan_launch`, de modo que `transcript_exists` se evalúe con el candado puesto.
+6. **El candado deja ver un pid viejo:** `acquire` no trunca el archivo.
+   - Arreglo:
+     - `set_len(0)` al adquirir;
+     - que `holder()` no tome el flock para consultar (leer el pid y comprobar que el proceso vive), o en su defecto un reintento corto en `acquire` ante `WouldBlock`.
+7. **`LITHEMUX_HOME` relativo:** se reenvía tal cual al hijo.
+   - Arreglo: volverlo absoluto al leerlo.
+8. **Contexto de SessionStart:**
+   - el nombre de la categoría no se aplana: un salto de línea mete líneas arbitrarias;
+   - el tope de 2.000 caracteres no se cumple cuando `shown == 0`.
+   - Arreglo: aplanar todos los textos del usuario y truncar al final como último recurso.
+9. **`open` no comprueba que exista `lithemux-hook`.**
+   - Arreglo: si no es ejecutable, que `open` falle con un mensaje claro antes de lanzar.
+10. **Conexión al socket bloqueante** en `socket_app_notifier.rs`.
+    - Arreglo: socket no bloqueante **antes** de `connect`.
+    - Test: un servidor que acepta pero nunca lee no retrasa el hook más allá de su presupuesto.
+
+**Guardas que no disparaban (la auditoría lo comprobó con casos malos):**
+
+11. **`real_programs`.** Un test con `cargo_bin("lithemux")` sin `env_clear` hereda el `SHELL` y el `PATH` reales y pasa la guarda.
+    - Arreglo: exigir que toda invocación de los binarios en los tests pase por el `Sandbox` con `env_clear`.
+    - Agregar el fixture `bad` correspondiente.
+12. **`arch_boundaries`.** `use crate::modules::<otro>::<caso_de_uso>` dentro de un `domain/` pasa, porque la puerta re-exporta casos de uso.
+    - Arreglo: en `domain/`, solo se permiten tipos de otros módulos (una lista explícita de lo que cada puerta expone desde su `domain`).
+    - Agregar el fixture `bad`.
+
+**Tests que faltan:**
+
+13. Propiedades de D-03:
+    - un descendiente vivo de `claude` no retiene el candado (`CLOEXEC`);
+    - SIGTERM → 143 y SIGHUP → 129, ambos reenviados al hijo;
+    - SIGINT no mata al padre;
+    - el tope de 48 caracteres del slug (D-07).
+14. El test `open_test.rs`, «The lock dies with the process», celebra que el `claude` huérfano siga vivo sin candado.
+    - Arreglo:
+      - que el test compruebe lo que de verdad se garantiza;
+      - documentar en D-03 el riesgo de doble reanudación si el padre muere por SIGKILL;
+      - en la Fase 2 el SessionHost es el dueño del PTY y mata al hijo al cerrar (anotarlo en la §2.1).
+
+**Orden y reglas de `CLAUDE.md`:**
+
+15. `cli/src/commands/doctor.rs` hace E/S propia (prueba de escritura del directorio de datos, spawn del hook en seco), y `commands/category.rs` hace `canonicalize`.
+    - Mover esos chequeos a casos de uso de `core`.
+16. Separar los tipos de su caso de uso, como ya se hace en `launch_ports.rs` y `hook_ports.rs`: `ContextPorts`, `ClaudeInspection` y `ResolvedClaude`.
+17. Unificar el cálculo del tiempo relativo, que hoy está duplicado en `cli/src/output/elapsed.rs` y en `templates/en.rs`, en un solo lugar de `domain`.
+18. Partir `handle_hook_event` y `compose`, que están en el límite de las ~50 líneas.
+
+**Hallazgos de la prueba manual de la Fase 1:**
+
+19. **Variables de entorno heredadas de Claude Code.**
+    - Qué pasó: la app se lanzó desde una sesión de Claude Code y el `claude` de adentro mostró «Transcript saving is off — inherited CLAUDE_CODE_CHILD_SESSION marker». **La conversación no se guardó.**
+    - Arreglo: tanto `core::launch` como el SessionHost deben quitar del entorno del hijo los marcadores de sesión de Claude Code y de cmux. Como mínimo:
+      - `CLAUDECODE`;
+      - `CLAUDE_CODE_CHILD_SESSION`;
+      - `CLAUDE_CODE_ENTRYPOINT`;
+      - `CLAUDE_CODE_SSE_PORT`;
+      - `CMUX_*`.
+    - La lista exacta sale de la documentación y de inspeccionar el entorno real. No se quitan las variables de configuración que el usuario fija a propósito (`CLAUDE_CODE_MAX_OUTPUT_TOKENS`, etc.).
+    - Test: el fake-claude, lanzado con esas variables en el entorno del padre, no las recibe.
+    - Se vuelve regla `H-00N`: todo lanzamiento de procesos pasa por el filtro de entorno.
+20. **La primera tecla muerta no compuso.**
+    - Qué pasó: el primer `´` + `a` llegó a Claude como «´a». Después `á`, `é` e `í` salieron bien.
+    - Qué hacer: investigar si es la primera composición tras ganar el foco o el primer foco de la ventana, y corregir.
 
 ### 2.1 Gestor de sesiones (sin interfaz)
 
@@ -291,13 +391,37 @@ Se ejecuta con la tecnología que salga de la Fase 1. Las subfases se describen 
 
 ### 2.2 Barra lateral
 
+La referencia es la barra de cmux, que Jhon usa a diario. La implementación es propia.
+
+- Cada sesión es una **tarjeta** con:
+  - el título (nombre de la sesión o título personalizado);
+  - una línea de vista previa del último mensaje;
+  - el estado en texto («Claude is waiting for your input», «Needs input», idle);
+  - un contador de no leídos;
+  - el cwd abreviado;
+  - los **puertos en escucha** del árbol de procesos de la sesión (p. ej. `:52844`). Se detectan con `libproc`, sin red; al hacer clic se abre `http://localhost:<puerto>` en el navegador por defecto.
+- **Vista previa sin leer archivos internos:** solo se usan campos documentados de los hooks:
+  - el `message` de Notification;
+  - el `prompt` de UserPromptSubmit;
+  - el último mensaje de Stop, si la entrada documentada lo trae en la versión instalada.
+  Nunca se lee el transcript.
+- **Sesiones fijadas** (pin) arriba, fuera de su categoría.
+- Las sesiones de shell también tienen tarjeta.
 - Categorías colapsables. La **madre es la cabecera** de su categoría y las hijas cuelgan de ella. Una categoría sin madre muestra a sus sesiones al mismo nivel.
 - Indicador de estado por sesión: trabajando, idle, esperando permiso (resaltado), hibernada y terminada. También indicador de no leído: hubo actividad mientras no se veía.
 - Crear, renombrar, reordenar y borrar categorías y sesiones. Marcar una sesión como madre (respetando una por categoría). Activar `keep_alive`.
 
 ### 2.3 Área de trabajo
 
-- Un panel o **split en 2**, horizontal o vertical. Abrir una sesión en el panel activo o en «el otro panel». Atajos de teclado para dividir, cambiar de foco y cerrar el panel.
+- **Por defecto, un solo panel.** Los splits se crean cuando el usuario los pide: el layout de dos paneles fijos de la Fase 1 era solo de prueba.
+- **Árbol de splits** de hasta 4 paneles, horizontales o verticales, con divisores que se arrastran.
+- **Cada panel tiene pestañas** (varias terminales o sesiones por panel) y una barra con botones, como la de cmux:
+  - nueva pestaña de terminal;
+  - dividir a la derecha;
+  - dividir hacia abajo;
+  - el botón de navegador está reservado para la §3.7.
+- Abrir una sesión desde la barra lateral en el panel activo. Arrastrar una pestaña a otro panel.
+- Atajos de teclado para dividir, cambiar de foco, cambiar de pestaña y cerrar.
 - La disposición y el contenido de los paneles se guardan en la BD.
 
 ### 2.4 Ciclo de vida y hibernación
@@ -352,13 +476,17 @@ Al abrir la app:
 - **3.3 Medidor de memoria** por sesión y total, a partir del árbol de procesos (`libproc`), en la barra de estado.
 - **3.4 Importador desde cmux:** lee `~/Library/Application Support/cmux/session-com.cmuxterm.app.json`, que trae workspaces con `customTitle`, `currentDirectory` y `terminal.agent.sessionId`. Propone categorías y sesiones que conservan su `claude_session_id`, para no perder las conversaciones actuales. Solo lectura sobre cmux.
 - **3.5 Búsqueda y salto rápido** de sesiones (paleta con cmd+p) y navegación completa con teclado.
+- **3.7 Navegador embebido (spike con go/no-go).**
+  - Una pestaña de navegador dentro de un panel, como el botón del globo de cmux.
+  - En gpui no hay vista web: habría que incrustar un `WKWebView` nativo en la ventana, y Zed no lo hace. Spike de máximo 2 días.
+  - Si no es viable, se queda con abrir el navegador por defecto desde los puertos de la §2.2.
+  - Lo que navegue el usuario es tráfico suyo; la app sigue sin conexiones propias.
 - **3.6** Panic hook que escribe en `<home>/logs/app.log` (rotado), sin enviar nada. Smoke test automatizado del ciclo: crear sesión → abrir → hibernar → reanudar.
 - **Cierre:** checklist de CI, reporte de la fase, **detente y reporta.**
 
 ## Fase 4 — Extensiones y Windows (se planifica en detalle al llegar)
 
 - Perfiles genéricos definidos por configuración (comando, args, si soporta resume, adaptador de hooks): Codex, modelos locales (Ollama) y comandos propios.
-- Layouts de hasta 4 paneles.
 - Port a Windows: ConPTY (portable-pty), rutas, socket → named pipe, señales → `TerminateProcess`, y presión de memoria con la API de Windows.
 
 ---
@@ -374,4 +502,12 @@ Al abrir la app:
    - riesgos detectados.
 3. `git add -A` (revisando que no entren binarios, `target/` ni secretos). **Sin commit.**
 4. Reporte breve a la sesión planificadora y a Jhon: resultado de los criterios de aceptación, punto por punto.
-5. Esperar.
+5. Esperar. Mientras tanto, la planificadora lanza una **auditoría independiente** con un agente Opus 5.5.
+   - El auditor recibe el plan de la fase, `CLAUDE.md` y el diff de la fase, pero no el reporte de la ejecutora, para que su lectura no parta de esas conclusiones.
+   - Revisa:
+     - que se cumpla la especificación;
+     - las reglas de arquitectura;
+     - los bugs;
+     - los tests que solo confirman la implementación;
+     - que los checks del punto 1 se hayan ejecutado de verdad.
+   - Cada hallazgo confirmado se corrige antes del commit. Si es un bug, se vuelve una regla `H-00N`.

@@ -93,3 +93,22 @@ fn the_codebase_respects_the_boundaries() {
         describe(&violations)
     );
 }
+
+// docs/decisiones.md D-19: only `crates/app/src/<feature>/mod.rs` is a door.
+#[test]
+fn a_feature_door_exists_only_in_the_app_crate() {
+    let violations = check(&fixture("bad"));
+    for lookalike in [
+        "tauri-app/src/no_barrels_other_crate/mod.rs",
+        "core/src/app/src/no_barrels_nested_app/mod.rs",
+        "app/src/terminal_view/no_barrels_inner/mod.rs",
+    ] {
+        assert!(
+            violations
+                .iter()
+                .any(|violation| violation.rule == "no-barrels" && violation.file == lookalike),
+            "{lookalike} was taken for a door:\n{}",
+            describe(&violations)
+        );
+    }
+}

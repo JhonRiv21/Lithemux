@@ -210,8 +210,9 @@ fn foreign_internals(line: &str, own_module: Option<&str>) -> Vec<String> {
     found
 }
 
-// A module's own `mod.rs` is its door and may re-export concrete names; every
-// other `mod.rs` under `src/`, and `lib.rs`, only declare submodules.
+// A module's own `mod.rs` is its door and may re-export concrete names, and so
+// is the `mod.rs` of an app feature (`app/src/<feature>/mod.rs`); every other
+// `mod.rs` under `src/`, and `lib.rs`, only declare submodules.
 fn is_declaration_only_file(kind: &FileKind<'_>) -> bool {
     let relative = kind.relative;
     if !relative.contains("/src/") {
@@ -226,7 +227,16 @@ fn is_declaration_only_file(kind: &FileKind<'_>) -> bool {
     let is_module_door = kind
         .module
         .is_some_and(|module| relative.ends_with(&format!("/src/modules/{module}/mod.rs")));
-    !is_module_door
+    !is_module_door && !is_app_feature_door(relative)
+}
+
+// `relative` starts at `crates/`, so only the `app` crate itself qualifies:
+// not `tauri-app/src/...` nor an `app/src/` nested inside another crate.
+fn is_app_feature_door(relative: &str) -> bool {
+    relative
+        .strip_prefix("app/src/")
+        .and_then(|inside_app| inside_app.strip_suffix("/mod.rs"))
+        .is_some_and(|feature| !feature.contains('/'))
 }
 
 fn is_module_declaration(line: &str) -> bool {

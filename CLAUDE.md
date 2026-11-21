@@ -108,3 +108,4 @@ No se persigue cobertura. Se prueba lo que puede fallar de verdad, **desde la es
 
 - **Planificadora** (Opus): diseña el plan, revisa cada fase y redacta los encargos. No escribe código del repo.
 - **Ejecutora** (Fable): implementa las fases del plan.
+- **Auditor** (agente Opus 5.5 que lanza la planificadora al cierre de cada fase): revisa la fase sin leer antes el reporte de la ejecutora. Sus hallazgos confirmados se corrigen antes del commit.
