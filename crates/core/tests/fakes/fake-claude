@@ -1,0 +1,27 @@
+#!/bin/sh
+# Test double for the `claude` CLI. No test runs the real one.
+# It answers `--version` and, inside a lithemux session, records how it was
+# called in $LITHEMUX_HOME/fake-claude.log. Two optional files in
+# $LITHEMUX_HOME steer it: fake-claude.sleep (seconds to stay alive) and
+# fake-claude.exit (exit code).
+if [ "$1" = "--version" ]; then
+  echo "9.9.9 (Claude Code)"
+  exit 0
+fi
+if [ -n "$LITHEMUX_HOME" ]; then
+  {
+    echo "cwd=$PWD"
+    echo "session_env=$LITHEMUX_SESSION_ID"
+    echo "home_env=$LITHEMUX_HOME"
+    for arg in "$@"; do
+      echo "arg=$arg"
+    done
+  } > "$LITHEMUX_HOME/fake-claude.log"
+  if [ -f "$LITHEMUX_HOME/fake-claude.sleep" ]; then
+    sleep "$(cat "$LITHEMUX_HOME/fake-claude.sleep")"
+  fi
+  if [ -f "$LITHEMUX_HOME/fake-claude.exit" ]; then
+    exit "$(cat "$LITHEMUX_HOME/fake-claude.exit")"
+  fi
+fi
+exit 0

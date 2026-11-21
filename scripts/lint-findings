@@ -1,0 +1,88 @@
+#!/bin/sh
+# Findings lint: every bug that reached a commit or a phase review becomes a
+# rule, so it cannot come back unnoticed. See docs/hallazgos.md.
+#
+#   scripts/lint-findings            check every tracked file
+#   scripts/lint-findings --staged   check only what is staged
+#   scripts/lint-findings FILE...    check the given files
+#
+# A rule is a folder findings/H-NNN/ with:
+#   pattern   one extended regular expression (grep -E)
+#   paths     optional: extended regex the file path must match (default \.rs$)
+#   bad.txt   an example the pattern must flag
+#   good.txt  an example the pattern must let through
+#   README.md phase where it appeared and why
+#
+# Exit codes: 0 clean, 1 findings, 2 a rule is broken.
+set -u
+
+root=$(cd "$(dirname "$0")/.." && pwd)
+rules_dir=${FINDINGS_DIR:-"$root/findings"}
+
+rules=""
+for dir in "$rules_dir"/H-*/; do
+  [ -d "$dir" ] && rules="$rules $dir"
+done
+
+# 1. Every rule is proven against its own two examples before it is trusted.
+broken=0
+count=0
+for dir in $rules; do
+  id=$(basename "$dir")
+  count=$((count + 1))
+  for required in pattern bad.txt good.txt README.md; do
+    if [ ! -f "$dir$required" ]; then
+      echo "lint-findings: $id is missing $required" >&2
+      broken=1
+    fi
+  done
+  [ -f "${dir}pattern" ] && [ -f "${dir}bad.txt" ] && [ -f "${dir}good.txt" ] || continue
+  if ! grep -Eq -f "${dir}pattern" "${dir}bad.txt"; then
+    echo "lint-findings: $id does not flag its own bad example" >&2
+    broken=1
+  fi
+  if grep -Eq -f "${dir}pattern" "${dir}good.txt"; then
+    echo "lint-findings: $id flags its own good example" >&2
+    broken=1
+  fi
+done
+[ "$broken" -eq 0 ] || exit 2
+
+# 2. The files to check.
+if [ "${1:-}" = "--staged" ]; then
+  files=$(cd "$root" && git diff --cached --name-only --diff-filter=ACM)
+elif [ "$#" -gt 0 ]; then
+  files=$(printf '%s\n' "$@")
+else
+  files=$(cd "$root" && git ls-files --cached --others --exclude-standard)
+fi
+
+# 3. Each rule against each file it applies to.
+found=0
+for dir in $rules; do
+  id=$(basename "$dir")
+  paths='\.rs$'
+  [ -f "${dir}paths" ] && paths=$(cat "${dir}paths")
+  for file in $(printf '%s\n' "$files" | grep -E "$paths"); do
+    case "$file" in
+      findings/* | */arch-fixtures/*) continue ;;
+    esac
+    case "$file" in
+      /*) target=$file ;;
+      *) target="$root/$file" ;;
+    esac
+    [ -f "$target" ] || continue
+    if matches=$(grep -En -f "${dir}pattern" "$target"); then
+      printf '%s\n' "$matches" | while IFS= read -r line; do
+        echo "$id $file:$line"
+      done
+      found=1
+    fi
+  done
+done
+
+if [ "$found" -ne 0 ]; then
+  echo "lint-findings: known findings came back; each rule explains itself in findings/<id>/README.md" >&2
+  exit 1
+fi
+echo "lint-findings: $count rule(s), no findings"

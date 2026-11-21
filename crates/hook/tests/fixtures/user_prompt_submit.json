@@ -1,0 +1,8 @@
+{
+  "session_id": "7d1c3f52-9a7e-4c1b-8f3e-2b9d5a6c2222",
+  "transcript_path": "/Users/x/.claude/projects/-work-demo/7d1c3f52-9a7e-4c1b-8f3e-2b9d5a6c2222.jsonl",
+  "cwd": "/work/demo",
+  "permission_mode": "default",
+  "hook_event_name": "UserPromptSubmit",
+  "prompt": "Write a function to calculate the factorial of a number"
+}

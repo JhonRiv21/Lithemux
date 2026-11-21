@@ -1,0 +1,12 @@
+---
+source: crates/core/src/modules/context/domain/test/render_context_test.rs
+expression: "render(&executor(), &[documenter()], Lang::En)"
+---
+lithemux: this session belongs to the category "Selektal" (root folder /Users/x/Linktic/RecruitLine).
+This session's name: selektal-ejecutora. Role: implementa las fases que define la planificadora.
+The category has no mother: its sessions are sisters and coordinate directly with each other.
+Sisters:
+- selektal-documental (role: requerimientos; state: hibernated, last activity 3 days ago)
+Sessions talk to each other with SendMessage using those names.
+Category board (shared by the sisters): /Users/x/Library/Application Support/lithemux/categories/selektal/board.md
+This list is a snapshot taken at startup; `lithemux status selektal` shows the current state.

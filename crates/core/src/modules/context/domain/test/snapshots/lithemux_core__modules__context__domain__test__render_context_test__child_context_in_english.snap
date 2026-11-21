@@ -1,0 +1,12 @@
+---
+source: crates/core/src/modules/context/domain/test/render_context_test.rs
+expression: "render(&executor(), &[planner(), documenter()], Lang::En)"
+---
+lithemux: this session belongs to the category "Selektal" (root folder /Users/x/Linktic/RecruitLine).
+This session's name: selektal-ejecutora. Role: implementa las fases que define la planificadora.
+Mother of the category: selektal-planificadora (role: planifica, revisa y redacta prompts; state: idle, last activity 5 min ago).
+Sisters:
+- selektal-documental (role: requerimientos; state: hibernated, last activity 3 days ago)
+Sessions talk to each other with SendMessage using those names. When this session finishes a task or gets blocked, it reports to the mother; anything outside its role goes through the mother.
+Category board (kept by the mother; read-only for this session unless the mother says otherwise): /Users/x/Library/Application Support/lithemux/categories/selektal/board.md
+This list is a snapshot taken at startup; `lithemux status selektal` shows the current state.

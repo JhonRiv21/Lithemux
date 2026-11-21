@@ -1,0 +1,8 @@
+/target
+*.snap.new
+.DS_Store
+.env
+.env.*
+*.db
+*.db-wal
+*.db-shm

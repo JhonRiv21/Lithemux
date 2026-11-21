@@ -1,0 +1,26 @@
+#!/bin/sh
+# Fast checks only: formatting and the findings lint on what is staged.
+# Tests and Clippy run at phase close and in CI.
+# Enable with: git config core.hooksPath .githooks
+set -e
+
+root=$(git rev-parse --show-toplevel)
+cd "$root"
+
+if ! command -v cargo >/dev/null 2>&1; then
+  # rustup installed with Homebrew is keg-only and may not be in the PATH.
+  for dir in /opt/homebrew/opt/rustup/bin /usr/local/opt/rustup/bin "$HOME/.cargo/bin"; do
+    if [ -x "$dir/cargo" ]; then
+      PATH="$dir:$PATH"
+      export PATH
+      break
+    fi
+  done
+fi
+if ! command -v cargo >/dev/null 2>&1; then
+  echo "pre-commit: cargo not found; add rustup's bin directory to the PATH" >&2
+  exit 1
+fi
+
+cargo fmt --all --check
+scripts/lint-findings --staged

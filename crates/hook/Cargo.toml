@@ -1,0 +1,24 @@
+[package]
+name = "lithemux-hook"
+description = "Minimal Claude Code hook binary for lithemux"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "lithemux-hook"
+path = "src/main.rs"
+
+[dependencies]
+lithemux-core.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+assert_cmd.workspace = true
+rusqlite.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true

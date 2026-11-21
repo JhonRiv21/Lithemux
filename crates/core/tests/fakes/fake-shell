@@ -1,0 +1,10 @@
+#!/bin/sh
+# Test double for the user's login shell. A real login shell rebuilds the PATH
+# from the machine's profile (on macOS, /etc/paths.d) and would find the real
+# `claude`; this one only ever sees /usr/bin:/bin.
+PATH=/usr/bin:/bin
+export PATH
+case "$1" in
+  -lic | -lc) exec /bin/sh -c "$2" ;;
+  *) exec /bin/sh ;;
+esac
