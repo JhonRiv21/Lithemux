@@ -10,10 +10,10 @@ use std::collections::HashMap;
 use std::sync::mpsc;
 
 use lithemux_core::modules::category::SqliteCategoryRepository;
-use lithemux_core::modules::launch::LaunchError;
+use lithemux_core::modules::launch::{FlockSessionLocks, LaunchError, SessionLocks};
 use lithemux_core::modules::session::{
     Profile, SessionRef, SqliteSessionRepository, State, apply_state, find_session_by_id,
-    get_session,
+    get_session, hibernate_what_was_left_running,
 };
 use lithemux_core::platform::paths::home::current_user;
 use lithemux_core::platform::store::connection::Db;
@@ -38,7 +38,7 @@ pub(super) struct Pending {
 }
 
 pub struct SessionHost {
-    config: HostConfig,
+    pub(super) config: HostConfig,
     pub(super) db: Db,
     pub(super) hosted: Vec<Hosted>,
     pub(super) pending: HashMap<String, Pending>,
@@ -48,6 +48,8 @@ pub struct SessionHost {
     /// The last state read from the database for every session heard of.
     pub(super) states: HashMap<String, State>,
     pub(super) warnings: Vec<String>,
+    /// When the memory valve last hibernated a session.
+    pub(super) valve_last_used_at: Option<i64>,
     next_run: u64,
     inbox: mpsc::Receiver<Signal>,
     mailbox: Mailbox,
@@ -69,6 +71,18 @@ impl SessionHost {
     pub fn start(config: HostConfig) -> Result<(Self, async_channel::Receiver<()>), HostError> {
         let db = Db::open(&config.home)?;
         let instance = InstanceLock::acquire(&config.home.app_lock_path())?;
+        // Nothing of this app runs yet: what the database still has as
+        // running was cut short, and is hibernated (PLAN §2.5).
+        let locks = FlockSessionLocks::new(&config.home);
+        hibernate_what_was_left_running(&SqliteSessionRepository::new(&db), |id| {
+            // The pid is read first: taking the lock writes ours over it.
+            // One that is alive is an orphan of an app that died, or a
+            // terminal: either way the session is not ours to settle. And
+            // it is the lock, not the pid, that says whether it is free.
+            let somebody_runs_it = locks.holder(id).is_some();
+            let lock = locks.acquire(id).ok()?;
+            (!somebody_runs_it).then_some(lock)
+        })?;
         let (mailbox, inbox, changes) = Mailbox::new();
         let address = config.home.app_socket();
         address
@@ -84,6 +98,7 @@ impl SessionHost {
             phases: HashMap::new(),
             states: HashMap::new(),
             warnings: Vec::new(),
+            valve_last_used_at: None,
             next_run: 0,
             inbox,
             mailbox,

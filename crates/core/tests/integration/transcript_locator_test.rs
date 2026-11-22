@@ -58,7 +58,7 @@ fn the_launcher_resumes_only_when_the_transcript_exists_on_disk() {
     let home = tempfile::tempdir().unwrap();
     let store = InMemoryStore::new();
     add_category(&store, &InMemoryBoards::default(), "demo");
-    let session = add_session(&store, &store, "demo/ejecutora", Kind::Child);
+    let session = add_session(&store, &store, "demo/ejecutora", Kind::Member);
     let claude_id = session.claude_session_id.clone().unwrap();
     let category = get_category(&store, "demo").unwrap();
 

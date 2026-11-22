@@ -4,8 +4,8 @@ expression: "render(&planner(), &[executor(), documenter()], Lang::Es)"
 ---
 lithemux: esta sesión pertenece a la categoría «Selektal» (carpeta raíz /Users/x/Linktic/RecruitLine).
 Nombre de esta sesión: selektal-planificadora. Rol: planifica, revisa y redacta prompts.
-Esta sesión es la madre de la categoría: coordina la categoría y es la única que escribe el tablero.
-Hijas:
+Esta sesión es la sesión coordinadora de la categoría: coordina la categoría y es la única que escribe el tablero.
+Las demás sesiones:
 - selektal-ejecutora (rol: implementa las fases que define la planificadora; estado: inactiva, última actividad hace 5 min)
 - selektal-documental (rol: requerimientos; estado: hibernada, última actividad hace 3 días)
 Las sesiones se comunican con SendMessage usando esos nombres.

@@ -11,9 +11,27 @@ pub fn title_from(typed: &str) -> Option<String> {
     one_line(typed, MAX_TITLE_CHARS)
 }
 
-/// One line of a message; `None` when it has no text.
+/// One line of a message, as text: Claude writes markdown, and a card
+/// shows it raw. `None` when it has no text.
 pub fn preview_from(message: &str) -> Option<String> {
-    one_line(message, MAX_PREVIEW_CHARS)
+    one_line(&without_markdown(message), MAX_PREVIEW_CHARS)
+}
+
+/// Drops the basic markers: the `#` of a heading, `**`, `__` and backticks.
+/// A lone `*` or `_` is left alone: it is as often a product or a name.
+fn without_markdown(text: &str) -> String {
+    text.lines()
+        .map(|line| {
+            let heading = line.trim_start().trim_start_matches('#');
+            let line = if heading.starts_with(' ') {
+                heading
+            } else {
+                line
+            };
+            line.replace("**", "").replace("__", "").replace('`', "")
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn one_line(text: &str, max_chars: usize) -> Option<String> {

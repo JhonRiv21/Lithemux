@@ -8,7 +8,7 @@ use lithemux_core::modules::category::{
 };
 use lithemux_core::modules::session::{
     Kind, NewSession, Profile, Session, SessionRef, SqliteSessionRepository, State, apply_state,
-    create_session, find_session_by_id, get_session, remove_session,
+    create_session, find_session_by_id, get_session, remove_session, set_keep_alive,
 };
 use lithemux_core::modules::settings::{SettingKey, SqliteSettingsRepository, write_setting};
 use lithemux_core::platform::paths::home::Home;
@@ -98,6 +98,7 @@ impl HostedWorld {
                 ("PATH".into(), "/usr/bin:/bin".into()),
                 ("HOME".into(), self.dir.path().into()),
             ],
+            hibernate_grace: std::time::Duration::from_millis(300),
         }
     }
 
@@ -113,7 +114,7 @@ impl HostedWorld {
             NewSession {
                 target: target(slug),
                 role: format!("role of {slug}"),
-                kind: Kind::Child,
+                kind: Kind::Member,
                 profile,
                 cwd: None,
                 model: None,
@@ -165,6 +166,25 @@ impl HostedWorld {
             None,
         )
         .unwrap();
+    }
+
+    /// As if its last activity had been at `at` and it were idle since.
+    pub fn set_idle_since(&self, session_id: &str, at: i64) {
+        let db = self.db();
+        apply_state(
+            &SqliteSessionRepository::new(&db),
+            session_id,
+            State::Idle,
+            Some(at),
+            None,
+        )
+        .unwrap();
+    }
+
+    pub fn keep_alive(&self, session_id: &str) {
+        let db = self.db();
+        let sessions = SqliteSessionRepository::new(&db);
+        set_keep_alive(&sessions, &self.stored(session_id), true).unwrap();
     }
 
     /// A file the fake claude reads to know how to behave.

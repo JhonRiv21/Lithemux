@@ -31,7 +31,12 @@ pub struct Sidebar {
 
 impl Sidebar {
     pub fn new(live: Entity<Live>, workspace: Entity<Workspace>, cx: &mut Context<Self>) -> Self {
-        cx.observe(&live, |_, _, cx| cx.notify()).detach();
+        cx.observe(&live, |this, live, cx| {
+            // The language may have changed.
+            this.texts = Rc::clone(&live.read(cx).texts);
+            cx.notify();
+        })
+        .detach();
         cx.observe(&workspace, |_, _, cx| cx.notify()).detach();
         let texts = Rc::clone(&live.read(cx).texts);
         Sidebar {
@@ -80,8 +85,8 @@ impl Sidebar {
             MenuCommand::SetPinned(id, pinned) => {
                 self.change(cx, |actions| actions.set_pinned(&id, pinned));
             }
-            MenuCommand::SetMother(id, mother) => {
-                self.change(cx, |actions| actions.set_mother(&id, mother));
+            MenuCommand::SetCoordinator(id, coordinator) => {
+                self.change(cx, |actions| actions.set_coordinator(&id, coordinator));
             }
             MenuCommand::SetKeepAlive(id, keep) => {
                 self.change(cx, |actions| actions.set_keep_alive(&id, keep));
@@ -140,10 +145,10 @@ impl Render for Sidebar {
             .flex_none()
             .w(px(WIDTH))
             .h_full()
-            .bg(rgb(theme::SIDEBAR))
+            .bg(rgb(theme::colors().sidebar))
             .border_r_1()
-            .border_color(rgb(theme::BORDER))
-            .text_color(rgb(theme::TEXT))
+            .border_color(rgb(theme::colors().border))
+            .text_color(rgb(theme::colors().text))
             .child(list)
             .when_some(notice, |sidebar, notice| {
                 sidebar.child(
@@ -151,7 +156,7 @@ impl Render for Sidebar {
                         .px_2()
                         .py_1()
                         .text_xs()
-                        .text_color(rgb(theme::ATTENTION))
+                        .text_color(rgb(theme::colors().attention))
                         .child(notice),
                 )
             })

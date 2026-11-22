@@ -176,7 +176,7 @@ impl Sandbox {
             "demo/planificadora",
             "--role",
             "Planifica y revisa",
-            "--mother",
+            "--coordinator",
         ]);
         self.run(&["new", "demo/ejecutora", "--role", "Implementa las fases"]);
         self.run(&["new", "demo/documental", "--role", "Requerimientos"]);
@@ -205,6 +205,7 @@ impl Sandbox {
                 .into_iter()
                 .map(|(name, value)| (name.into(), value.into()))
                 .collect(),
+            hibernate_grace: std::time::Duration::from_millis(300),
         };
         SessionHost::start(config).unwrap().0
     }

@@ -39,6 +39,7 @@ pub fn session(slug: &str, role: &str, kind: Kind) -> Session {
         pin_sort: None,
         preview: None,
         unread: 0,
+        notice: None,
     }
 }
 
@@ -46,7 +47,7 @@ pub fn planner() -> Session {
     session(
         "planificadora",
         "planifica, revisa y redacta prompts",
-        Kind::Mother,
+        Kind::Coordinator,
     )
 }
 
@@ -54,12 +55,12 @@ pub fn executor() -> Session {
     session(
         "ejecutora",
         "implementa las fases que define la planificadora",
-        Kind::Child,
+        Kind::Member,
     )
 }
 
 pub fn documenter() -> Session {
-    let mut session = session("documental", "requerimientos", Kind::Child);
+    let mut session = session("documental", "requerimientos", Kind::Member);
     session.state = State::Hibernated;
     session.last_activity_at = Some(NOW - 3 * 86_400);
     session

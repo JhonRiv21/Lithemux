@@ -35,6 +35,7 @@ fn session(id: &str, category_id: &str, slug: &str, kind: Kind, sort: i64) -> Se
         pin_sort: None,
         preview: None,
         unread: 0,
+        notice: None,
     }
 }
 
@@ -47,23 +48,23 @@ pub fn session_repository_contract(
     categories.insert(&category("c2", "selektal")).unwrap();
     assert_eq!(sessions.next_sort("c1").unwrap(), 1);
 
-    let child = session("s2", "c1", "ejecutora", Kind::Child, 2);
-    let mother = session("s1", "c1", "planificadora", Kind::Mother, 1);
-    let other = session("s3", "c2", "ejecutora", Kind::Child, 1);
-    for s in [&child, &mother, &other] {
+    let child = session("s2", "c1", "ejecutora", Kind::Member, 2);
+    let coordinator = session("s1", "c1", "planificadora", Kind::Coordinator, 1);
+    let other = session("s3", "c2", "ejecutora", Kind::Member, 1);
+    for s in [&child, &coordinator, &other] {
         sessions.insert(s).unwrap();
     }
 
     // Round trip, ordering and lookups.
     assert_eq!(
         sessions.list_in("c1").unwrap(),
-        vec![mother.clone(), child.clone()]
+        vec![coordinator.clone(), child.clone()]
     );
     assert_eq!(sessions.next_sort("c1").unwrap(), 3);
     // All of them at once: each category's together, in its own order.
     assert_eq!(
         sessions.list_all().unwrap(),
-        vec![mother.clone(), child.clone(), other.clone()]
+        vec![coordinator.clone(), child.clone(), other.clone()]
     );
     assert_eq!(
         sessions.find("c1", "ejecutora").unwrap(),
@@ -74,13 +75,16 @@ pub fn session_repository_contract(
         Some(other.clone())
     );
     assert_eq!(sessions.find("c2", "planificadora").unwrap(), None);
-    assert_eq!(sessions.find_by_id("s1").unwrap(), Some(mother.clone()));
-    assert_eq!(sessions.find_mother("c1").unwrap(), Some(mother));
-    assert_eq!(sessions.find_mother("c2").unwrap(), None);
+    assert_eq!(
+        sessions.find_by_id("s1").unwrap(),
+        Some(coordinator.clone())
+    );
+    assert_eq!(sessions.find_coordinator("c1").unwrap(), Some(coordinator));
+    assert_eq!(sessions.find_coordinator("c2").unwrap(), None);
 
     // Field updates.
     sessions.update_role("s2", "new role").unwrap();
-    sessions.update_kind("s3", Kind::Mother).unwrap();
+    sessions.update_kind("s3", Kind::Coordinator).unwrap();
     sessions.update_keep_alive("s2", true).unwrap();
     sessions.update_model("s2", None).unwrap();
     sessions.update_claude_version("s2", "2.1.330").unwrap();
@@ -93,7 +97,7 @@ pub fn session_repository_contract(
     assert_eq!(updated.model, None);
     assert_eq!(updated.claude_version.as_deref(), Some("2.1.330"));
     assert_eq!(updated.claude_session_id.as_deref(), Some("claude-new"));
-    assert_eq!(sessions.find_mother("c2").unwrap().unwrap().id, "s3");
+    assert_eq!(sessions.find_coordinator("c2").unwrap().unwrap().id, "s3");
 
     // State: activity is kept when not given, and `unless` protects a state.
     sessions

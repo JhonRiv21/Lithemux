@@ -48,14 +48,14 @@ fn category(entry: &CategoryStatus, now: i64) {
         println!("  (no sessions)");
         return;
     }
-    let mother = entry
+    let coordinator = entry
         .sessions
         .iter()
-        .find(|s| s.session.kind == Kind::Mother);
+        .find(|s| s.session.kind == Kind::Coordinator);
     let rest: Vec<&SessionStatus> = entry
         .sessions
         .iter()
-        .filter(|s| s.session.kind != Kind::Mother)
+        .filter(|s| s.session.kind != Kind::Coordinator)
         .collect();
     let name_width = entry
         .sessions
@@ -64,9 +64,9 @@ fn category(entry: &CategoryStatus, now: i64) {
         .max()
         .unwrap_or(0);
 
-    // Without a mother every session sits at the same level.
-    let indent = if let Some(mother) = mother {
-        println!("  {}", row(mother, "◆ ", name_width + 3, now));
+    // Without a coordinator every session sits at the same level.
+    let indent = if let Some(coordinator) = coordinator {
+        println!("  {}", row(coordinator, "◆ ", name_width + 3, now));
         "  "
     } else {
         ""
@@ -77,7 +77,7 @@ fn category(entry: &CategoryStatus, now: i64) {
         } else {
             "├─ "
         };
-        let width = if mother.is_some() {
+        let width = if coordinator.is_some() {
             name_width
         } else {
             name_width + 2

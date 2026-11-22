@@ -14,3 +14,12 @@ impl Language {
         }
     }
 }
+
+impl From<lithemux_core::modules::settings::InterfaceLanguage> for Language {
+    fn from(language: lithemux_core::modules::settings::InterfaceLanguage) -> Self {
+        match language {
+            lithemux_core::modules::settings::InterfaceLanguage::English => Language::English,
+            lithemux_core::modules::settings::InterfaceLanguage::Spanish => Language::Spanish,
+        }
+    }
+}

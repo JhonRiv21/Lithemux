@@ -17,8 +17,8 @@ fn divider_of(split: u32) -> Stateful<Div> {
     div()
         .id(("divider", split as usize))
         .flex_none()
-        .bg(rgb(theme::BORDER))
-        .hover(|style| style.bg(rgb(theme::ACCENT)))
+        .bg(rgb(theme::colors().border))
+        .hover(|style| style.bg(rgb(theme::colors().accent)))
         .on_drag(DividerDrag { split }, |drag, _, _, cx| cx.new(|_| *drag))
 }
 

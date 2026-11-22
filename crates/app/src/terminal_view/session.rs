@@ -144,6 +144,17 @@ impl TerminalSession {
         self.pty.hang_up();
     }
 
+    /// Like `terminate`, giving the program `grace` to leave by itself: for
+    /// a program that has something to save on its way out.
+    pub fn terminate_within(&self, grace: std::time::Duration) {
+        self.pty.hang_up_within(grace);
+    }
+
+    /// Kills the program and what it left, at once.
+    pub fn kill_now(&self) {
+        self.pty.kill_now();
+    }
+
     /// Typed text or a paste, as the program asked to receive pastes.
     pub fn paste(&self, text: &str) {
         self.write(paste_bytes(text, self.modes().bracketed_paste));

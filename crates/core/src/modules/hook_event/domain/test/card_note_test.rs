@@ -118,3 +118,25 @@ fn the_notifications_that_block_claude_on_the_user_count_as_unread() {
         assert!(note.asks_for_attention, "{kind}");
     }
 }
+
+// Block 4, part 0 (5): what Claude asks for is pending, not the last thing
+// said: it must not stay on the card once it is answered or dropped.
+#[test]
+fn a_request_for_the_user_is_a_pending_notice_and_what_is_said_is_not() {
+    let asks = HookInput::from_json(
+        r#"{"message":"Claude needs your permission","notification_type":"permission_prompt"}"#,
+    );
+    assert!(
+        card_note(HookEvent::Notification, &asks)
+            .unwrap()
+            .is_pending
+    );
+    let says = HookInput::from_json(r#"{"last_assistant_message":"Done."}"#);
+    assert!(!card_note(HookEvent::Stop, &says).unwrap().is_pending);
+    let prompt = HookInput::from_json(r#"{"prompt":"do it"}"#);
+    assert!(
+        !card_note(HookEvent::PromptSubmit, &prompt)
+            .unwrap()
+            .is_pending
+    );
+}

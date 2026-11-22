@@ -16,7 +16,7 @@ fn world() -> InMemoryStore {
     add_category(&store, &boards, "demo");
     add_category(&store, &boards, "selektal");
     for target in ["demo/a", "demo/b", "demo/c", "selektal/x"] {
-        add_session(&store, &store, target, Kind::Child);
+        add_session(&store, &store, target, Kind::Member);
     }
     store
 }

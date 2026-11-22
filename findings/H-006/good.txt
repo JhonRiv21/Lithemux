@@ -1,0 +1,6 @@
+        KeyBinding::new("cmd-}", NextTab, context),
+        KeyBinding::new("cmd-shift-d", SplitDown, context),
+        KeyBinding::new("cmd-shift-right", NextTab, context),
+        KeyBinding::new("cmd-1", ShowTab1, context),
+        KeyBinding::new("shift-cmd-right", NextTab, context),
+        KeyBinding::new("cmd-alt-shift-d", Other, context),

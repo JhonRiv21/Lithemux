@@ -9,6 +9,9 @@ pub struct CardNote<'a> {
     pub message: Option<&'a str>,
     /// Whether it counts as unread until the user looks at the session.
     pub asks_for_attention: bool,
+    /// Whether the text is a request that stands only while Claude waits
+    /// for the user, rather than the last thing said.
+    pub is_pending: bool,
 }
 
 /// `None` for the events that say nothing to the user.
@@ -17,10 +20,12 @@ pub fn card_note(event: HookEvent, input: &HookInput) -> Option<CardNote<'_>> {
         HookEvent::PromptSubmit => Some(CardNote {
             message: input.prompt.as_deref(),
             asks_for_attention: false,
+            is_pending: false,
         }),
         HookEvent::Stop => Some(CardNote {
             message: input.last_assistant_message.as_deref(),
             asks_for_attention: true,
+            is_pending: false,
         }),
         // Only the ones that block Claude on the user. The rest inform
         // (a login, a quota, a finished agent), and the idle reminder
@@ -33,6 +38,7 @@ pub fn card_note(event: HookEvent, input: &HookInput) -> Option<CardNote<'_>> {
             .map(|_| CardNote {
                 message: input.message.as_deref(),
                 asks_for_attention: true,
+                is_pending: true,
             }),
         HookEvent::SessionStart
         | HookEvent::SessionEnd

@@ -11,6 +11,9 @@ use crate::sidebar::status::Status;
 use crate::sidebar::status_text::status_text;
 use crate::theme;
 
+/// How much sooner than the tabs the buttons give up their room.
+const TOOLBAR_YIELDS: f32 = 1000.0;
+
 impl Workspace {
     pub(super) fn render_pane(
         &self,
@@ -29,9 +32,9 @@ impl Workspace {
             .size_full()
             .border_1()
             .border_color(rgb(if is_focused && has_many_panes {
-                theme::ACCENT
+                theme::colors().accent
             } else {
-                theme::BORDER
+                theme::colors().border
             }))
             .capture_any_mouse_down(cx.listener(move |this, _, window, cx| {
                 this.focus_pane(pane_id, window, cx);
@@ -51,24 +54,28 @@ impl Workspace {
                 .flex()
                 .items_center()
                 .justify_center()
+                .flex_none()
                 .w(px(26.0))
                 .h(px(22.0))
                 .rounded_sm()
                 .text_sm()
-                .text_color(rgb(theme::TEXT_MUTED))
+                .text_color(rgb(theme::colors().text_muted))
                 .tooltip(crate::app_shell::tooltip::text(self.texts.get(label_key)))
                 .child(glyph)
         };
         let enabled = |button: Stateful<gpui::Div>| {
             button.hover(|style| {
                 style
-                    .bg(rgb(theme::SURFACE_ACTIVE))
-                    .text_color(rgb(theme::TEXT))
+                    .bg(rgb(theme::colors().surface_active))
+                    .text_color(rgb(theme::colors().text))
             })
         };
+        // It shrinks, hiding its last buttons, when the pane is narrow.
         div()
             .flex()
-            .flex_none()
+            .flex_shrink(TOOLBAR_YIELDS)
+            .min_w(px(30.0))
+            .overflow_hidden()
             .items_center()
             .gap_1()
             .px_1()
@@ -98,7 +105,7 @@ impl Workspace {
                 .items_center()
                 .justify_center()
                 .text_sm()
-                .text_color(rgb(theme::TEXT_FAINT))
+                .text_color(rgb(theme::colors().text_faint))
                 .child(self.texts.get("workspace.empty_pane"))
                 .into_any_element();
         };
@@ -142,7 +149,7 @@ impl Workspace {
             .px_2()
             .py_1()
             .text_sm()
-            .text_color(rgb(theme::TEXT_MUTED))
+            .text_color(rgb(theme::colors().text_muted))
             .child(status_text(&info.status, &self.texts))
             .when(can_start, |line| {
                 line.child(
@@ -150,9 +157,9 @@ impl Workspace {
                         .id(id_of("start", 0, &info.session_id))
                         .px_2()
                         .rounded_sm()
-                        .bg(rgb(theme::SURFACE_ACTIVE))
-                        .text_color(rgb(theme::TEXT))
-                        .hover(|style| style.bg(rgb(theme::ACCENT)))
+                        .bg(rgb(theme::colors().surface_active))
+                        .text_color(rgb(theme::colors().text))
+                        .hover(|style| style.bg(rgb(theme::colors().accent)))
                         .on_click(cx.listener(move |this, _, window, cx| {
                             this.reopen(&session_id, window, cx);
                         }))

@@ -635,10 +635,16 @@ Costo en el hook: una escritura más, unos 3 ms (media de 16 ms con `hyperfine`,
 | `cmd+shift+d` | Dividir hacia abajo |
 | `cmd+w` | Cerrar la pestaña (termina el programa de la sesión) |
 | `cmd+shift+w` | Cerrar el panel con todas sus pestañas |
-| `cmd+]` / `cmd+[` | Foco al panel siguiente / anterior |
-| `cmd+alt+→` / `cmd+alt+←` | Lo mismo (los de la Fase 1) |
-| `cmd+shift+]` / `cmd+shift+[` | Pestaña siguiente / anterior |
+| `cmd+alt+→` / `cmd+alt+←` | Foco al panel siguiente / anterior |
+| `cmd+shift+→` / `cmd+shift+←` | Pestaña siguiente / anterior |
+| `cmd+1` … `cmd+9` | La pestaña de ese lugar en el panel con foco |
+| `cmd+]` / `cmd+[` | Panel siguiente / anterior (teclado US) |
+| `cmd+shift+]` / `cmd+shift+[` | Pestaña siguiente / anterior (teclado US) |
+| `cmd+,` | Ajustes |
+| `cmd+m` | Minimizar |
 | `cmd+q` | Salir |
+
+**Por qué los corchetes no servían (bloque 4, parte 0).** gpui nombra cada tecla por el carácter que produce. Con Shift sobre una tecla que no es una letra, macOS informa el carácter ya desplazado y gpui descarta el Shift: «cmd+shift+]» llega como `cmd-}`. El atajo estaba escrito como `cmd-shift-]`, que no coincide nunca, ni siquiera en un teclado US. Ahora está como `cmd-}` / `cmd-{`. En un teclado latinoamericano esa tecla da `´` y `¨`, y los corchetes piden Option, así que ahí los corchetes no son prácticos: **cada acción tiene al menos un atajo que no depende de la distribución** (letras, dígitos y flechas). Un test construye las pulsaciones como las construye gpui en macOS y lo comprueba.
 
 Solo valen con el foco en el área de trabajo, para que no interfieran con un formulario de la barra lateral.
 
@@ -664,7 +670,7 @@ Solo valen con el foco en el área de trabajo, para que no interfieran con un fo
 
 *2026-11-22.*
 
-- **Al restaurar** el layout, ninguna pestaña arranca su programa (lo pide el encargo; la reanudación automática de lo visible es de la §2.5). Cada pestaña sin programa muestra su estado y un botón «Abrir».
+- **Al restaurar** el layout: en el bloque 3 ninguna pestaña arrancaba su programa. **Desde el bloque 4 lo visible se reanuda solo (D-50).**
 - **Clic en una tarjeta:** muestra la sesión en el panel con foco (o va a la pestaña que ya tiene) y arranca su programa si la app no lo tiene. Si terminó aquí, se ve su última pantalla con el botón «Reabrir».
 - **Cerrar una pestaña** (o el panel) termina el programa de la sesión. Ocultar sin terminar llegará con la hibernación (§2.4).
 - **Una sesión, una pestaña:** un terminal tiene un solo canal de repintado, así que no puede verse en dos sitios.
@@ -721,3 +727,92 @@ Se usa `/tmp` y no `$TMPDIR` porque en macOS este último ya es largo.
 - **La app cierra lo que ya no existe.** Cada vez que relee el tablero, cierra en el host las sesiones que la base de datos ya no tiene. Hace falta porque las sesiones de shell no toman candado (la CLI no puede saber que están abiertas) y por si la base cambia por otra vía.
 
 Borrar desde la barra lateral no cambia: pide confirmación, cierra el programa y borra.
+
+## D-47 · Ajustes a la tarjeta y a las pestañas tras la prueba con clics del bloque 3
+
+*2026-11-22, bloque 4, parte 0.*
+
+- **Puertos: solo los de lo que la sesión arrancó.** Claude Code 2.1.330 escucha él mismo en un puerto local por sesión, que no sirve al usuario. El proceso raíz de una sesión (el `claude`, o el shell) nunca aporta puertos; sus descendientes, sí.
+- **La tarjeta nombra hasta 3 puertos** y cuenta el resto («+2»). El texto de estado es el que cede, con puntos suspensivos; los puertos no se cortan.
+- **En un panel estrecho mandan las pestañas.** Los botones del panel ceden primero su sitio (queda al menos el de nueva terminal); después las pestañas se encogen hasta unas letras con puntos suspensivos, y solo entonces la fila se desplaza.
+- **La vista previa no muestra markdown en crudo.** Al guardarla se quitan `**`, `__`, las comillas invertidas y el `#` de los títulos. Un `*` o un `_` sueltos se dejan: suelen ser un producto o un nombre.
+
+## D-48 · Lo que Claude pide se guarda aparte de lo último que dijo
+
+*2026-11-22, bloque 4, parte 0. Fuente: <https://code.claude.com/docs/en/hooks>, consultada ese día.*
+
+**El problema.** Si Claude pedía un permiso y el usuario pulsaba Esc, la tarjeta seguía en «waiting / Claude needs your permission» hasta el siguiente mensaje, y el aviso quedaba como vista previa incluso con la sesión terminada.
+
+**Qué dice la documentación.** No hay ningún evento para eso:
+
+- `Stop` «does not run if the stoppage occurred due to a user interrupt».
+- `PermissionDenied` «only fires in auto mode: it doesn't run when you manually deny a permission dialog».
+- `PostToolUseFailure` «doesn't fire for tool calls rejected before execution… or a permission denial».
+- Ningún tipo de `Notification` avisa de que el permiso ya no está pendiente.
+
+**Lo que se hizo.**
+
+- Migración 3: columna `sessions.notice`. Lo que Claude pide (`Notification` de los tres tipos que bloquean) va ahí, **no** a la vista previa. La tarjeta muestra el aviso mientras existe y, si no, lo último que se dijo.
+- El aviso se borra en cuanto la sesión deja de esperar, por cualquier vía: `PostToolUse`, `Stop`, un mensaje nuevo, `SessionEnd`, el cierre desde la app o la hibernación. La regla vive en los casos de uso `apply_state` y `move_state`.
+- **`idle_prompt` mueve `waiting → idle`, si llega.** Se dejó porque no hace daño y solo toca una sesión que esté en `waiting`.
+
+**Lo que midió la planificadora con el `claude` real (ronda de correcciones del bloque 4).** La mitigación anterior **no funciona** como única salida: tras rechazar un permiso con Esc, la sesión siguió en `waiting` con «Claude needs your permission» **más de 3 minutos, sin que llegara ningún `idle_prompt`**. Y con un permiso de verdad pendiente la sesión se mantuvo en `waiting` 100 s sin que un `idle_prompt` la bajara (la sospecha contraria de la auditoría era falsa).
+
+**Qué se hace entonces (PLAN §2.4, ajuste del 22-nov).** No hay señal documentada, así que no se intenta adivinar que el permiso se rechazó. La consecuencia que importaba era que una sesión así no hibernaría nunca, y eso se resuelve en la regla de hibernación: **una sesión en `waiting` también se hiberna** cuando lleva más de `hibernate_after_hours` sin ningún evento (D-49).
+
+**Limitación conocida, tal como queda.** Tras rechazar un permiso con Esc, la tarjeta sigue diciendo que Claude espera, con el aviso del permiso, hasta que pase algo en la sesión: un mensaje nuevo, una herramienta, el fin de la sesión o su hibernación.
+
+## D-49 · Hibernación y válvula de memoria
+
+*2026-11-22, bloque 4, §2.4.*
+
+- **Las decisiones son funciones puras** de `core` (`session/domain/hibernation_policy.rs`), con la hora como parámetro: nadie espera 48 h para probarlas.
+  - Hibernar: en reposo (`idle`) **o esperando al usuario (`waiting`)**, fuera de la vista, sin `keep_alive` y **más de** `hibernate_after_hours` sin actividad. Trabajando (`working`), nunca.
+  - Válvula: solo sesiones `idle`, fuera de la vista y sin `keep_alive`; **nunca una `waiting`**. La que lleva más tiempo quieta, una por minuto como máximo. Con presión **crítica**, sin mínimo; con presión de **aviso** (`warning`), solo si lleva al menos 30 min quieta. En macOS el nivel crítico casi nunca llega (jetsam actúa antes) y esta Mac pasa el día en aviso.
+- **Hibernar es:** escribir `hibernated` en la BD **primero** (para que lo que el programa avise al salir no lo deshaga), SIGHUP al grupo y SIGKILL a los 5 s si sigue vivo. El candado se libera cuando no queda nada del grupo.
+- **Despertar:** una sesión hibernada cuya pestaña pasa a estar a la vista se relanza con `core::launch`, que reanuda con `--resume`. La tarjeta dice «resuming»/«reanudando» hasta que Claude avisa. Si se la mira mientras su programa todavía se está yendo (los 5 s de gracia), se pide igual y el host la abre sola cuando el candado queda libre.
+- **Lo que el programa avise mientras se va no deshace la hibernación:** `Stop`, `UserPromptSubmit`, `Notification` y `SessionEnd` respetan el estado `hibernated`. Solo `SessionStart`, el arranque de la siguiente corrida, saca a una sesión de ahí.
+- **Una sesión que termina sola** queda en `ended` con el botón «Resume»: no se relanza por mirarla.
+- **Cada 30 s** el área de trabajo, que es quien sabe qué está a la vista, repasa las sesiones.
+- **Nunca se pierde una conversación:** la app no borra transcripts, y relanzar pasa siempre por `plan_launch`, que usa `--resume` si el transcript existe.
+
+**Desviación: la presión de memoria se consulta, no se escucha.** El plan pide `DISPATCH_SOURCE_TYPE_MEMORYPRESSURE`. Suscribirse a esa fuente desde Rust exige `unsafe` (FFI con libdispatch), y la regla `H-002` deja el `unsafe` en un solo sitio. Se lee el mismo nivel del kernel, `kern.memorystatus_vm_pressure_level` (1 normal, 2 aviso, 4 crítico), con `/usr/sbin/sysctl` cada 30 s, a través de `command_without_session_markers`. Cuesta unos 4 ms cada vez y, como la válvula actúa una vez por minuto como máximo, no se pierde nada frente al aviso inmediato. **Aceptada por la planificadora.** `sysctl` se lanza con un plazo de 2 s, para que un cuelgue no detenga el ciclo.
+
+## D-50 · Arranque y restauración: lo visible se reanuda
+
+*2026-11-22, bloque 4, §2.5. Sustituye lo que D-41 decía del arranque.*
+
+- **Cerrar la app es hibernar** (principio 3 del plan): al salir, las sesiones de Claude que estaban en marcha quedan `hibernated`, escrito antes de avisar a los programas. Las que el usuario había cerrado siguen `ended`. **Con la misma gracia que una hibernación:** todos los programas reciben el SIGHUP a la vez y tienen 5 s para salir; a lo que siga vivo se le manda SIGKILL desde el propio cierre, porque los hilos que lo harían mueren con la app. Con el `claude` real el cierre tarda menos de 1 s.
+- **Al arrancar, antes de nada,** el host hiberna toda sesión de Claude que la BD todavía tenga como `working`, `idle` o `waiting` y que **nadie tenga**: es lo que deja una caída, un `kill -9` o un reinicio del Mac. Lo decide **el candado, no el pid** escrito en su archivo: se lee el pid, se intenta tomar el candado y solo si se consigue y ese pid no está vivo se escribe `hibernated`, con el candado tomado. Una sesión abierta con `lithemux open` en otra terminal, o un `claude` huérfano de una app que murió, no se tocan.
+- **Con la ventana arriba:** las sesiones de Claude hibernadas que están a la vista (la pestaña mostrada de cada panel) se reanudan solas; las demás siguen hibernadas hasta que se las mire. Las sesiones de shell que tienen pestaña se relanzan en su carpeta.
+- Una sesión `ended` a la vista no se relanza: muestra el botón.
+
+## D-51 · Ajustes, idioma, tema y menú
+
+*2026-11-22, bloque 4, §2.6.*
+
+- **Los ajustes son los mismos en la ventana y en `lithemux config`,** con la misma validación (`settings::checked_value`): `language`, `context_language`, `theme`, `font_family`, `font_size`, `scrollback`, `hibernate_after_hours`, `memory_valve` y `claude_path`. El test del §0.6 que dejaba `language` fuera de la CLI se cambió citando el §2.6.
+- **Todo se aplica sin reiniciar.** La app relee los ajustes cada 3 s junto con el tablero, así que también recoge lo que se cambie con `lithemux config` desde una terminal. El idioma cambia los textos, la barra de menús y la ventana de Ajustes al momento.
+- **`scrollback` vale para las terminales que se abran desde entonces;** una ya abierta conserva el suyo.
+- **Una fuente que el Mac no tiene** no se usa: se dibuja con Menlo. La lista de fuentes del sistema es lenta de obtener, así que solo se consulta cuando cambia la fuente pedida (consultarla cada 3 s llevaba la CPU en reposo al 1,17 %).
+- **Tema:** claro, oscuro o el del sistema; con «sistema» la app sigue a macOS cuando cambia. Cada tema tiene sus colores por defecto del terminal. Un test comprueba el contraste del texto sobre cada fondo en los dos temas.
+- **Barra de título:** gpui no deja fijar la apariencia de la ventana, y la barra del sistema no seguía el tema. Las ventanas la ocultan (`appears_transparent`) y pintan una franja propia bajo los botones de macOS, que arrastra la ventana y la amplía con doble clic.
+- **Menú nativo:** el de la app (Acerca de, Ajustes…, Salir), Archivo, Edición, Visualización, Ventana y Ayuda. Copiar y pegar son acciones, para que el menú y el teclado pidan lo mismo. «Ayuda» solo tiene «Abrir la carpeta de datos»: la app no tiene documentación en línea que abrir ni debe conectarse a nada.
+
+## D-52 · «Madre» e «hijas» pasan a ser «sesión coordinadora» y «sesiones»
+
+*2026-11-22, ronda de correcciones del bloque 4. Decisión de Jhon.*
+
+| Antes | Ahora |
+|---|---|
+| madre / `mother` | sesión coordinadora / `coordinator` |
+| hija / `child` | sesión de la categoría / `member` |
+| hermanas / `sisters` | las demás sesiones / `the other sessions` |
+
+- **Código:** `Kind::Coordinator` y `Kind::Member`, `coordinator_policy.rs`, `find_coordinator`, `SessionError::CoordinatorExists`.
+- **BD, migración 4:** los valores de `sessions.kind` y el índice `one_coordinator_per_category`. Los valores viejos estaban en un `CHECK` de la tabla, así que la tabla se rehace dentro de la migración. Probada desde las versiones 1, 2 y 3, con datos, y desde el esquema de una base v3 hecha por la propia app.
+- **CLI:** `--coordinator` en `new` y `set`. `--mother` deja de existir, sin alias: la app no se ha publicado.
+- **Contexto que recibe Claude** (es/en): «sesión coordinadora», «Coordinadora de la categoría», «Las demás sesiones».
+- **Interfaz:** etiqueta «coordinator»/«coordinadora»; «Make coordinator»/«Hacer coordinadora»; «Remove as coordinator»/«Quitar como coordinadora»; «already has a coordinator session».
+- **Quedan con el término viejo, por ser historia:** los reportes de las fases 0, 1 y 2 y las decisiones anteriores a esta. En `git log`, los commits anteriores.
+- **Regla `H-007`:** el vocabulario viejo no vuelve a `crates/*/src`, `locales/` ni al `README.md`. No prohíbe `child` a secas, como pedía el encargo, porque es también «proceso hijo» y el método `.child(…)` de gpui; atrapa las formas en que nombraba el tipo de sesión.

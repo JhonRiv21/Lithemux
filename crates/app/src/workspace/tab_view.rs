@@ -10,6 +10,8 @@ use crate::sidebar::status_text::status_color;
 use crate::theme;
 
 const TAB_BAR_HEIGHT: f32 = 30.0;
+/// Room for the dot, a few letters with their ellipsis, and the close mark.
+const MIN_TAB_WIDTH: f32 = 96.0;
 
 /// What a tab needs from its session.
 pub(super) struct TabInfo {
@@ -27,21 +29,24 @@ fn tab_frame(pane_id: u32, session_id: &str, is_shown: bool) -> Stateful<Div> {
     div()
         .id(id_of("tab", pane_id, session_id))
         .flex()
-        .flex_none()
+        // A tab gives up width, down to a few letters and an ellipsis,
+        // before the row has to scroll.
+        .flex_initial()
         .items_center()
         .gap_1()
         .h_full()
         .px_2()
+        .min_w(px(MIN_TAB_WIDTH))
         .max_w(px(220.0))
         .border_r_1()
-        .border_color(rgb(theme::BORDER))
+        .border_color(rgb(theme::colors().border))
         .text_sm()
         .text_color(rgb(if is_shown {
-            theme::TEXT
+            theme::colors().text
         } else {
-            theme::TEXT_MUTED
+            theme::colors().text_muted
         }))
-        .when(is_shown, |tab| tab.bg(rgb(theme::WINDOW)))
+        .when(is_shown, |tab| tab.bg(rgb(theme::colors().window)))
 }
 
 impl Workspace {
@@ -72,15 +77,17 @@ impl Workspace {
             .flex_none()
             .items_center()
             .h(px(TAB_BAR_HEIGHT))
-            .bg(rgb(theme::SIDEBAR))
+            .bg(rgb(theme::colors().sidebar))
             .border_b_1()
-            .border_color(rgb(theme::BORDER))
+            .border_color(rgb(theme::colors().border))
             .child(
                 div()
                     .id(("tabs", pane_id as usize))
                     .flex()
-                    .flex_1()
-                    .min_w_0()
+                    // In a narrow pane the tabs come first: the buttons
+                    // give up their room before a tab loses its name.
+                    .flex_auto()
+                    .min_w(px(MIN_TAB_WIDTH))
                     .h_full()
                     .overflow_x_scroll()
                     .children(tabs),
@@ -102,8 +109,8 @@ impl Workspace {
             title: info.title.clone(),
         };
         tab_frame(pane_id, &info.session_id, is_shown)
-            .hover(|style| style.bg(rgb(theme::SURFACE_HOVER)))
-            .drag_over::<TabDrag>(|style, _, _, _| style.bg(rgb(theme::SURFACE_ACTIVE)))
+            .hover(|style| style.bg(rgb(theme::colors().surface_hover)))
+            .drag_over::<TabDrag>(|style, _, _, _| style.bg(rgb(theme::colors().surface_active)))
             .on_click(cx.listener(move |this, _, window, cx| {
                 this.select_tab(&to_select, window, cx);
             }))
@@ -121,7 +128,7 @@ impl Workspace {
                     .rounded_full()
                     .bg(rgb(status_color(&info.status))),
             )
-            .child(div().truncate().child(info.title))
+            .child(div().flex_1().min_w_0().truncate().child(info.title))
             .child(self.render_close_button(pane_id, &info.session_id, cx))
             .into_any_element()
     }
@@ -138,11 +145,11 @@ impl Workspace {
             .flex_none()
             .px_1()
             .rounded_sm()
-            .text_color(rgb(theme::TEXT_FAINT))
+            .text_color(rgb(theme::colors().text_faint))
             .hover(|style| {
                 style
-                    .bg(rgb(theme::SURFACE_ACTIVE))
-                    .text_color(rgb(theme::TEXT))
+                    .bg(rgb(theme::colors().surface_active))
+                    .text_color(rgb(theme::colors().text))
             })
             .on_click(cx.listener(move |this, _, window, cx| {
                 this.close_tab(&to_close, window, cx);

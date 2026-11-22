@@ -3,17 +3,14 @@
 use std::ops::Range;
 
 use gpui::{
-    App, Bounds, Context, ElementInputHandler, EntityInputHandler, EventEmitter, FocusHandle,
-    Focusable, IntoElement, KeyDownEvent, Pixels, Point, Render, SharedString, UTF16Selection,
-    Window, canvas, div, prelude::*, px, rgb,
+    App, Bounds, ClipboardItem, Context, ElementInputHandler, Entity, EntityInputHandler,
+    EventEmitter, FocusHandle, Focusable, IntoElement, KeyDownEvent, Pixels, Point, Render,
+    SharedString, UTF16Selection, Window, canvas, div, prelude::*, px, rgb,
 };
 
 use super::buffer::Buffer;
-
-const TEXT: u32 = 0xe6e6ea;
-const PLACEHOLDER: u32 = 0x6f6f78;
-const BACKGROUND: u32 = 0x101012;
-const BORDER: u32 = 0x4d78cc;
+use crate::edit_actions::{Copy, Paste};
+use crate::theme;
 
 pub enum TextFieldEvent {
     Submitted,
@@ -37,6 +34,11 @@ impl TextField {
         }
     }
 
+    pub fn set_text(&mut self, text: &str, cx: &mut Context<Self>) {
+        self.buffer = Buffer::with_text(text);
+        cx.notify();
+    }
+
     pub fn text(&self) -> &str {
         self.buffer.text()
     }
@@ -55,16 +57,24 @@ impl TextField {
             "right" => self.buffer.right(),
             "home" => self.buffer.start(),
             "end" => self.buffer.end(),
-            "v" if command => {
-                if let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) {
-                    self.buffer.replace(None, &text);
-                }
-            }
             // Text keys go to the input method.
             _ => return,
         }
         cx.stop_propagation();
         cx.notify();
+    }
+}
+
+impl TextField {
+    fn paste(&mut self, _: &Paste, _: &mut Window, cx: &mut Context<Self>) {
+        if let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) {
+            self.buffer.replace(None, &text);
+            cx.notify();
+        }
+    }
+
+    fn copy(&mut self, _: &Copy, _: &mut Window, cx: &mut Context<Self>) {
+        cx.write_to_clipboard(ClipboardItem::new_string(self.buffer.text().to_string()));
     }
 }
 
@@ -154,15 +164,30 @@ impl EntityInputHandler for TextField {
     }
 }
 
+/// Covers the field without painting: it is where the system delivers
+/// typed text and compositions while the field has the focus.
+fn input_layer(field: Entity<TextField>, focus_handle: FocusHandle) -> impl IntoElement {
+    canvas(
+        |_, _, _| {},
+        move |bounds, (), window, cx| {
+            let input = ElementInputHandler::new(bounds, field);
+            window.handle_input(&focus_handle, input, cx);
+        },
+    )
+    .absolute()
+    .size_full()
+}
+
 impl Render for TextField {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let focused = self.focus_handle.is_focused(window);
+        let colors = theme::colors();
         let (before, after) = self.buffer.around_cursor();
         let is_empty = self.buffer.text().is_empty();
-        let entity = cx.entity();
-        let focus_handle = self.focus_handle.clone();
         div()
             .track_focus(&self.focus_handle)
+            .on_action(cx.listener(Self::paste))
+            .on_action(cx.listener(Self::copy))
             .on_key_down(cx.listener(Self::on_key_down))
             .relative()
             .flex()
@@ -172,33 +197,27 @@ impl Render for TextField {
             .px_1()
             .overflow_hidden()
             .rounded_sm()
-            .bg(rgb(BACKGROUND))
+            .bg(rgb(colors.field))
             .border_1()
-            .border_color(rgb(if focused { BORDER } else { BACKGROUND }))
+            .border_color(rgb(if focused {
+                colors.accent
+            } else {
+                colors.border
+            }))
             .text_sm()
-            .text_color(rgb(TEXT))
+            .text_color(rgb(colors.text))
             .child(SharedString::from(before.to_string()))
             .when(focused, |field| {
-                field.child(div().w(px(1.0)).h(px(14.0)).bg(rgb(TEXT)))
+                field.child(div().w(px(1.0)).h(px(14.0)).bg(rgb(colors.text)))
             })
             .child(SharedString::from(after.to_string()))
             .when(is_empty, |field| {
                 field.child(
                     div()
-                        .text_color(rgb(PLACEHOLDER))
+                        .text_color(rgb(colors.text_faint))
                         .child(self.placeholder.clone()),
                 )
             })
-            .child(
-                canvas(
-                    |_, _, _| {},
-                    move |bounds, (), window, cx| {
-                        let input = ElementInputHandler::new(bounds, entity);
-                        window.handle_input(&focus_handle, input, cx);
-                    },
-                )
-                .absolute()
-                .size_full(),
-            )
+            .child(input_layer(cx.entity(), self.focus_handle.clone()))
     }
 }

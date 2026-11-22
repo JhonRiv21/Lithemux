@@ -9,6 +9,7 @@ mod fake_claude_test;
 mod hook_log_test;
 mod listening_ports_test;
 mod login_shell_probe_test;
+mod migrations_test;
 mod sandbox;
 mod session_locks_test;
 mod sqlite_contracts;

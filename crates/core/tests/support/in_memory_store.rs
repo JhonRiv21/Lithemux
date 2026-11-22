@@ -139,12 +139,12 @@ impl SessionRepository for InMemoryStore {
         Ok(self.sessions.borrow().iter().find(|s| s.id == id).cloned())
     }
 
-    fn find_mother(&self, category_id: &str) -> Result<Option<Session>, SessionError> {
+    fn find_coordinator(&self, category_id: &str) -> Result<Option<Session>, SessionError> {
         let sessions = self.sessions.borrow();
-        let mut mothers = sessions
+        let mut coordinators = sessions
             .iter()
-            .filter(|s| s.category_id == category_id && s.kind == Kind::Mother);
-        Ok(mothers.next().cloned())
+            .filter(|s| s.category_id == category_id && s.kind == Kind::Coordinator);
+        Ok(coordinators.next().cloned())
     }
 
     fn update_role(&self, id: &str, role: &str) -> Result<(), SessionError> {
@@ -237,6 +237,10 @@ impl SessionRepository for InMemoryStore {
             }
             s.unread += i64::from(asks_for_attention);
         })
+    }
+
+    fn update_notice(&self, id: &str, notice: Option<&str>) -> Result<(), SessionError> {
+        self.update(id, |s| s.notice = notice.map(str::to_string))
     }
 
     fn clear_unread(&self, id: &str) -> Result<(), SessionError> {

@@ -11,6 +11,9 @@ pub const WAITING_NOTIFICATIONS: [&str; 3] = [
     "elicitation_url_dialog",
 ];
 
+/// The reminder Claude Code sends 60 s into any idle period.
+const IDLE_REMINDER: &str = "idle_prompt";
+
 /// `SessionStart` sources that open a conversation. `compact` is not one:
 /// it fires in the middle of a turn.
 const COMPACT_SOURCE: &str = "compact";
@@ -37,23 +40,36 @@ pub fn transition(event: HookEvent, input: &HookInput) -> Option<Transition> {
         touches_activity,
         preserves: None,
     };
+    // The app writes `hibernated` before it stops a session on purpose.
+    // What the program still reports on its way out must not undo that:
+    // only the start of a new run takes a session out of hibernation.
+    let late = |state, touches_activity| Transition::Set {
+        state,
+        touches_activity,
+        preserves: Some(State::Hibernated),
+    };
     match event {
         HookEvent::SessionStart if input.source.as_deref() == Some(COMPACT_SOURCE) => {
             Some(Transition::Activity)
         }
-        HookEvent::SessionStart | HookEvent::Stop => Some(set(State::Idle, true)),
-        HookEvent::PromptSubmit => Some(set(State::Working, true)),
+        HookEvent::SessionStart => Some(set(State::Idle, true)),
+        HookEvent::Stop => Some(late(State::Idle, true)),
+        HookEvent::PromptSubmit => Some(late(State::Working, true)),
+        // Nothing documented fires when the user dismisses a permission
+        // prompt; this reminder, 60 s into the idle period that follows,
+        // is the first sign that Claude no longer waits for an answer.
+        HookEvent::Notification if input.notification_type.as_deref() == Some(IDLE_REMINDER) => {
+            Some(Transition::Move {
+                from: State::Waiting,
+                to: State::Idle,
+            })
+        }
         HookEvent::Notification => input
             .notification_type
             .as_deref()
             .filter(|kind| WAITING_NOTIFICATIONS.contains(kind))
-            .map(|_| set(State::Waiting, false)),
-        // The app writes `hibernated` before it stops a session on purpose.
-        HookEvent::SessionEnd => Some(Transition::Set {
-            state: State::Ended,
-            touches_activity: false,
-            preserves: Some(State::Hibernated),
-        }),
+            .map(|_| late(State::Waiting, false)),
+        HookEvent::SessionEnd => Some(late(State::Ended, false)),
         // The permission was granted and the tool ran, well or badly: the
         // turn goes on.
         HookEvent::PostToolUse | HookEvent::PostToolUseFailure => Some(Transition::Move {

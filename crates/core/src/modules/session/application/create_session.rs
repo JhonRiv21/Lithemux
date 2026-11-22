@@ -1,9 +1,9 @@
 use uuid::Uuid;
 
 use crate::modules::category::{Category, CategoryRepository, get_category, list_categories};
+use crate::modules::session::domain::coordinator_policy::check_can_be_coordinator;
 use crate::modules::session::domain::kind::Kind;
 use crate::modules::session::domain::messaging_name::name_owner;
-use crate::modules::session::domain::mother_policy::check_can_be_mother;
 use crate::modules::session::domain::profile::Profile;
 use crate::modules::session::domain::session::{NewSession, Session};
 use crate::modules::session::domain::state::State;
@@ -24,12 +24,12 @@ pub fn create_session(
         return Err(SessionError::AlreadyExists(new.target.to_string()));
     }
     ensure_messaging_name_is_free(categories, sessions, &new.target.messaging_name())?;
-    if new.kind == Kind::Mother {
-        let current = sessions.find_mother(&category.id)?;
-        check_can_be_mother(current.as_ref(), None).map_err(|mother| {
-            SessionError::MotherExists {
+    if new.kind == Kind::Coordinator {
+        let current = sessions.find_coordinator(&category.id)?;
+        check_can_be_coordinator(current.as_ref(), None).map_err(|coordinator| {
+            SessionError::CoordinatorExists {
                 category: category.slug.clone(),
-                mother,
+                coordinator,
             }
         })?;
     }
@@ -52,6 +52,7 @@ pub fn create_session(
         title: None,
         pin_sort: None,
         preview: None,
+        notice: None,
         unread: 0,
     };
     sessions.insert(&session)?;

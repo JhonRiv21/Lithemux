@@ -36,6 +36,7 @@ pub struct Workspace {
     /// The save of a divider that is still being dragged. Replacing it
     /// drops the one before: only the last move is saved.
     pending_save: Option<Task<()>>,
+    _lifecycle: Task<()>,
 }
 
 impl Workspace {
@@ -52,7 +53,9 @@ impl Workspace {
                 Rc::clone(&live.texts),
             )
         };
-        cx.observe_in(&live, window, |this, _, window, cx| {
+        cx.observe_in(&live, window, |this, live, window, cx| {
+            // The language may have changed.
+            this.texts = Rc::clone(&live.read(cx).texts);
             this.follow_the_sessions(window, cx);
             cx.notify();
         })
@@ -76,6 +79,7 @@ impl Workspace {
             notice: None,
             focus_handle: cx.focus_handle(),
             pending_save: None,
+            _lifecycle: Self::keep_the_lifecycle(cx),
         }
     }
 
@@ -91,6 +95,8 @@ impl Workspace {
         if self.layout != before {
             self.save(cx);
         }
+        // What is on show may have just been hibernated, or restored.
+        self.wake_what_is_seen(cx);
         if self.adopt_the_terminals(window, cx) {
             self.focus_what_is_shown(window, cx);
         }
@@ -154,8 +160,12 @@ impl Workspace {
         }));
     }
 
-    /// Once the window is up: what the restored layout shows is on show.
+    /// Once the window is up, the restored layout comes back to life (PLAN
+    /// §2.5): the Claude sessions on show are resumed, the rest stay
+    /// hibernated, and the shells start again.
     pub fn arrange(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.wake_what_is_seen(cx);
+        self.relaunch_the_shells(cx);
         self.follow_the_sessions(window, cx);
         self.focus_what_is_shown(window, cx);
     }
@@ -163,6 +173,7 @@ impl Workspace {
     /// After any change of tabs or panes.
     pub(super) fn changed(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.save(cx);
+        self.wake_what_is_seen(cx);
         self.follow_the_sessions(window, cx);
         self.focus_what_is_shown(window, cx);
         cx.notify();
@@ -214,7 +225,7 @@ impl Render for Workspace {
             .flex()
             .flex_col()
             .size_full()
-            .bg(rgb(theme::WINDOW));
+            .bg(rgb(theme::colors().window));
         shortcuts::handle(root, cx)
             .child(div().flex_1().min_h_0().child(tree))
             .when_some(notice, |root, notice| {
@@ -223,7 +234,7 @@ impl Render for Workspace {
                         .px_2()
                         .py_1()
                         .text_sm()
-                        .text_color(rgb(theme::ATTENTION))
+                        .text_color(rgb(theme::colors().attention))
                         .child(notice),
                 )
             })

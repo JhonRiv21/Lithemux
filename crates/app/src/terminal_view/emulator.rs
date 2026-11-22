@@ -10,11 +10,9 @@ use alacritty_terminal::grid::Dimensions;
 use alacritty_terminal::term::{Config, Term};
 use alacritty_terminal::vte::ansi::{Processor, Rgb};
 
+use super::look;
 use super::palette;
 use super::pty::GridSize;
-
-/// Lines of history kept per terminal.
-const SCROLLBACK_LINES: usize = 5_000;
 
 pub(super) struct TermDimensions {
     columns: usize,
@@ -78,7 +76,7 @@ impl Emulator {
     pub fn new(size: GridSize, input: mpsc::Sender<Vec<u8>>) -> Self {
         let (color_requests, pending_colors) = mpsc::channel();
         let config = Config {
-            scrolling_history: SCROLLBACK_LINES,
+            scrolling_history: look::scrollback(),
             ..Config::default()
         };
         let replies = Replies {

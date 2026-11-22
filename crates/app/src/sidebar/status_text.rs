@@ -7,6 +7,7 @@ use crate::theme;
 pub fn status_text(status: &Status, texts: &Texts) -> String {
     match status {
         Status::Opening => texts.get("status.opening"),
+        Status::Resuming => texts.get("status.resuming"),
         Status::Closing => texts.get("status.closing"),
         Status::Working => texts.get("status.working"),
         Status::Idle => texts.get("status.idle"),
@@ -36,15 +37,15 @@ pub fn card_status_text(status: &Status, texts: &Texts) -> String {
 
 pub fn status_color(status: &Status) -> u32 {
     match status {
-        Status::Waiting => theme::ATTENTION,
-        Status::Working | Status::Opening => theme::WORKING,
-        Status::Idle | Status::Running => theme::ACCENT,
-        Status::Failed(_) => theme::DANGER,
+        Status::Waiting => theme::colors().attention,
+        Status::Working | Status::Opening | Status::Resuming => theme::colors().working,
+        Status::Idle | Status::Running => theme::colors().accent,
+        Status::Failed(_) => theme::colors().danger,
         Status::Closing
         | Status::Hibernated
         | Status::Ended
         | Status::NotStarted
         | Status::NotRunning
-        | Status::OpenElsewhere(_) => theme::TEXT_FAINT,
+        | Status::OpenElsewhere(_) => theme::colors().text_faint,
     }
 }

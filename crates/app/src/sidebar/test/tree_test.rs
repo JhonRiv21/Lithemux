@@ -42,6 +42,7 @@ fn session(category: &str, slug: &str, kind: Kind) -> Session {
         pin_sort: None,
         preview: None,
         unread: 0,
+        notice: None,
     }
 }
 
@@ -59,16 +60,16 @@ fn titles(cards: &[crate::sidebar::tree::Card]) -> Vec<&str> {
     cards.iter().map(|card| card.title.as_str()).collect()
 }
 
-// PLAN §2.2: the mother is the header of its category and the children
+// PLAN §2.2: the coordinator is the header of its category and the rest
 // hang from it.
 #[test]
-fn the_mother_heads_its_category() {
+fn the_coordinator_heads_its_category() {
     let tree = tree_of(
         &[category("demo", 1)],
         &[
-            session("demo", "ejecutora", Kind::Child),
-            session("demo", "planificadora", Kind::Mother),
-            session("demo", "auditora", Kind::Child),
+            session("demo", "ejecutora", Kind::Member),
+            session("demo", "planificadora", Kind::Coordinator),
+            session("demo", "auditora", Kind::Member),
         ],
     );
     let group = &tree.groups[0];
@@ -76,14 +77,14 @@ fn the_mother_heads_its_category() {
     assert_eq!(titles(&group.cards), ["ejecutora", "auditora"]);
 }
 
-// PLAN §2.2: a category without a mother shows its sessions at one level.
+// PLAN §2.2: a category without a coordinator shows its sessions at one level.
 #[test]
-fn a_category_without_a_mother_has_no_header() {
+fn a_category_without_a_coordinator_has_no_header() {
     let tree = tree_of(
         &[category("demo", 1)],
         &[
-            session("demo", "a", Kind::Child),
-            session("demo", "b", Kind::Child),
+            session("demo", "a", Kind::Member),
+            session("demo", "b", Kind::Member),
         ],
     );
     assert_eq!(tree.groups[0].header, None);
@@ -93,13 +94,13 @@ fn a_category_without_a_mother_has_no_header() {
 // PLAN §2.2: pinned sessions go on top, outside their category.
 #[test]
 fn pinned_sessions_are_on_top_in_their_own_order_and_not_in_their_category() {
-    let mut late = session("demo", "late", Kind::Child);
+    let mut late = session("demo", "late", Kind::Member);
     late.pin_sort = Some(2);
-    let mut early = session("other", "early", Kind::Child);
+    let mut early = session("other", "early", Kind::Member);
     early.pin_sort = Some(1);
     let tree = tree_of(
         &[category("demo", 1), category("other", 2)],
-        &[late, session("demo", "plain", Kind::Child), early],
+        &[late, session("demo", "plain", Kind::Member), early],
     );
     assert_eq!(titles(&tree.pinned), ["early", "late"]);
     assert_eq!(titles(&tree.groups[0].cards), ["plain"]);
@@ -109,15 +110,15 @@ fn pinned_sessions_are_on_top_in_their_own_order_and_not_in_their_category() {
 
 // PLAN §2.2
 #[test]
-fn a_pinned_mother_leaves_its_category_without_header() {
-    let mut mother = session("demo", "m", Kind::Mother);
-    mother.pin_sort = Some(1);
+fn a_pinned_coordinator_leaves_its_category_without_header() {
+    let mut coordinator = session("demo", "m", Kind::Coordinator);
+    coordinator.pin_sort = Some(1);
     let tree = tree_of(
         &[category("demo", 1)],
-        &[mother, session("demo", "child", Kind::Child)],
+        &[coordinator, session("demo", "other", Kind::Member)],
     );
     assert_eq!(tree.groups[0].header, None);
-    assert!(tree.pinned[0].is_mother);
+    assert!(tree.pinned[0].is_coordinator);
 }
 
 // PLAN §2.2: every category is there, in order, with its folded state.
@@ -127,7 +128,7 @@ fn categories_keep_their_order_and_an_empty_one_is_still_shown() {
     folded.collapsed = true;
     let tree = tree_of(
         &[folded, category("alfa", 2)],
-        &[session("alfa", "a", Kind::Child)],
+        &[session("alfa", "a", Kind::Member)],
     );
     let names: Vec<&str> = tree.groups.iter().map(|g| g.name.as_str()).collect();
     assert_eq!(names, ["ZETA", "ALFA"]);
@@ -138,13 +139,13 @@ fn categories_keep_their_order_and_an_empty_one_is_still_shown() {
 // PLAN §2.2: what a card carries.
 #[test]
 fn a_card_carries_title_preview_status_unread_cwd_and_ports() {
-    let mut api = session("demo", "api", Kind::Child);
+    let mut api = session("demo", "api", Kind::Member);
     api.title = Some("The API".to_string());
     api.preview = Some("done".to_string());
     api.unread = 3;
     api.cwd = Some("/Users/ana/Work/clients/acme/api".to_string());
     api.keep_alive = true;
-    let mut shell = session("demo", "sh", Kind::Child);
+    let mut shell = session("demo", "sh", Kind::Member);
     shell.profile = Profile::Shell;
     let ports = HashMap::from([(api.id.clone(), vec![3000, 52844])]);
     let tree = build(&Board {

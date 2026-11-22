@@ -80,8 +80,8 @@ fn bold_applies_only_to_the_cells_printed_in_bold() {
 fn reverse_video_swaps_foreground_and_background() {
     let grid = screen_after("\x1b[7mx");
     let style = grid.rows[0][0].style;
-    assert_eq!(style.foreground, palette::BACKGROUND);
-    assert_eq!(style.background, Some(palette::FOREGROUND));
+    assert_eq!(style.foreground, palette::background());
+    assert_eq!(style.background, Some(palette::foreground()));
 }
 
 // PLAN §1.1: cells

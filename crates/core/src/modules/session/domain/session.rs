@@ -30,6 +30,8 @@ pub struct Session {
     pub pin_sort: Option<i64>,
     /// One line of the last thing said in it.
     pub preview: Option<String>,
+    /// What Claude is waiting for from the user, while it waits.
+    pub notice: Option<String>,
     /// How many times it asked for attention since it was last looked at.
     pub unread: i64,
 }
@@ -41,6 +43,12 @@ impl Session {
 
     pub fn display_title(&self) -> &str {
         self.title.as_deref().unwrap_or(&self.slug)
+    }
+
+    /// What the card shows under the title: the pending request, or the
+    /// last thing said.
+    pub fn card_line(&self) -> Option<&str> {
+        self.notice.as_deref().or(self.preview.as_deref())
     }
 
     pub fn is_pinned(&self) -> bool {

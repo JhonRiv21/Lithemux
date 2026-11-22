@@ -8,6 +8,8 @@ use crate::session_host::{Failure, Phase};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Status {
     Opening,
+    /// Waking from hibernation: its conversation is being resumed.
+    Resuming,
     Closing,
     Working,
     Idle,
@@ -32,13 +34,21 @@ impl Status {
     pub fn is_live(&self) -> bool {
         matches!(
             self,
-            Status::Opening | Status::Working | Status::Idle | Status::Waiting | Status::Running
+            Status::Opening
+                | Status::Resuming
+                | Status::Working
+                | Status::Idle
+                | Status::Waiting
+                | Status::Running
         )
     }
 }
 
 pub fn status_of(phase: Option<&Phase>, state: State, profile: Profile) -> Status {
     match phase {
+        Some(Phase::Opening) if state == State::Hibernated && profile == Profile::Claude => {
+            Status::Resuming
+        }
         Some(Phase::Opening) => Status::Opening,
         Some(Phase::Closing) => Status::Closing,
         Some(Phase::OpenElsewhere { pid }) => Status::OpenElsewhere(*pid),
@@ -50,7 +60,8 @@ pub fn status_of(phase: Option<&Phase>, state: State, profile: Profile) -> Statu
             State::Waiting => Status::Waiting,
             // The program started and Claude has not said so yet: what the
             // database has is from the run before.
-            State::New | State::Ended | State::Hibernated => Status::Opening,
+            State::Hibernated => Status::Resuming,
+            State::New | State::Ended => Status::Opening,
         },
         Some(Phase::Ended) | None if profile == Profile::Shell => Status::NotRunning,
         Some(Phase::Ended) => match state {

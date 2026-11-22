@@ -360,3 +360,19 @@ fn the_only_pane_stays_when_all_its_sessions_are_gone() {
     assert_eq!(layout.panes_in_order().len(), 1);
     assert!(layout.active_pane().tabs.is_empty());
 }
+
+// Block 4, part 0 (2): cmd+1…9 shows the tab at that place of the pane in
+// focus; a place past the last tab changes nothing.
+#[test]
+fn a_tab_is_shown_by_its_place_in_the_pane() {
+    let mut layout = Layout::single();
+    for session in ["a", "b", "c"] {
+        layout.open(session);
+    }
+    layout.show_tab_at(0);
+    assert_eq!(layout.active_pane().active_session(), Some("a"));
+    layout.show_tab_at(2);
+    assert_eq!(layout.active_pane().active_session(), Some("c"));
+    layout.show_tab_at(7);
+    assert_eq!(layout.active_pane().active_session(), Some("c"));
+}

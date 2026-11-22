@@ -14,11 +14,11 @@ impl Render for Tooltip {
             .px_2()
             .py_1()
             .rounded_sm()
-            .bg(rgb(theme::SURFACE_ACTIVE))
+            .bg(rgb(theme::colors().surface_active))
             .border_1()
-            .border_color(rgb(theme::BORDER))
+            .border_color(rgb(theme::colors().border))
             .text_xs()
-            .text_color(rgb(theme::TEXT))
+            .text_color(rgb(theme::colors().text))
             .child(self.0.clone())
     }
 }

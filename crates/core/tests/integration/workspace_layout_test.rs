@@ -45,7 +45,7 @@ fn the_layout_survives_closing_and_opening_the_database() {
         add_category(&categories, &InMemoryBoards::default(), "demo");
         let ids: Vec<String> = ["demo/a", "demo/b", "demo/c"]
             .iter()
-            .map(|target| add_session(&categories, &sessions, target, Kind::Child).id)
+            .map(|target| add_session(&categories, &sessions, target, Kind::Member).id)
             .collect();
 
         let mut layout = Layout::single();
@@ -92,8 +92,8 @@ fn a_session_deleted_since_the_layout_was_saved_has_no_tab() {
         SqliteSessionRepository::new(&db),
     );
     add_category(&categories, &InMemoryBoards::default(), "demo");
-    let kept = add_session(&categories, &sessions, "demo/a", Kind::Child);
-    let deleted = add_session(&categories, &sessions, "demo/b", Kind::Child);
+    let kept = add_session(&categories, &sessions, "demo/a", Kind::Member);
+    let deleted = add_session(&categories, &sessions, "demo/b", Kind::Member);
     let mut layout = Layout::single();
     layout.open(&kept.id);
     layout.open(&deleted.id);
@@ -117,53 +117,6 @@ fn a_damaged_layout_is_replaced_by_one_empty_pane() {
     layouts.save("{ this is not a layout").unwrap();
     assert_eq!(
         restore_layout(&layouts, |_| true).unwrap(),
-        Layout::single()
-    );
-}
-
-// PLAN §2.3: a new migration. A database of the previous version keeps
-// its data and gains what the sidebar and the workspace need.
-#[test]
-fn a_database_of_the_previous_version_is_migrated_with_its_data() {
-    let temp = TempHome::new();
-    std::fs::create_dir_all(temp.home.db_path().parent().unwrap()).unwrap();
-    {
-        let old = rusqlite::Connection::open(temp.home.db_path()).unwrap();
-        old.execute_batch(include_str!("../fixtures/schema_v1.sql"))
-            .unwrap();
-        old.execute_batch(
-            "INSERT INTO categories(id, slug, name, root_dir, sort, created_at)
-               VALUES ('c1', 'demo', 'Demo', '/work/demo', 1, 10);
-             INSERT INTO sessions(id, category_id, slug, role, kind, profile, state, sort,
-                                  created_at, keep_alive)
-               VALUES ('s1', 'c1', 'api', 'the api', 'mother', 'claude', 'idle', 1, 20, 1);",
-        )
-        .unwrap();
-        old.pragma_update(None, "user_version", 1).unwrap();
-    }
-
-    let db = Db::open(&temp.home).unwrap();
-    assert_eq!(db.schema_version().unwrap(), 2);
-    let session = SqliteSessionRepository::new(&db)
-        .find_by_id("s1")
-        .unwrap()
-        .unwrap();
-    assert_eq!((session.slug.as_str(), session.keep_alive), ("api", true));
-    assert_eq!(
-        (
-            session.title,
-            session.pin_sort,
-            session.preview,
-            session.unread
-        ),
-        (None, None, None, 0)
-    );
-    let category =
-        &lithemux_core::modules::category::list_categories(&SqliteCategoryRepository::new(&db))
-            .unwrap()[0];
-    assert!(!category.collapsed);
-    assert_eq!(
-        restore_layout(&SqliteLayoutRepository::new(&db), |_| true).unwrap(),
         Layout::single()
     );
 }

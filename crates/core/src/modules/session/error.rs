@@ -18,8 +18,11 @@ pub enum SessionError {
     #[error("messaging name \"{name}\" is already used by {owner}")]
     MessagingNameTaken { name: String, owner: String },
 
-    #[error("category \"{category}\" already has a mother session ({mother})")]
-    MotherExists { category: String, mother: String },
+    #[error("category \"{category}\" already has a coordinator session ({coordinator})")]
+    CoordinatorExists {
+        category: String,
+        coordinator: String,
+    },
 
     #[error(transparent)]
     Category(#[from] CategoryError),

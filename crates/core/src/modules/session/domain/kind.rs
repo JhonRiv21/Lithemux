@@ -3,22 +3,24 @@ use serde::Serialize;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Kind {
-    Mother,
-    Child,
+    /// Coordinates the category and keeps its board. One per category.
+    Coordinator,
+    /// Any other session of the category.
+    Member,
 }
 
 impl Kind {
     pub fn as_str(self) -> &'static str {
         match self {
-            Kind::Mother => "mother",
-            Kind::Child => "child",
+            Kind::Coordinator => "coordinator",
+            Kind::Member => "member",
         }
     }
 
     pub fn parse(value: &str) -> Option<Self> {
         match value {
-            "mother" => Some(Kind::Mother),
-            "child" => Some(Kind::Child),
+            "coordinator" => Some(Kind::Coordinator),
+            "member" => Some(Kind::Member),
             _ => None,
         }
     }

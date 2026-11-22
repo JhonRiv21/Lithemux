@@ -520,3 +520,175 @@ Las pruebas G a K de `docs/fases/F2-prueba-manual.md`, que son la única comprob
 | `cargo deny check` | ok |
 | `scripts/lint-findings` | 5 reglas, sin hallazgos |
 | Pre-commit | exit 0 |
+
+## Bloque 4 · Ciclo de vida (§2.4), arranque (§2.5), ajustes e idioma (§2.6)
+
+**Fecha:** 2026-11-22.
+
+### Parte 0 · Lo que salió de la prueba con clics del bloque 3
+
+| # | Hallazgo | Arreglo | ¿Vi fallar el test antes? |
+|---|---|---|---|
+| 1 | El puerto del propio `claude` salía en cada tarjeta | El proceso raíz de una sesión no aporta puertos; solo sus descendientes (D-47) | **Sí** (la prueba esperaba lista vacía y recibió el puerto) |
+| 2 | Cambiar de pestaña con teclado no funcionaba | La causa: gpui recibe «cmd+shift+]» como `cmd-}` y el atajo estaba escrito `cmd-shift-]`, que no coincide nunca. Añadidos `cmd+shift+←/→`, `cmd+1…9`; los corchetes quedan como `cmd-{`/`cmd-}` para teclado US (D-38, regla `H-006`) | No: escribí el test con el arreglo. **Sí lo comprobé con teclas reales** (ver abajo) |
+| 3 | Los puertos se salían de la tarjeta | Hasta 3 puertos y «+k»; el que se recorta es el texto de estado | Función pura con test; el recorte lo vi en captura |
+| 4 | Pestañas cortadas en paneles estrechos | Los botones ceden antes que las pestañas. **Mi primer arreglo no funcionó** (lo vi en la captura: «ejecu» cortado y los 4 botones intactos); el segundo sí | Solo verificable a la vista: captura antes y después |
+| 5 | Estado «waiting» y aviso de permiso que no se iban | Columna `notice` aparte de la vista previa; se borra al dejar de esperar; `idle_prompt` devuelve `waiting → idle` (D-48) | **Sí**, los tres tests (transición, tarjeta, nota pendiente) |
+| 6 | Markdown en crudo en la vista previa | Se quitan `**`, `__`, comillas invertidas y `#` de título | **Sí** |
+| 7 | Barra de título clara sobre cuerpo oscuro | Barra propia con los colores del tema (D-51) | Solo a la vista: capturas en claro y en oscuro |
+
+**Interrupción con Esc (punto 5): limitación documentada.** La documentación oficial no tiene ningún evento para un permiso rechazado a mano ni para un turno interrumpido (citas en D-48). Queda una ventana de hasta ~60 s en la que la tarjeta sigue en «waiting».
+
+### §2.4 · Ciclo de vida e hibernación
+
+- Decisiones puras en `core` con la hora como parámetro: `is_due_for_hibernation` y `pick_for_memory_valve` (12 tests desde el texto del plan).
+- `SessionHost::hibernate`: estado primero, SIGHUP al grupo, SIGKILL tras la gracia (5 s; los tests usan 300 ms). `hibernate_what_is_due` y `relieve_memory` aplican las decisiones a lo que corre.
+- El área de trabajo repasa las sesiones cada 30 s. La presión de memoria se lee del kernel con `sysctl` (**desviación**, D-49).
+- Despertar al enfocar, con «resuming»; `ended` con botón «Resume».
+- Nunca se pierde una conversación: test de que borrar una sesión deja su transcript, y el relanzamiento pasa por `plan_launch` (`--resume` si hay transcript; lo comprueba el test de hibernar y despertar).
+
+### §2.5 · Arranque y restauración
+
+- Cerrar la app hiberna lo que corría; al arrancar se hiberna lo que una caída dejó como «en marcha» (sin tocar lo abierto en otra terminal).
+- Lo visible se reanuda solo, lo demás queda hibernado, las terminales se relanzan. **Cambia a propósito lo del bloque 3** (D-50).
+
+### §2.6 · Ajustes e idioma
+
+- Ventana de Ajustes (`settings_window/`: `form` sin gpui, `view`) y menú nativo (app, Archivo, Edición, Visualización, Ventana, Ayuda).
+- Idioma, tema, fuente y tamaño se aplican sin reiniciar, desde la ventana o desde `lithemux config`. `lithemux config` acepta `language` y los demás ajustes (test del §0.6 ajustado, citando el §2.6).
+- Temas claro, oscuro y del sistema, con colores de terminal para cada uno.
+
+### Lo que comprobé con clics y teclas reales
+
+Jhon dio permiso de Accesibilidad a cmux, así que esta vez sí pude manejar la ventana (con el `claude` falso):
+
+- **Arranque:** las dos sesiones de Claude a la vista se reanudaron solas («reanudando»), la terminal se relanzó y la sesión terminada y oculta no arrancó.
+- **Ajustes** (`cmd+,`): al pulsar «Oscuro» e «English» cambiaron al momento la ventana, la de Ajustes y la barra de menús. Encontré y corregí un fallo: la opción en uso perdía su resalte con el ratón encima.
+- **Atajos:** `cmd+shift+←` y `cmd+2` cambiaron la pestaña (lo leí en el layout guardado: 1 → 0 → 1). `cmd+d` dividió y el quinto panel dio el aviso.
+- **Terminal:** escribí un bucle que levantó 5 servidores; la tarjeta mostró `:8765 :8766 :8767 +2`.
+- **Aviso de permiso:** lancé el hook real con `permission_prompt` (tarjeta resaltada, «Claude is waiting for your input») y después con `idle_prompt` (volvió a «idle» con la vista previa anterior).
+- **`cmd+q`:** la app salió, no quedó ningún hijo ni servidor, el socket se borró y las sesiones quedaron `hibernated`.
+
+**No comprobé con la app real:** la hibernación por horas ni la válvula de memoria (están probadas en el host con PTY reales y reloj inyectado), el cambio de tema del sistema en vivo, el arrastre, ni nada con el `claude` de verdad.
+
+### Honestidad sobre los tests
+
+- **Vi fallar antes del arreglo:** puertos de la raíz, markdown, `idle_prompt`, nota pendiente, y el contraste del texto atenuado en el tema oscuro (ese test encontró un fallo real de la paleta).
+- **Escritos justo antes de implementar y pasaron a la primera:** las políticas de hibernación y de la válvula, y las de despertar y relanzar.
+- **Escritos junto con el código:** host (hibernar, cierre, arranque), ajustes, formulario, atajos.
+- **Tests antiguos que cambié porque cambió la especificación,** cada uno citando por qué: `idle_prompt` (ya no es «no hace nada»), las claves que la CLI rechazaba como desconocidas (`language`, `hibernate_after_hours`), la vista previa del aviso de permiso (ahora es `notice`), «opening» con estado hibernado (ahora «resuming»), y el puerto del proceso raíz.
+- La guarda D-13 marcó un test mío del bloque 3 que llamaba «claude» a una sesión; le cambié el nombre.
+
+### Mediciones
+
+| Qué | Resultado | Límite |
+|---|---|---|
+| `scripts/accept-phase2`: 20 sesiones, 4 categorías, 2 a la vista | 2 programas vivos, 2 lanzamientos | solo los visibles |
+| Footprint | 68–84 MB (pico 109–125 MB) en tres corridas | 200 MB |
+| CPU en reposo, 60 s | 0,14–0,17 s (0,23–0,28 %) | 1 % |
+| La misma medida antes de dejar en caché la lista de fuentes | 0,70 s (1,17 %): **no pasaba** | 1 % |
+| Conexiones de la app en 10 min (`scripts/accept-phase2 --network 600`) | 0 de 60 muestras con algún socket de red; `nettop` sin tráfico | 0 |
+| Tras salir | 0 programas, 20 sesiones `hibernated` | — |
+
+### Criterios de aceptación de la Fase 2
+
+| # | Criterio | Resultado |
+|---|---|---|
+| 1 | Checklist de CI en verde | **Sí** (abajo) |
+| 2 | 20 sesiones en 4 categorías, 2 visibles: footprint < 200 MB, solo los visibles vivos, CPU en reposo < 1 % | **Sí con el `claude` falso** (tabla de arriba). Con el `claude` real: pendiente, paso P.2 |
+| 3 | `cmd+q` y abrir: se restaura, lo visible se reanuda, lo demás hibernado, sin perder nada | **Sí con el `claude` falso**, con teclas reales. Con conversación real: paso K |
+| 4 | Reiniciar el Mac y repetir | **Pendiente** (Jhon y la planificadora, paso P.4). El caso está cubierto por el test de arranque tras una caída |
+| 5 | Madre e hijas como en la Fase 0 | El lanzamiento es el mismo `core::launch` y el mismo hook; con `claude` real: paso P.5 |
+| 6 | Interfaz completa en español e inglés | **Sí**: un test falla si falta una traducción, y lo vi cambiar en vivo |
+| 7 | Cero conexiones salientes de la app en 10 min | **Sí con el `claude` falso:** 60 muestras en 10 min, ningún socket de red, `nettop` sin bytes. Con el real: paso P.7 |
+| 8 | Detente y reporta | Hecho |
+
+### Checklist de cierre
+
+| Paso | Resultado |
+|---|---|
+| `cargo fmt --all --check` | sin diferencias |
+| `cargo clippy --workspace --all-targets -- -D warnings` | sin avisos |
+| `cargo test --workspace` | **604 pruebas, 0 fallas** (546 al cerrar el bloque 3 + 58) |
+| `cargo build --release` | ok |
+| `cargo deny check` | ok |
+| `scripts/lint-findings` | 6 reglas, sin hallazgos |
+| Tamaños | ninguna función sobre 50 líneas ni archivo de producción sobre 300 |
+| Pre-commit | exit 0 |
+
+### Desviaciones del plan
+
+1. **Presión de memoria por consulta (`sysctl`) y no por `DISPATCH_SOURCE_TYPE_MEMORYPRESSURE`** (D-49): evitar un segundo `unsafe`. **Decisión para la planificadora.**
+2. **«Ayuda» solo abre la carpeta de datos** (D-51).
+3. **`scrollback` no cambia en las terminales ya abiertas** (D-51).
+4. **Migración 3** (`sessions.notice`), que el plan no preveía (D-48).
+
+### Qué quedó fuera
+
+- Un botón para hibernar a mano una sesión (el plan no lo pide).
+- Log rotado, empaquetado como `.app`, icono (Fase 3).
+- Panel de navegador (§3.7).
+
+### Riesgos detectados
+
+1. **Con el `claude` real no probé nada de este bloque.** En particular, si `claude` tarda más de 5 s en salir tras el SIGHUP se le mata; la conversación no se pierde (está en el transcript), pero conviene verlo.
+2. **Ventana de ~60 s con «waiting» viejo** tras rechazar un permiso (D-48).
+3. **Tema claro:** los colores ANSI «blancos» se dibujan grises para que se lean; un programa que pinte fondo con ellos se verá distinto que en el oscuro.
+4. **`cmd+shift+←/→`** es «seleccionar hasta el inicio/fin de línea» en campos de texto de macOS. En una terminal no se usa, pero quien lo espere lo notará.
+5. **El estado en la BD de una sesión reanudada sigue `hibernated` hasta que el hook `SessionStart` avisa.** Con el `claude` falso, que no llama al hook, se queda en «reanudando»; con el real debe pasar a «idle» en segundos.
+
+### Lo que necesita a Jhon
+
+Pasos K, M, N, O y P de `docs/fases/F2-prueba-manual.md`, con el `claude` real; en especial P.4 (reiniciar el Mac).
+
+### Ronda de correcciones del bloque 4 (auditoría, prueba con el `claude` real y cambio de términos)
+
+**Fecha:** 2026-11-22.
+
+| # | Hallazgo | Arreglo | ¿Vi fallar el test antes? |
+|---|---|---|---|
+| 1 | Salir durante los 5 s de gracia de una hibernación dejaba al `claude` vivo y sin candado | `shut_down` mata (`kill_now`, que no pasa por `hung_up`) todo grupo que siga vivo al acabar el plazo | **Sí:** la sonda del auditor, hecha test, falló con «program 42476 outlived the app» |
+| 2 | La mitigación de D-48 no funciona con el `claude` real (ningún `idle_prompt` en más de 3 min) | Una sesión en `waiting` también se hiberna pasadas las horas; `working` nunca; la válvula no toca `waiting`. D-48 reescrita con lo que midió la planificadora | **Sí** (`a_session_left_waiting_hibernates_after_the_hours_too`) |
+| 3 | La válvula solo actuaba en nivel crítico, que en macOS casi no llega | También en «aviso», con 30 min de quietud como mínimo; `sysctl` con plazo de 2 s | **Sí** (los dos tests de nivel) |
+| 4 | «madre/hijas» → «sesión coordinadora/sesiones» | Código, BD (migración 4), CLI, contexto es/en con sus instantáneas, interfaz, README, regla `H-007` (D-52) | No aplica; la migración se prueba desde v1, v2, v3 y desde una base v3 hecha por la app |
+| 5 | Al salir, la gracia era de 200 ms y no los 5 s del plan | La misma gracia que una hibernación, para todos los programas a la vez | Lo cubre el test del punto 1 |
+| 6 | La recuperación al arrancar decidía por el pid del archivo, no por el candado | Lee el pid, intenta el candado y solo escribe `hibernated` con el candado tomado y el pid muerto | **Sí:** la sonda dio `Hibernated` donde debía seguir `Working` |
+| 7 | Una sesión hibernada, vista durante su gracia, no despertaba | `wakes_when_seen` acepta `Closing` con estado `hibernated`; se pide una sola vez (`reopens_when_closed`) y `follow_the_sessions` llama a `wake_what_is_seen` | No: cambié la regla y su test a la vez (el test anterior afirmaba lo contrario). El test del host lo escribí con el arreglo |
+| 8 | `accept-phase2`: la comprobación tras salir siempre daba 0; footprint sin historial | Usa los pids de `fake-claude.runs` con `kill -0`; el falso imprime 6000 líneas | — |
+| 9a | Faltaba fijar la gracia | Test: el SIGKILL llega después de la gracia configurada | Pasaba desde el principio. **Comprobado por mutación:** con `terminate()` en `hibernate` falla («killed 900 ms into a 1.5 s grace») |
+| 9b | Decisión de la válvula por nivel, pura | `pick_for_memory_valve(…, Pressure)` | **Sí** |
+| 9c | Migración v2 → v3 con datos | `migrations_test.rs`, desde cada versión | Escrito con la migración 4 |
+| 9d | Un `Stop` tardío podía pisar `hibernated` | `Stop`, `UserPromptSubmit`, `Notification` y `SessionEnd` respetan `hibernated`; solo `SessionStart` saca de ahí | **Sí** |
+| 10 | Contraste: el test miraba dos colores | Todos los colores de texto sobre todos los fondos, y el texto sobre el acento; paletas ajustadas (color `link` para los puertos) | **Sí:** «dark: text_faint on window is 3.6» y «on_accent on accent is 4.3» |
+| 11 | `H-006` no veía `shift-cmd-]` | El patrón acepta el `shift-` en cualquier posición; además un test sobre los atajos ya interpretados | El patrón se prueba con sus ejemplos `bad` |
+| 12 | Los campos de Ajustes no se refrescaban al cambiar desde la CLI | Se rellenan al releer los ajustes, salvo el que se esté editando | Sin test automático (es vista) |
+
+**Lo que no cumplí tal como se pidió.** `H-007` no prohíbe la palabra `child` a secas: es también «proceso hijo» (`std::process::Child`) y el método `.child(…)` de gpui, que está en toda la interfaz. Atrapa las formas en que nombraba el tipo de sesión (`Kind::Child`, `'child'`, «child session»), además de `mother`, `madre`, `hija`, `sister` y `hermana` (D-52).
+
+**Tests antiguos cambiados porque cambió la especificación:** los de transición de `Stop`, `UserPromptSubmit` y `Notification` (ahora respetan `hibernated`), el de «solo `idle` hiberna», el de «una sesión que se cierra no despierta» y los textos del contexto. El test de migración que había en `workspace_layout_test.rs` pasó a `migrations_test.rs`.
+
+**Verificado con la app real** (clics y teclas, `claude` falso): la base v3 de prueba se migró sola a v4 al abrir (`mother` → `coordinator`, índice `one_coordinator_per_category`); la tarjeta dice «coordinator» y el menú «Remove as coordinator»; `cmd+q` tardó 0,23 s y no dejó hijos.
+
+**No verificado por mí:** nada con el `claude` real; la válvula con presión real; salir durante la gracia en la app (está en el host).
+
+**Un desliz:** usé `git mv` para renombrar `mother_policy.rs`, que toca el stage. El resultado es el mismo que deja `git add -A`, pero es del tipo de comando que dije que evitaría.
+
+| Medición (`scripts/accept-phase2`, con 6000 líneas de historial por terminal) | Resultado | Límite |
+|---|---|---|
+| Programas vivos | 2 | solo los visibles |
+| Footprint | 105–106 MB (pico 146–147 MB), dos corridas | 200 MB |
+| CPU en reposo, 60 s | 0,15–0,16 s (0,25–0,27 %) | 1 % |
+| Programas vivos tras salir | 0 de 2 | 0 |
+
+| Paso | Resultado |
+|---|---|
+| `cargo fmt --all --check` | sin diferencias |
+| `cargo clippy --workspace --all-targets -- -D warnings` | sin avisos |
+| `cargo test --workspace` | **621 pruebas, 0 fallas** (604 + 17) |
+| `cargo build --release` | ok |
+| `cargo deny check` | ok |
+| `scripts/lint-findings` | 7 reglas, sin hallazgos |
+| Tamaños | ninguna función sobre 50 líneas ni archivo de producción sobre 300 |
+| Pre-commit | exit 0 |
+
+La suite tarda ahora unos 17 s más: los tests del binario real con un `claude` que ignora el SIGHUP esperan los 5 s de gracia al salir.

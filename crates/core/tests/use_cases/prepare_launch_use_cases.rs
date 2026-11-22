@@ -28,7 +28,7 @@ impl World {
     fn new() -> Self {
         let store = InMemoryStore::new();
         add_category(&store, &InMemoryBoards::default(), "demo");
-        let executor = add_session(&store, &store, "demo/ejecutora", Kind::Child);
+        let executor = add_session(&store, &store, "demo/ejecutora", Kind::Member);
         World {
             store,
             probe: FakeShellProbe::new()
@@ -125,7 +125,7 @@ fn a_session_open_elsewhere_cannot_be_prepared() {
 #[test]
 fn a_shell_session_is_prepared_without_a_lock() {
     let world = World::new();
-    let mut shell = new_session("demo/term", Kind::Child);
+    let mut shell = new_session("demo/term", Kind::Member);
     shell.profile = Profile::Shell;
     let (_, terminal) = create_session(&world.store, &world.store, shell, NOW).unwrap();
     let target = SessionRef::parse("demo/term").unwrap();

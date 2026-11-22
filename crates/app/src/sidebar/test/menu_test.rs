@@ -1,5 +1,5 @@
 //! PLAN §2.2, last point: «Crear, renombrar, reordenar y borrar categorías y
-//! sesiones. Marcar una sesión como madre (respetando una por categoría).
+//! sesiones. Marcar una sesión como coordinadora (respetando una por categoría).
 //! Activar `keep_alive`.» Plus: pinned sessions, and shell sessions have a
 //! card too. Each test is one of those sentences, asked of the menu.
 
@@ -21,7 +21,7 @@ fn card() -> Card {
         unread: 0,
         cwd: "~/demo".to_string(),
         ports: Vec::new(),
-        is_mother: false,
+        is_coordinator: false,
         is_pinned: false,
         keep_alive: false,
         is_shell: false,
@@ -72,30 +72,30 @@ fn a_session_can_be_moved_up_and_down_from_its_card() {
     ));
 }
 
-// «Marcar una sesión como madre»: what is offered is the change from what
+// «Marcar una sesión como coordinadora»: what is offered is the change from what
 // the session is now, never both.
 #[test]
-fn a_session_can_be_made_mother_and_a_mother_can_stop_being_one() {
+fn a_session_can_be_made_coordinator_and_a_coordinator_can_stop_being_one() {
     let child = card_menu(&card());
     assert!(offers(&child, |c| matches!(
         c,
-        MenuCommand::SetMother(_, true)
+        MenuCommand::SetCoordinator(_, true)
     )));
     assert!(!offers(&child, |c| matches!(
         c,
-        MenuCommand::SetMother(_, false)
+        MenuCommand::SetCoordinator(_, false)
     )));
-    let mother = card_menu(&Card {
-        is_mother: true,
+    let coordinator = card_menu(&Card {
+        is_coordinator: true,
         ..card()
     });
-    assert!(offers(&mother, |c| matches!(
+    assert!(offers(&coordinator, |c| matches!(
         c,
-        MenuCommand::SetMother(_, false)
+        MenuCommand::SetCoordinator(_, false)
     )));
-    assert!(!offers(&mother, |c| matches!(
+    assert!(!offers(&coordinator, |c| matches!(
         c,
-        MenuCommand::SetMother(_, true)
+        MenuCommand::SetCoordinator(_, true)
     )));
 }
 
@@ -144,7 +144,7 @@ fn a_session_can_be_pinned_and_unpinned() {
     )));
 }
 
-// «Las sesiones de shell también tienen tarjeta.» The mother coordinates
+// «Las sesiones de shell también tienen tarjeta.» The coordinator coordinates
 // Claude sessions (§0.2) and keep_alive exempts one from hibernation
 // (§2.4): neither means anything for a shell.
 #[test]
@@ -153,7 +153,10 @@ fn a_shell_card_offers_what_makes_sense_for_a_shell() {
         is_shell: true,
         ..card()
     });
-    assert!(!offers(&menu, |c| matches!(c, MenuCommand::SetMother(..))));
+    assert!(!offers(&menu, |c| matches!(
+        c,
+        MenuCommand::SetCoordinator(..)
+    )));
     assert!(!offers(&menu, |c| matches!(
         c,
         MenuCommand::SetKeepAlive(..)
@@ -258,7 +261,7 @@ fn every_entry_of_every_menu_has_its_text_in_both_languages() {
         },
         Card {
             is_pinned: true,
-            is_mother: true,
+            is_coordinator: true,
             keep_alive: true,
             status: Status::Idle,
             ..card()

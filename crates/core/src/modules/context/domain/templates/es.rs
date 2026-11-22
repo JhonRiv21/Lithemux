@@ -39,32 +39,32 @@ impl Phrases for Es {
         format!("Nombre de esta sesión: {name}. Rol: {role}.")
     }
 
-    fn is_mother(&self) -> &'static str {
-        "Esta sesión es la madre de la categoría: coordina la categoría y es la única que escribe el tablero."
+    fn is_coordinator(&self) -> &'static str {
+        "Esta sesión es la sesión coordinadora de la categoría: coordina la categoría y es la única que escribe el tablero."
     }
 
-    fn mother_is(&self, entry: &str) -> String {
-        format!("Madre de la categoría: {entry}.")
+    fn coordinator_is(&self, entry: &str) -> String {
+        format!("Coordinadora de la categoría: {entry}.")
     }
 
-    fn no_mother(&self) -> &'static str {
-        "La categoría no tiene madre: sus sesiones son hermanas y coordinan directamente entre sí."
+    fn no_coordinator(&self) -> &'static str {
+        "La categoría no tiene sesión coordinadora: sus sesiones coordinan directamente entre sí."
     }
 
-    fn children_heading(&self) -> &'static str {
-        "Hijas:"
+    fn members_heading(&self) -> &'static str {
+        "Las demás sesiones:"
     }
 
-    fn no_children(&self) -> &'static str {
-        "La categoría todavía no tiene sesiones hijas."
+    fn no_members(&self) -> &'static str {
+        "La categoría todavía no tiene más sesiones."
     }
 
-    fn sisters_heading(&self) -> &'static str {
-        "Hermanas:"
+    fn others_heading(&self) -> &'static str {
+        "Las demás sesiones:"
     }
 
-    fn no_sisters(&self) -> &'static str {
-        "Esta sesión todavía no tiene hermanas."
+    fn no_others(&self) -> &'static str {
+        "La categoría todavía no tiene más sesiones."
     }
 
     fn more(&self, hidden: usize) -> String {
@@ -95,22 +95,22 @@ impl Phrases for Es {
         "Las sesiones se comunican con SendMessage usando esos nombres."
     }
 
-    fn child_reporting(&self) -> &'static str {
-        "Al terminar una tarea o al bloquearse, esta sesión reporta a la madre; lo que esté fuera de su rol pasa por la madre."
+    fn member_reporting(&self) -> &'static str {
+        "Al terminar una tarea o al bloquearse, esta sesión reporta a la coordinadora; lo que esté fuera de su rol pasa por la coordinadora."
     }
 
-    fn board_of_mother(&self, board: &str) -> String {
+    fn board_of_coordinator(&self, board: &str) -> String {
         format!("Tablero de la categoría (solo lo escribe esta sesión): {board}")
     }
 
-    fn board_of_child(&self, board: &str) -> String {
+    fn board_of_member(&self, board: &str) -> String {
         format!(
-            "Tablero de la categoría (lo mantiene la madre; de solo lectura para esta sesión salvo que la madre indique otra cosa): {board}"
+            "Tablero de la categoría (lo mantiene la coordinadora; de solo lectura para esta sesión salvo que la coordinadora indique otra cosa): {board}"
         )
     }
 
     fn board_shared(&self, board: &str) -> String {
-        format!("Tablero de la categoría (compartido entre las hermanas): {board}")
+        format!("Tablero de la categoría (compartido entre sus sesiones): {board}")
     }
 
     fn snapshot_note(&self, category_slug: &str) -> String {

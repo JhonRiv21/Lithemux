@@ -4,8 +4,11 @@
 
 mod headless;
 pub mod live;
+mod menus;
+mod preferences;
 mod quit_signals;
 mod run;
+pub mod title_bar;
 pub mod tooltip;
 pub mod window;
 

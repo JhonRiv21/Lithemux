@@ -22,10 +22,10 @@ pub fn new(args: NewArgs) -> anyhow::Result<()> {
         NewSession {
             target: target.clone(),
             role: args.role,
-            kind: if args.mother {
-                Kind::Mother
+            kind: if args.coordinator {
+                Kind::Coordinator
             } else {
-                Kind::Child
+                Kind::Member
             },
             profile: match args.profile {
                 ProfileArg::Claude => Profile::Claude,
@@ -54,8 +54,12 @@ pub fn set(args: SetArgs) -> anyhow::Result<()> {
         set_role(&sessions, &session, role)?;
         changed = true;
     }
-    if let Some(mother) = args.mother {
-        let kind = if mother { Kind::Mother } else { Kind::Child };
+    if let Some(coordinator) = args.coordinator {
+        let kind = if coordinator {
+            Kind::Coordinator
+        } else {
+            Kind::Member
+        };
         set_kind(&sessions, &category, &session, kind)?;
         changed = true;
     }
@@ -68,7 +72,9 @@ pub fn set(args: SetArgs) -> anyhow::Result<()> {
         changed = true;
     }
     if !changed {
-        bail!("nothing to change: pass --role, --mother, --keep-alive, --model or --default-model");
+        bail!(
+            "nothing to change: pass --role, --coordinator, --keep-alive, --model or --default-model"
+        );
     }
     let (category, session) = get_session(&categories, &sessions, &target)?;
     output::session::updated(&target, &category, &session);

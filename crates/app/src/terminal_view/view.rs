@@ -15,6 +15,7 @@ use super::keys::{KeyModifiers, KeyPress};
 use super::paint::{FontMetrics, Frame, measure, paint_frame};
 use super::pty::GridSize;
 use super::session::TerminalSession;
+use crate::edit_actions::{Copy, Paste};
 
 /// Where the grid was painted last, to map pointer positions to cells.
 #[derive(Clone, Copy)]
@@ -133,37 +134,27 @@ impl TerminalView {
             alt: keystroke.modifiers.alt,
             platform: keystroke.modifiers.platform,
         };
-        let only_platform = modifiers
-            == KeyModifiers {
-                platform: true,
-                ..KeyModifiers::default()
-            };
-        match keystroke.key.as_str() {
-            "v" if only_platform => self.paste(cx),
-            "c" if only_platform => self.copy(cx),
-            key => {
-                let sent = self.session.press(KeyPress { key, modifiers });
-                trace(format_args!(
-                    "key_down {} {modifiers:?} held {} -> {}",
-                    kind_of_key(
-                        key,
-                        keystroke.key_char.is_some(),
-                        modifiers.control || modifiers.platform
-                    ),
-                    event.is_held,
-                    if sent {
-                        "sent as a key"
-                    } else {
-                        "left to the input method"
-                    }
-                ));
-                if !sent {
-                    return;
-                }
-                self.composition.reset();
-                self.follow_input(cx);
+        let key = keystroke.key.as_str();
+        let sent = self.session.press(KeyPress { key, modifiers });
+        trace(format_args!(
+            "key_down {} {modifiers:?} held {} -> {}",
+            kind_of_key(
+                key,
+                keystroke.key_char.is_some(),
+                modifiers.control || modifiers.platform
+            ),
+            event.is_held,
+            if sent {
+                "sent as a key"
+            } else {
+                "left to the input method"
             }
+        ));
+        if !sent {
+            return;
         }
+        self.composition.reset();
+        self.follow_input(cx);
         cx.stop_propagation();
     }
 
@@ -196,6 +187,8 @@ impl Render for TerminalView {
         div()
             .size_full()
             .track_focus(&self.focus_handle)
+            .on_action(cx.listener(|view, _: &Copy, _, cx| view.copy(cx)))
+            .on_action(cx.listener(|view, _: &Paste, _, cx| view.paste(cx)))
             .on_key_down(cx.listener(Self::on_key_down))
             .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))
             .on_mouse_move(cx.listener(Self::on_mouse_move))

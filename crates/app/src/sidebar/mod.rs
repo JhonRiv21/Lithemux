@@ -18,6 +18,7 @@ mod group_view;
 pub mod menu;
 pub mod order;
 mod overlay_view;
+pub mod port_chips;
 pub mod status;
 pub mod status_text;
 pub mod tree;

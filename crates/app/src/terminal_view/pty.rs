@@ -251,6 +251,12 @@ impl PtyProcess {
     /// it. What the program leaves behind is dealt with when it ends. Asking
     /// twice, or once all is gone, does nothing.
     pub fn hang_up(&self) {
+        self.hang_up_within(HANGUP_GRACE);
+    }
+
+    /// Like `hang_up`, with the time the program gets to leave by itself
+    /// before it is killed.
+    pub fn hang_up_within(&self, grace: Duration) {
         let Some(group) = self.group else {
             return;
         };
@@ -262,7 +268,7 @@ impl PtyProcess {
         }
         let reaped = Arc::clone(&self.reaped);
         thread::spawn(move || {
-            let deadline = Instant::now() + HANGUP_GRACE;
+            let deadline = Instant::now() + grace;
             while !reaped.load(Ordering::Acquire) {
                 if Instant::now() >= deadline {
                     let _ = kill_process_group(group, Signal::KILL);
@@ -271,6 +277,18 @@ impl PtyProcess {
                 thread::sleep(REAP_POLL);
             }
         });
+    }
+}
+
+impl PtyProcess {
+    /// Kills whatever is left of the group, at once, whatever was asked of
+    /// it before. For when there is no time left to wait for a grace.
+    pub fn kill_now(&self) {
+        if let Some(group) = self.group
+            && !self.is_gone()
+        {
+            let _ = kill_process_group(group, Signal::KILL);
+        }
     }
 }
 

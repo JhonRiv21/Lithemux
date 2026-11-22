@@ -4,9 +4,9 @@ expression: "render(&executor(), &[documenter()], Lang::Es)"
 ---
 lithemux: esta sesión pertenece a la categoría «Selektal» (carpeta raíz /Users/x/Linktic/RecruitLine).
 Nombre de esta sesión: selektal-ejecutora. Rol: implementa las fases que define la planificadora.
-La categoría no tiene madre: sus sesiones son hermanas y coordinan directamente entre sí.
-Hermanas:
+La categoría no tiene sesión coordinadora: sus sesiones coordinan directamente entre sí.
+Las demás sesiones:
 - selektal-documental (rol: requerimientos; estado: hibernada, última actividad hace 3 días)
 Las sesiones se comunican con SendMessage usando esos nombres.
-Tablero de la categoría (compartido entre las hermanas): /Users/x/Library/Application Support/lithemux/categories/selektal/board.md
+Tablero de la categoría (compartido entre sus sesiones): /Users/x/Library/Application Support/lithemux/categories/selektal/board.md
 Esta lista es del momento del arranque; `lithemux status selektal` muestra el estado actual.

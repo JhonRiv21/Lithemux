@@ -22,9 +22,9 @@ fn label(text: SharedString) -> impl IntoElement {
         .px_2()
         .py_1()
         .rounded_sm()
-        .bg(rgb(theme::SURFACE_ACTIVE))
+        .bg(rgb(theme::colors().surface_active))
         .text_sm()
-        .text_color(rgb(theme::TEXT))
+        .text_color(rgb(theme::colors().text))
         .child(text)
 }
 

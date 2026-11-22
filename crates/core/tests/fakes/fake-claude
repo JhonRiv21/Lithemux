@@ -10,7 +10,9 @@
 # How it stands with its terminal goes to fake-claude.terminal. Every run
 # adds `<session id> <pid> <first argument>` to fake-claude.runs. On a
 # terminal it greets, and with fake-claude.late-line it prints once more a
-# moment later. With fake-claude.ignore-hup it ignores the hangup.
+# moment later. With fake-claude.ignore-hup it ignores the hangup. With
+# fake-claude.lines it prints that many lines after greeting, to fill the
+# scrollback of its terminal.
 if [ "$1" = "--version" ]; then
   echo "9.9.9 (Claude Code)"
   exit 0
@@ -43,12 +45,21 @@ if [ -n "$LITHEMUX_HOME" ]; then
   [ -f "$LITHEMUX_HOME/fake-claude.sleep" ] && nap=$(cat "$LITHEMUX_HOME/fake-claude.sleep")
   [ -f "$LITHEMUX_HOME/fake-claude.exit" ] && code=$(cat "$LITHEMUX_HOME/fake-claude.exit")
   late=no
+  lines=""
+  [ -f "$LITHEMUX_HOME/fake-claude.lines" ] && lines=$(cat "$LITHEMUX_HOME/fake-claude.lines")
   [ -f "$LITHEMUX_HOME/fake-claude.late-line" ] && late=yes
   if [ -f "$LITHEMUX_HOME/fake-claude.leave-behind" ]; then
     sleep "$(cat "$LITHEMUX_HOME/fake-claude.leave-behind")" > /dev/null 2>&1 &
     echo $! > "$LITHEMUX_HOME/fake-claude.left-behind.pid"
   fi
   [ -t 1 ] && echo "fake claude ready"
+  if [ -n "$lines" ]; then
+    i=0
+    while [ "$i" -lt "$lines" ]; do
+      i=$((i + 1))
+      echo "line $i of a session that has been talking for a while: lorem ipsum dolor sit amet"
+    done
+  fi
   if [ "$late" = yes ]; then
     sleep 0.3
     echo "a line printed later"

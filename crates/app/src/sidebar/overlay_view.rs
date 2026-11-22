@@ -20,7 +20,7 @@ impl Sidebar {
             .gap_1()
             .p_2()
             .border_t_1()
-            .border_color(rgb(theme::BORDER));
+            .border_color(rgb(theme::colors().border));
         if let Some(form @ Form::NewCategory { .. }) = &self.form {
             return footer.child(self.render_form(form, cx)).into_any_element();
         }
@@ -40,9 +40,9 @@ impl Sidebar {
             .px_2()
             .py_1()
             .rounded_sm()
-            .bg(rgb(theme::SURFACE))
+            .bg(rgb(theme::colors().surface))
             .text_sm()
-            .hover(|style| style.bg(rgb(theme::SURFACE_ACTIVE)))
+            .hover(|style| style.bg(rgb(theme::colors().surface_active)))
             .child(label)
     }
 
@@ -53,7 +53,7 @@ impl Sidebar {
             .gap_1()
             .p_1()
             .rounded_md()
-            .bg(rgb(theme::SURFACE))
+            .bg(rgb(theme::colors().surface))
             .child(form.field().clone());
         let confirm = match form {
             Form::NewCategory { .. } | Form::NewSession { .. } => "form.create",
@@ -84,7 +84,7 @@ impl Sidebar {
             .child(
                 div()
                     .text_xs()
-                    .text_color(rgb(theme::TEXT_MUTED))
+                    .text_color(rgb(theme::colors().text_muted))
                     .child(chosen),
             )
             .child(
@@ -128,11 +128,15 @@ impl Sidebar {
             .py_1()
             .text_sm()
             .text_color(rgb(if is_delete {
-                theme::DANGER
+                theme::colors().danger
             } else {
-                theme::TEXT
+                theme::colors().text
             }))
-            .hover(|style| style.bg(rgb(theme::ACCENT)).text_color(rgb(theme::TEXT)))
+            .hover(|style| {
+                style
+                    .bg(rgb(theme::colors().accent))
+                    .text_color(rgb(theme::colors().on_accent))
+            })
             .on_click(cx.listener(move |this, _, window, cx| {
                 this.run(command.clone(), window, cx);
             }))
@@ -152,9 +156,9 @@ impl Sidebar {
             .py_1()
             .min_w(px(190.0))
             .rounded_md()
-            .bg(rgb(theme::SURFACE))
+            .bg(rgb(theme::colors().surface))
             .border_1()
-            .border_color(rgb(theme::BORDER))
+            .border_color(rgb(theme::colors().border))
             .shadow_md()
             .occlude()
             .on_mouse_down_out(cx.listener(|this, _, _, cx| {

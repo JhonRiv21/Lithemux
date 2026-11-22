@@ -13,6 +13,7 @@ mod host;
 mod hosted;
 mod instance_lock;
 mod leaving;
+mod lifecycle;
 mod mailbox;
 mod opened;
 mod opening;
@@ -22,7 +23,7 @@ mod queries;
 #[cfg(test)]
 mod test;
 
-pub use config::HostConfig;
+pub use config::{HIBERNATE_GRACE, HostConfig};
 pub use error::HostError;
 pub use failure::Failure;
 pub use host::SessionHost;

@@ -1,17 +1,39 @@
-//! The colors of the interface. One dark theme for now; the choice of
-//! theme comes with the settings window (PLAN §2.6).
+//! The colors of the interface: a dark and a light palette, and which one
+//! is in use. The whole app has one theme at a time.
 
-pub const WINDOW: u32 = 0x161618;
-pub const SIDEBAR: u32 = 0x1c1c1f;
-pub const SURFACE: u32 = 0x232327;
-pub const SURFACE_HOVER: u32 = 0x2b2b30;
-pub const SURFACE_ACTIVE: u32 = 0x33333a;
-pub const BORDER: u32 = 0x2a2a2e;
-pub const ACCENT: u32 = 0x4d78cc;
-pub const TEXT: u32 = 0xe6e6ea;
-pub const TEXT_MUTED: u32 = 0x9a9aa2;
-pub const TEXT_FAINT: u32 = 0x6f6f78;
-pub const ATTENTION: u32 = 0xe5a50a;
-pub const WORKING: u32 = 0x57a773;
-pub const DANGER: u32 = 0xd9534f;
-pub const BADGE: u32 = 0x3d6fd6;
+mod palette;
+
+#[cfg(test)]
+mod test;
+
+use std::sync::atomic::{AtomicBool, Ordering};
+
+use lithemux_core::modules::settings::ThemeChoice;
+
+pub use palette::{DARK, LIGHT, Palette};
+
+static LIGHT_IS_IN_USE: AtomicBool = AtomicBool::new(false);
+
+/// Whether the light palette applies: what the user chose or, for
+/// «system», what macOS is set to.
+pub fn is_light_for(choice: ThemeChoice, system_is_dark: bool) -> bool {
+    match choice {
+        ThemeChoice::Light => true,
+        ThemeChoice::Dark => false,
+        ThemeChoice::System => !system_is_dark,
+    }
+}
+
+/// Returns whether it changed.
+pub fn use_light(light: bool) -> bool {
+    LIGHT_IS_IN_USE.swap(light, Ordering::AcqRel) != light
+}
+
+pub fn is_light() -> bool {
+    LIGHT_IS_IN_USE.load(Ordering::Acquire)
+}
+
+/// The palette in use.
+pub fn colors() -> &'static Palette {
+    if is_light() { &LIGHT } else { &DARK }
+}

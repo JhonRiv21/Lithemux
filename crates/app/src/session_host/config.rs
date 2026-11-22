@@ -1,5 +1,6 @@
 use std::ffi::OsString;
 use std::path::PathBuf;
+use std::time::Duration;
 
 use lithemux_core::modules::launch::{HookBinary, SiblingHookBinary};
 use lithemux_core::platform::paths::home::Home;
@@ -22,7 +23,12 @@ pub struct HostConfig {
     /// The environment the sessions start from. The marks of the session
     /// the app itself may run in are taken out of it.
     pub environment: Vec<(OsString, OsString)>,
+    /// How long a session being hibernated gets to leave by itself before
+    /// it is killed (PLAN §2.4: five seconds).
+    pub hibernate_grace: Duration,
 }
+
+pub const HIBERNATE_GRACE: Duration = Duration::from_secs(5);
 
 impl HostConfig {
     pub fn from_environment() -> Result<Self, HostError> {
@@ -33,6 +39,7 @@ impl HostConfig {
             shell: user_shell(),
             claude_config_dir: None,
             environment: std::env::vars_os().collect(),
+            hibernate_grace: HIBERNATE_GRACE,
         })
     }
 }

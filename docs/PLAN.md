@@ -1,6 +1,8 @@
 # lithemux · Plan por fases
 
-Gestor de sesiones de terminal y Claude Code, ligero, sin telemetría, con categorías jerárquicas (madre e hijas).
+Gestor de sesiones de terminal y Claude Code, ligero, sin telemetría, con categorías jerárquicas (una sesión coordinadora y las demás sesiones).
+
+> **Terminología (22-nov-2026):** lo que antes se llamaba «madre» es la **sesión coordinadora** (`coordinator` en el código y en la BD) y las «hijas» son las **sesiones** de la categoría (`member`). Los reportes y las decisiones anteriores conservan el término viejo.
 Primero macOS; Windows después. Open source (MIT), repo público. No se distribuye firmado.
 
 > **Protocolo de trabajo (obligatorio)**
@@ -48,7 +50,7 @@ Son la base del diseño. Fuente: code.claude.com/docs (cli-reference, sessions, 
 
 ## Fase 0 — Núcleo: categorías, contexto y lanzador (sin interfaz)
 
-**Objetivo:** que la jerarquía madre/hijas y la reanudación funcionen desde ya en cualquier terminal, incluida cmux. La app de la Fase 2 reutilizará este núcleo tal cual.
+**Objetivo:** que la jerarquía coordinadora/sesiones y la reanudación funcionen desde ya en cualquier terminal, incluida cmux. La app de la Fase 2 reutilizará este núcleo tal cual.
 
 ### 0.1 Andamiaje
 
@@ -81,7 +83,7 @@ sessions(
   category_id TEXT NOT NULL REFERENCES categories ON DELETE CASCADE,
   slug TEXT NOT NULL,         -- "planificadora"
   role TEXT NOT NULL,         -- descripción libre del rol: "Planifica, revisa y redacta prompts"
-  kind TEXT NOT NULL CHECK(kind IN ('mother','child')),
+  kind TEXT NOT NULL CHECK(kind IN ('coordinator','member')),
   profile TEXT NOT NULL CHECK(profile IN ('claude','shell')),
   cwd TEXT,                   -- NULL = root_dir de la categoría
   claude_session_id TEXT,     -- uuid que se pasa a --session-id/--resume; solo profile=claude
@@ -92,13 +94,13 @@ sessions(
   last_activity_at INTEGER, created_at INTEGER, sort INTEGER,
   UNIQUE(category_id, slug))
 
-CREATE UNIQUE INDEX one_mother_per_category ON sessions(category_id) WHERE kind='mother';
+CREATE UNIQUE INDEX one_coordinator_per_category ON sessions(category_id) WHERE kind='coordinator';
 
 settings(key TEXT PK, value TEXT)   -- language, hibernate_after_hours, etc.
 ```
 
 - **Nombre de mensajería** = `<category.slug>-<session.slug>`, por ejemplo `selektal-planificadora`. Se calcula, no se guarda, y debe ser único en todo el sistema. Validarlo al crear.
-- Una categoría puede no tener madre. En ese caso todas sus sesiones son hermanas.
+- Una categoría puede no tener coordinadora. En ese caso todas sus sesiones son hermanas.
 
 ### 0.3 Lanzador (`core::launch`)
 
@@ -157,22 +159,22 @@ Texto **factual**, corto (menos de 2.000 caracteres), en el idioma del ajuste `c
 
 Contenido según el caso:
 
-- **Madre:**
+- **Coordinadora:**
   - categoría y carpeta raíz;
   - su nombre de mensajería y su rol;
-  - lista de hijas: nombre de mensajería, rol, estado y última actividad en tiempo relativo;
+  - lista de las demás sesiones: nombre de mensajería, rol, estado y última actividad en tiempo relativo;
   - que ella coordina la categoría y es la única que escribe el tablero;
   - ruta del tablero;
   - que la lista es una foto del arranque y `lithemux status <categoria>` da el estado vivo.
-- **Hija:**
+- **Sesión de la categoría:**
   - categoría;
   - su nombre y su rol;
-  - su madre (nombre de mensajería y rol);
+  - su coordinadora (nombre de mensajería y rol);
   - sus hermanas;
-  - que reporta a la madre al terminar o al bloquearse, y que lo que esté fuera de su rol pasa por la madre;
-  - ruta del tablero, de solo lectura salvo que la madre indique otra cosa;
+  - que reporta a la coordinadora al terminar o al bloquearse, y que lo que esté fuera de su rol pasa por la coordinadora;
+  - ruta del tablero, de solo lectura salvo que la coordinadora indique otra cosa;
   - `lithemux status`.
-- **Sin madre:** las sesiones se presentan como hermanas que coordinan directamente entre sí.
+- **Sin coordinadora:** las sesiones se presentan como hermanas que coordinan directamente entre sí.
 
 El **tablero** es `<home>/categories/<slug>/board.md`. Se crea vacío, con un encabezado, al crear la categoría. No vive en el repo de la app de usuario.
 
@@ -181,10 +183,10 @@ Ejemplo en español (como referencia de tono, no literal):
 ```
 lithemux: esta sesión pertenece a la categoría «Selektal» (carpeta /Users/x/Linktic/RecruitLine).
 Nombre de esta sesión: selektal-ejecutora. Rol: implementa las fases que define la planificadora.
-Madre de la categoría: selektal-planificadora (rol: planifica, revisa y redacta prompts).
+Coordinadora de la categoría: selektal-planificadora (rol: planifica, revisa y redacta prompts).
 Hermanas: selektal-documental (rol: requerimientos; estado: hibernada, última actividad hace 3 días).
-Las sesiones se comunican con SendMessage usando esos nombres. Al terminar una tarea o al bloquearse, esta sesión reporta a la madre.
-Tablero de la categoría (lo mantiene la madre): /Users/x/Library/Application Support/lithemux/categories/selektal/board.md
+Las sesiones se comunican con SendMessage usando esos nombres. Al terminar una tarea o al bloquearse, esta sesión reporta a la coordinadora.
+Tablero de la categoría (lo mantiene la coordinadora): /Users/x/Library/Application Support/lithemux/categories/selektal/board.md
 Esta lista es del momento del arranque; `lithemux status selektal` muestra el estado actual.
 ```
 
@@ -195,17 +197,17 @@ Con `clap`. Salida legible por defecto y `--json` donde aplique.
 ```
 lithemux cat add <slug> --name <Nombre> --root <dir> [--color]
 lithemux cat list | cat rm <slug> [--yes]
-lithemux new <cat>/<slug> --role "<texto>" [--mother] [--profile claude|shell] [--cwd <dir>] [--model <m>]
+lithemux new <cat>/<slug> --role "<texto>" [--coordinator] [--profile claude|shell] [--cwd <dir>] [--model <m>]
 lithemux open <cat>/<slug>            # corre la sesión en la terminal actual y sale con su código de salida
-lithemux status [<cat>] [--json]      # árbol madre → hijas con estado y última actividad
+lithemux status [<cat>] [--json]      # árbol coordinadora → sesiones con estado y última actividad
 lithemux context <cat>/<slug>         # imprime el contexto que recibiría (depuración)
-lithemux set <cat>/<slug> --role|--mother|--keep-alive|--model ...
+lithemux set <cat>/<slug> --role|--coordinator|--keep-alive|--model ...
 lithemux rm <cat>/<slug> [--yes]      # no borra el transcript de Claude
 lithemux config get|set|unset <clave> # claves: claude_path (ruta absoluta), context_language (es|en)
 lithemux doctor                       # claude elegido y todos los instalados, BD, permisos, sesiones abiertas, prueba en seco del hook
 ```
 
-- `set` acepta `--mother [true|false]`, `--keep-alive [true|false]`, `--model <m>` y `--default-model` (vuelve al modelo por defecto del usuario).
+- `set` acepta `--coordinator [true|false]`, `--keep-alive [true|false]`, `--model <m>` y `--default-model` (vuelve al modelo por defecto del usuario).
 - `cat rm` conserva el `board.md` e imprime su ruta.
 - `config` rechaza cualquier otra clave con la lista de las válidas.
 - `doctor` lista **todos** los `claude` del PATH (`which -a claude` dentro de `-lic`) con su versión, marca el que se usaría y advierte si hay más de una instalación con versiones distintas.
@@ -218,11 +220,11 @@ lithemux doctor                       # claude elegido y todos los instalados, B
 Forma y capas de las pruebas: sección «Pruebas» de `CLAUDE.md`. Regla del equipo: **los tests se escriben desde esta especificación, no desde la implementación.** Escríbelos antes o en paralelo, mirando este documento.
 
 Prueba solo lógica pura que puede fallar:
-- unicidad de la madre;
+- unicidad de la coordinadora;
 - validación de slugs y de nombres de mensajería;
 - elección `--session-id` vs `--resume` según exista o no el transcript (con un `HOME` temporal);
 - construcción exacta de los argumentos;
-- render del contexto para madre, hija y sin madre (snapshots con `insta`);
+- render del contexto para coordinadora, sesión y sin coordinadora (snapshots con `insta`);
 - el hook sin `LITHEMUX_SESSION_ID` sale con 0 sin salida;
 - el hook con la BD bloqueada sale con 0.
 
@@ -230,9 +232,9 @@ Prueba solo lógica pura que puede fallar:
 
 1. CI en verde en local: fmt, clippy `-D warnings`, test, build `--release`, `cargo deny check`.
 2. **Prueba manual en cmux,** documentada en el reporte con capturas de texto:
-   - crear la categoría `demo` con `planificadora` (madre), `ejecutora` y `documental`, y abrir las tres con `lithemux open`;
+   - crear la categoría `demo` con `planificadora` (coordinadora), `ejecutora` y `documental`, y abrir las tres con `lithemux open`;
    - en la ejecutora, `/list-agents` muestra `demo-planificadora` y `demo-documental` con esos nombres;
-   - preguntar a la ejecutora «¿quién es tu madre y quiénes tus hermanas?»: responde correctamente sin que se lo hayas dicho;
+   - preguntar a la ejecutora «¿quién es tu coordinadora y quiénes tus hermanas?»: responde correctamente sin que se lo hayas dicho;
    - cerrar las tres (`/exit`) y volver a abrirlas con `lithemux open`: reanudan la misma conversación (recuerdan algo dicho antes) y conservan el nombre;
    - abrir dos veces la misma sesión: la segunda falla por el candado.
 3. Medir y anotar el tiempo del hook (`hyperfine` sobre `lithemux-hook stop` con BD real). Objetivo: p95 por debajo de 20 ms.
@@ -450,9 +452,9 @@ La referencia es la barra de cmux, que Jhon usa a diario. La implementación es 
   Nunca se lee el transcript.
 - **Sesiones fijadas** (pin) arriba, fuera de su categoría.
 - Las sesiones de shell también tienen tarjeta.
-- Categorías colapsables. La **madre es la cabecera** de su categoría y las hijas cuelgan de ella. Una categoría sin madre muestra a sus sesiones al mismo nivel.
+- Categorías colapsables. La **coordinadora es la cabecera** de su categoría y las demás sesiones cuelgan de ella. Una categoría sin coordinadora muestra a sus sesiones al mismo nivel.
 - Indicador de estado por sesión: trabajando, idle, esperando permiso (resaltado), hibernada y terminada. También indicador de no leído: hubo actividad mientras no se veía.
-- Crear, renombrar, reordenar y borrar categorías y sesiones. Marcar una sesión como madre (respetando una por categoría). Activar `keep_alive`.
+- Crear, renombrar, reordenar y borrar categorías y sesiones. Marcar una sesión como coordinadora (respetando una por categoría). Activar `keep_alive`.
 
 ### 2.3 Área de trabajo
 
@@ -470,8 +472,10 @@ La referencia es la barra de cmux, que Jhon usa a diario. La implementación es 
 ### 2.4 Ciclo de vida y hibernación
 
 - **Hibernar:** la sesión no está visible, `keep_alive=0`, `state=idle` (nunca `working` ni `waiting`) y lleva **más de `hibernate_after_hours`** sin actividad. Ese valor es **48 h por defecto**, configurable.
+  - *Ajuste del 22-nov-2026, tras la prueba con el `claude` real:* si el usuario rechaza un permiso con Esc, Claude Code no emite ningún evento documentado y la sesión se queda en `waiting` indefinidamente (medido: más de 3 min sin `idle_prompt`). Por eso, una sesión en `waiting` **también** se hiberna cuando lleva más de `hibernate_after_hours` sin ningún evento. `working` nunca se hiberna. La válvula de memoria sigue sin tocar las `waiting`.
   - Acción: escribir `state=hibernated` en la BD, mandar SIGHUP al grupo de procesos y SIGKILL a los 5 s si sigue vivo.
 - **Válvula de memoria (activada por defecto, desactivable):** se escucha la presión de memoria de macOS (`DISPATCH_SOURCE_TYPE_MEMORYPRESSURE`). En estado **crítico**, se hiberna la sesión idle no visible más antigua (que no sea `keep_alive`). Como máximo una cada 60 s.
+  - *Ajuste del 22-nov-2026:* en macOS el nivel crítico casi nunca llega, porque jetsam actúa antes, y esta Mac pasa el día en «warning». Por eso la válvula también actúa en **warning**, pero solo con sesiones idle no visibles que lleven **al menos 30 min** sin actividad. En crítico, sin ese mínimo. Siempre como máximo una cada 60 s. Se lee el nivel con `sysctl kern.memorystatus_vm_pressure_level` cada 30 s, sin `unsafe` (D-49, aceptada).
 - **Despertar:** al enfocar una sesión hibernada se relanza con `core::launch` (que resuelve `--resume`). El usuario solo ve un indicador de «reanudando».
 - Si el proceso termina solo, la sesión queda en `ended` con un botón para reanudar.
 - **Nada en la app debe hacer perder una conversación:** nunca se borra un transcript y nunca se relanza con `--session-id` si el transcript existe.
@@ -505,7 +509,7 @@ Al abrir la app:
    - CPU en reposo por debajo de 1 %.
 3. Cerrar la app con `cmd+q` y abrirla: la disposición se restaura, las visibles se reanudan y las demás quedan hibernadas sin perder nada.
 4. **Reiniciar el Mac** y repetir el punto 3.
-5. Madre e hijas funcionan en la app igual que en la Fase 0.
+5. Coordinadora y sesiones funcionan en la app igual que en la Fase 0.
 6. La interfaz completa funciona en español y en inglés.
 7. `nettop`/Little Snitch con la app abierta 10 min: **cero conexiones salientes** de la app. Las de los procesos `claude` son de Claude, no nuestras.
 8. **Detente y reporta.**

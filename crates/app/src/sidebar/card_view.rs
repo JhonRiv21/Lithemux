@@ -7,6 +7,7 @@ use gpui::{
 
 use super::drag::CardDrag;
 use super::menu::{MenuCommand, card_menu};
+use super::port_chips::ports_shown;
 use super::status_text::{card_status_text, status_color};
 use super::tree::Card;
 use super::view::Sidebar;
@@ -19,11 +20,11 @@ pub(super) fn id_of(kind: &str, name: &str) -> ElementId {
 /// Waiting for the user stands out; then, the card of what is in focus.
 fn border_of(card: &Card, is_in_focus: bool) -> u32 {
     if card.status.is_highlighted() {
-        theme::ATTENTION
+        theme::colors().attention
     } else if is_in_focus {
-        theme::ACCENT
+        theme::colors().accent
     } else {
-        theme::SIDEBAR
+        theme::colors().sidebar
     }
 }
 
@@ -50,8 +51,8 @@ impl Sidebar {
         let title_row = self.render_title_row(card);
         let status_row = self.render_status_row(card, cx);
         self.card_frame(card, is_in_focus, hangs)
-            .hover(|style| style.bg(rgb(theme::SURFACE_HOVER)))
-            .drag_over::<CardDrag>(|style, _, _, _| style.border_color(rgb(theme::ACCENT)))
+            .hover(|style| style.bg(rgb(theme::colors().surface_hover)))
+            .drag_over::<CardDrag>(|style, _, _, _| style.border_color(rgb(theme::colors().accent)))
             .on_click(cx.listener(move |this, _, window, cx| {
                 this.run(MenuCommand::Open(opened.clone()), window, cx);
             }))
@@ -71,7 +72,7 @@ impl Sidebar {
                 div()
                     .truncate()
                     .text_xs()
-                    .text_color(rgb(theme::TEXT_MUTED))
+                    .text_color(rgb(theme::colors().text_muted))
                     .child(preview)
             }))
             .child(status_row)
@@ -92,9 +93,9 @@ impl Sidebar {
             .border_1()
             .border_color(rgb(border_of(card, is_in_focus)))
             .bg(rgb(if is_in_focus {
-                theme::SURFACE_ACTIVE
+                theme::colors().surface_active
             } else {
-                theme::SURFACE
+                theme::colors().surface
             }))
     }
 
@@ -122,11 +123,11 @@ impl Sidebar {
             .children((card.unread > 0).then(|| self.render_unread(card)))
     }
 
-    /// «mother», «kept alive».
+    /// «coordinator», «kept alive».
     fn render_tags(&self, card: &Card) -> Vec<Div> {
         let mut tags = Vec::new();
-        if card.is_mother {
-            tags.push(self.texts.get("sidebar.mother"));
+        if card.is_coordinator {
+            tags.push(self.texts.get("sidebar.coordinator"));
         }
         if card.keep_alive {
             tags.push(self.texts.get("sidebar.keep_alive"));
@@ -136,9 +137,9 @@ impl Sidebar {
                 .flex_none()
                 .px_1()
                 .rounded_sm()
-                .bg(rgb(theme::SURFACE_ACTIVE))
+                .bg(rgb(theme::colors().surface_active))
                 .text_xs()
-                .text_color(rgb(theme::TEXT_MUTED))
+                .text_color(rgb(theme::colors().text_muted))
                 .child(text)
         };
         tags.into_iter().map(tag).collect()
@@ -153,7 +154,8 @@ impl Sidebar {
             .flex_none()
             .px_1()
             .rounded_full()
-            .bg(rgb(theme::BADGE))
+            .bg(rgb(theme::colors().badge))
+            .text_color(rgb(theme::colors().on_accent))
             .text_xs()
             .tooltip(crate::app_shell::tooltip::text(label))
             .child(card.unread.to_string())
@@ -162,33 +164,41 @@ impl Sidebar {
 
     /// Its status in words, where it works and the ports it listens on.
     fn render_status_row(&self, card: &Card, cx: &mut Context<Self>) -> Div {
+        let (ports, more) = ports_shown(&card.ports);
+        let status_color = if card.status.is_highlighted() {
+            theme::colors().attention
+        } else {
+            theme::colors().text_muted
+        };
         div()
             .flex()
             .items_center()
             .gap_1()
             .text_xs()
+            // The text gives way, with an ellipsis; the ports never do.
             .child(
                 div()
-                    .flex_none()
-                    .text_color(rgb(if card.status.is_highlighted() {
-                        theme::ATTENTION
-                    } else {
-                        theme::TEXT_MUTED
-                    }))
+                    .flex_shrink(1.0)
+                    .min_w_0()
+                    .truncate()
+                    .text_color(rgb(status_color))
                     .child(card_status_text(&card.status, &self.texts)),
             )
             .child(
                 div()
                     .flex_1()
+                    .min_w_0()
                     .truncate()
-                    .text_color(rgb(theme::TEXT_FAINT))
+                    .text_color(rgb(theme::colors().text_faint))
                     .child(SharedString::from(card.cwd.clone())),
             )
-            .children(
-                card.ports
-                    .iter()
-                    .map(|port| self.render_port(card, *port, cx)),
-            )
+            .children(ports.iter().map(|port| self.render_port(card, *port, cx)))
+            .children((more > 0).then(|| {
+                div()
+                    .flex_none()
+                    .text_color(rgb(theme::colors().text_faint))
+                    .child(format!("+{more}"))
+            }))
     }
 
     /// `:3000`; a click shows that page in the browser.
@@ -198,8 +208,8 @@ impl Sidebar {
             .flex_none()
             .px_1()
             .rounded_sm()
-            .text_color(rgb(theme::ACCENT))
-            .hover(|style| style.bg(rgb(theme::SURFACE_ACTIVE)))
+            .text_color(rgb(theme::colors().link))
+            .hover(|style| style.bg(rgb(theme::colors().surface_active)))
             .on_click(cx.listener(move |this, _, _, cx| {
                 cx.stop_propagation();
                 this.open_port(port, cx);

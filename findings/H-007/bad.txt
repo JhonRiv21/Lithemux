@@ -1,0 +1,7 @@
+    if session.kind == Kind::Mother {
+        self.find_one("category_id = ?1 AND kind = 'mother'", [category_id])
+            Kind::Child => "child",
+make_mother = "Mark as mother"
+mother = "madre"
+        "Esta sesión todavía no tiene hermanas."
+        "The category has no child sessions yet."

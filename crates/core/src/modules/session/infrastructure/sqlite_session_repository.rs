@@ -12,7 +12,7 @@ use crate::platform::store::error::StoreError;
 
 const COLUMNS: &str = "id, category_id, slug, role, kind, profile, cwd, claude_session_id, \
      model, keep_alive, state, claude_version, last_activity_at, created_at, sort, \
-     title, pin_sort, preview, unread";
+     title, pin_sort, preview, unread, notice";
 
 pub struct SqliteSessionRepository<'a> {
     db: &'a Db,
@@ -64,9 +64,9 @@ impl SessionRepository for SqliteSessionRepository<'_> {
         self.execute(
             "INSERT INTO sessions(id, category_id, slug, role, kind, profile, cwd, \
              claude_session_id, model, keep_alive, state, claude_version, last_activity_at, \
-             created_at, sort, title, pin_sort, preview, unread) \
+             created_at, sort, title, pin_sort, preview, unread, notice) \
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, \
-             ?16, ?17, ?18, ?19)",
+             ?16, ?17, ?18, ?19, ?20)",
             params![
                 session.id,
                 session.category_id,
@@ -86,7 +86,8 @@ impl SessionRepository for SqliteSessionRepository<'_> {
                 session.title,
                 session.pin_sort,
                 session.preview,
-                session.unread
+                session.unread,
+                session.notice
             ],
         )
     }
@@ -122,8 +123,8 @@ impl SessionRepository for SqliteSessionRepository<'_> {
         self.find_one("id = ?1", [id])
     }
 
-    fn find_mother(&self, category_id: &str) -> Result<Option<Session>, SessionError> {
-        self.find_one("category_id = ?1 AND kind = 'mother'", [category_id])
+    fn find_coordinator(&self, category_id: &str) -> Result<Option<Session>, SessionError> {
+        self.find_one("category_id = ?1 AND kind = 'coordinator'", [category_id])
     }
 
     fn update_role(&self, id: &str, role: &str) -> Result<(), SessionError> {
@@ -242,6 +243,13 @@ impl SessionRepository for SqliteSessionRepository<'_> {
         )
     }
 
+    fn update_notice(&self, id: &str, notice: Option<&str>) -> Result<(), SessionError> {
+        self.execute(
+            "UPDATE sessions SET notice = ?2 WHERE id = ?1",
+            params![id, notice],
+        )
+    }
+
     fn clear_unread(&self, id: &str) -> Result<(), SessionError> {
         self.execute("UPDATE sessions SET unread = 0 WHERE id = ?1", [id])
     }
@@ -272,6 +280,7 @@ fn from_row(row: &Row<'_>) -> rusqlite::Result<Session> {
         pin_sort: row.get(16)?,
         preview: row.get(17)?,
         unread: row.get(18)?,
+        notice: row.get(19)?,
     })
 }
 

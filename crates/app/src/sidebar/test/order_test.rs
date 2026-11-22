@@ -46,11 +46,11 @@ fn a_card_dropped_on_another_takes_its_place() {
 #[test]
 fn a_new_order_of_the_shown_items_leaves_the_hidden_ones_where_they_were() {
     use crate::sidebar::order::with_shown_reordered;
-    let all = ids(&["mother", "b", "pinned", "d", "e"]);
+    let all = ids(&["coordinator", "b", "pinned", "d", "e"]);
     let new_order = ids(&["e", "b", "d"]);
     assert_eq!(
         with_shown_reordered(&all, &new_order),
-        ids(&["mother", "e", "pinned", "b", "d"])
+        ids(&["coordinator", "e", "pinned", "b", "d"])
     );
     assert_eq!(with_shown_reordered(&all, &[]), all);
 }

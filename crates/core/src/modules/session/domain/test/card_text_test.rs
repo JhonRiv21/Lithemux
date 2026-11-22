@@ -38,3 +38,26 @@ fn a_title_is_bounded() {
     let title = title_from(&"x".repeat(500)).unwrap();
     assert_eq!(title.chars().count(), MAX_TITLE_CHARS);
 }
+
+// Block 4, part 0 (6): the card shows text, not markdown source.
+#[test]
+fn a_preview_drops_the_basic_markdown_markers() {
+    assert_eq!(
+        preview_from("Un **PTY** es un `pseudo terminal`, __no__ un tubo").as_deref(),
+        Some("Un PTY es un pseudo terminal, no un tubo")
+    );
+    assert_eq!(
+        preview_from("## Resumen\n\n# Cambios\nTodo listo").as_deref(),
+        Some("Resumen Cambios Todo listo")
+    );
+}
+
+// Block 4, part 0 (6): only the markers go; what looks like one inside a
+// word or a path stays.
+#[test]
+fn text_that_only_resembles_markdown_is_left_alone() {
+    assert_eq!(
+        preview_from("issue #12 in snake_case_name, 2 * 3 = 6").as_deref(),
+        Some("issue #12 in snake_case_name, 2 * 3 = 6")
+    );
+}

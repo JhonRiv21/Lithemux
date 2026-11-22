@@ -23,32 +23,32 @@ impl Phrases for En {
         format!("This session's name: {name}. Role: {role}.")
     }
 
-    fn is_mother(&self) -> &'static str {
-        "This session is the mother of the category: it coordinates the category and is the only one that writes the board."
+    fn is_coordinator(&self) -> &'static str {
+        "This session is the coordinator session of the category: it coordinates the category and is the only one that writes the board."
     }
 
-    fn mother_is(&self, entry: &str) -> String {
-        format!("Mother of the category: {entry}.")
+    fn coordinator_is(&self, entry: &str) -> String {
+        format!("Coordinator of the category: {entry}.")
     }
 
-    fn no_mother(&self) -> &'static str {
-        "The category has no mother: its sessions are sisters and coordinate directly with each other."
+    fn no_coordinator(&self) -> &'static str {
+        "The category has no coordinator session: its sessions coordinate directly with each other."
     }
 
-    fn children_heading(&self) -> &'static str {
-        "Children:"
+    fn members_heading(&self) -> &'static str {
+        "The other sessions:"
     }
 
-    fn no_children(&self) -> &'static str {
-        "The category has no child sessions yet."
+    fn no_members(&self) -> &'static str {
+        "The category has no other sessions yet."
     }
 
-    fn sisters_heading(&self) -> &'static str {
-        "Sisters:"
+    fn others_heading(&self) -> &'static str {
+        "The other sessions:"
     }
 
-    fn no_sisters(&self) -> &'static str {
-        "This session has no sisters yet."
+    fn no_others(&self) -> &'static str {
+        "The category has no other sessions yet."
     }
 
     fn more(&self, hidden: usize) -> String {
@@ -79,22 +79,22 @@ impl Phrases for En {
         "Sessions talk to each other with SendMessage using those names."
     }
 
-    fn child_reporting(&self) -> &'static str {
-        "When this session finishes a task or gets blocked, it reports to the mother; anything outside its role goes through the mother."
+    fn member_reporting(&self) -> &'static str {
+        "When this session finishes a task or gets blocked, it reports to the coordinator; anything outside its role goes through the coordinator."
     }
 
-    fn board_of_mother(&self, board: &str) -> String {
+    fn board_of_coordinator(&self, board: &str) -> String {
         format!("Category board (written only by this session): {board}")
     }
 
-    fn board_of_child(&self, board: &str) -> String {
+    fn board_of_member(&self, board: &str) -> String {
         format!(
-            "Category board (kept by the mother; read-only for this session unless the mother says otherwise): {board}"
+            "Category board (kept by the coordinator; read-only for this session unless the coordinator says otherwise): {board}"
         )
     }
 
     fn board_shared(&self, board: &str) -> String {
-        format!("Category board (shared by the sisters): {board}")
+        format!("Category board (shared by its sessions): {board}")
     }
 
     fn snapshot_note(&self, category_slug: &str) -> String {

@@ -1,0 +1,7 @@
+    if session.kind == Kind::Coordinator {
+            Kind::Member => "member",
+make_coordinator = "Make coordinator"
+            .child(title_row)
+    let mut child = command.spawn()?;
+        "Las demás sesiones:"
+/// The environment a child process starts from.

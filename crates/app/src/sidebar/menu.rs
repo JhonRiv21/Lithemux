@@ -11,7 +11,7 @@ pub enum MenuCommand {
     Close(String),
     RenameSession(String),
     SetPinned(String, bool),
-    SetMother(String, bool),
+    SetCoordinator(String, bool),
     SetKeepAlive(String, bool),
     ShiftSession(String, isize),
     DeleteSession(String),
@@ -45,13 +45,19 @@ pub fn card_menu(card: &Card) -> Vec<MenuItem> {
     } else {
         item("menu.pin", MenuCommand::SetPinned(id(), true))
     });
-    // Mother and keep-alive are about Claude sessions: a shell has no
+    // Coordinator and keep-alive are about Claude sessions: a shell has no
     // conversation to coordinate or to hibernate.
     if !card.is_shell {
-        items.push(if card.is_mother {
-            item("menu.make_child", MenuCommand::SetMother(id(), false))
+        items.push(if card.is_coordinator {
+            item(
+                "menu.remove_coordinator",
+                MenuCommand::SetCoordinator(id(), false),
+            )
         } else {
-            item("menu.make_mother", MenuCommand::SetMother(id(), true))
+            item(
+                "menu.make_coordinator",
+                MenuCommand::SetCoordinator(id(), true),
+            )
         });
         items.push(if card.keep_alive {
             item(

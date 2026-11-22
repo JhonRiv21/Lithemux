@@ -10,9 +10,9 @@ use crate::session_host::{Failure, HostError};
 use crate::sidebar::error::SidebarError;
 
 fn every_problem() -> Vec<Message> {
-    let mother = SessionError::MotherExists {
+    let coordinator = SessionError::CoordinatorExists {
         category: "demo".into(),
-        mother: "planificadora".into(),
+        coordinator: "planificadora".into(),
     };
     let taken = SessionError::MessagingNameTaken {
         name: "demo-api".into(),
@@ -21,7 +21,7 @@ fn every_problem() -> Vec<Message> {
     vec![
         (&SidebarError::UnusableName("¡¡".into())).into(),
         (&SidebarError::Gone).into(),
-        (&SidebarError::Session(mother)).into(),
+        (&SidebarError::Session(coordinator)).into(),
         (&SidebarError::Session(taken)).into(),
         (&SidebarError::Session(SessionError::AlreadyExists("demo/api".into()))).into(),
         (&SidebarError::Session(SessionError::NotFound("demo/api".into()))).into(),
@@ -60,21 +60,21 @@ fn every_problem_has_its_text_in_both_languages() {
     }
 }
 
-// Audit of block 3 (7): the mother rule is said in the user's language.
+// Audit of block 3 (7): the coordinator rule is said in the user's language.
 #[test]
-fn a_second_mother_is_refused_in_the_language_of_the_interface() {
-    let error = SidebarError::Session(SessionError::MotherExists {
+fn a_second_coordinator_is_refused_in_the_language_of_the_interface() {
+    let error = SidebarError::Session(SessionError::CoordinatorExists {
         category: "demo".into(),
-        mother: "planificadora".into(),
+        coordinator: "planificadora".into(),
     });
     let message = Message::from(&error);
     assert_eq!(
         Texts::of(Language::Spanish).say(&message),
-        "«demo» ya tiene una sesión madre (planificadora)."
+        "«demo» ya tiene una sesión coordinadora (planificadora)."
     );
     assert_eq!(
         Texts::of(Language::English).say(&message),
-        "“demo” already has a mother session (planificadora)."
+        "“demo” already has a coordinator session (planificadora)."
     );
 }
 

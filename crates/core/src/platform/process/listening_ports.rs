@@ -56,8 +56,8 @@ impl Parents {
     }
 }
 
-/// For each of `roots`, the ports its tree listens on, in order and without
-/// repeats. One pass over the machine's listening sockets serves them all;
+/// For each of `roots`, the ports that what it started listens on, in order
+/// and without repeats; not the ports of the root itself. One pass over the machine's listening sockets serves them all;
 /// from each listener the way up to its root is a few lookups.
 pub fn listening_ports(roots: &[u32]) -> HashMap<u32, Vec<u16>> {
     let mut found: HashMap<u32, BTreeSet<u16>> =
@@ -68,6 +68,11 @@ pub fn listening_ports(roots: &[u32]) -> HashMap<u32, Vec<u16>> {
     let mut parents = Parents::new();
     for listener in listeners::get_all().unwrap_or_default() {
         if listener.protocol != Protocol::TCP || listener.state != SocketState::Listen {
+            continue;
+        }
+        // A root is a session's own program (the shell, or `claude`, which
+        // listens on a port of its own): only what it started counts.
+        if roots.contains(&listener.process.pid) {
             continue;
         }
         if let Some(root) = parents.root_of(listener.process.pid, roots)

@@ -19,8 +19,8 @@ impl World {
     fn new() -> Self {
         let (store, boards) = (InMemoryStore::new(), InMemoryBoards::default());
         add_category(&store, &boards, "demo");
-        add_session(&store, &store, "demo/planificadora", Kind::Mother);
-        let executor = add_session(&store, &store, "demo/ejecutora", Kind::Child);
+        add_session(&store, &store, "demo/planificadora", Kind::Coordinator);
+        let executor = add_session(&store, &store, "demo/ejecutora", Kind::Member);
         World {
             store,
             boards,
@@ -65,7 +65,7 @@ fn session_start_marks_idle_and_prints_the_context() {
         .as_str()
         .unwrap();
     assert!(context.contains("This session's name: demo-ejecutora"));
-    assert!(context.contains("Mother of the category: demo-planificadora"));
+    assert!(context.contains("Coordinator of the category: demo-planificadora"));
 
     let session = world.executor_now();
     assert_eq!(session.state, State::Idle);
@@ -322,24 +322,117 @@ fn a_turn_leaves_its_last_message_on_the_card_and_counts_as_unread() {
     );
 }
 
-// PLAN §2.2
+// PLAN §2.2; block 4, part 0 (5): the request is on the card while Claude
+// waits, and counts once. The idle reminder is not counted again.
 #[test]
-fn a_permission_request_shows_on_the_card_and_the_idle_reminder_does_not() {
+fn a_permission_request_shows_on_the_card_while_it_is_pending() {
     let world = World::new();
     world.fire(
         "notification",
         r#"{"message":"Claude needs your permission to use Bash","notification_type":"permission_prompt"}"#,
         NOW,
     );
+    let waiting = world.executor_now();
+    assert_eq!(
+        waiting.card_line(),
+        Some("Claude needs your permission to use Bash")
+    );
+    assert_eq!(waiting.unread, 1);
+
     world.fire(
         "notification",
         r#"{"message":"Claude is waiting for your input","notification_type":"idle_prompt"}"#,
         NOW + 60,
     );
-    let session = world.executor_now();
-    assert_eq!(
-        session.preview.as_deref(),
-        Some("Claude needs your permission to use Bash")
+    let later = world.executor_now();
+    assert_eq!(later.unread, 1);
+    assert_ne!(later.card_line(), Some("Claude is waiting for your input"));
+}
+
+// Block 4, part 0 (5): what Claude asked for leaves the card when the wait
+// ends, however it ends, and what was said last is back.
+#[test]
+fn a_permission_request_leaves_the_card_once_claude_no_longer_waits() {
+    let ask = r#"{"message":"Claude needs your permission to use Bash","notification_type":"permission_prompt"}"#;
+    let ways_out = [
+        ("post-tool-use", "{}", State::Working),
+        ("stop", "{}", State::Idle),
+        (
+            "prompt-submit",
+            r#"{"prompt":"never mind"}"#,
+            State::Working,
+        ),
+        ("session-end", "{}", State::Ended),
+        // The user dismissed the prompt: nothing fires until the reminder.
+        (
+            "notification",
+            r#"{"notification_type":"idle_prompt"}"#,
+            State::Idle,
+        ),
+    ];
+    for (event, stdin, state) in ways_out {
+        let world = World::new();
+        world.fire("stop", r#"{"last_assistant_message":"Let me check."}"#, NOW);
+        world.fire("notification", ask, NOW + 1);
+        let waiting = world.executor_now();
+        assert_eq!(waiting.state, State::Waiting);
+        assert_eq!(
+            waiting.card_line(),
+            Some("Claude needs your permission to use Bash")
+        );
+        assert_eq!(waiting.preview.as_deref(), Some("Let me check."));
+
+        world.fire(event, stdin, NOW + 2);
+        let after = world.executor_now();
+        assert_eq!(after.state, state, "{event}");
+        assert_eq!(after.notice, None, "{event}");
+        assert_ne!(
+            after.card_line(),
+            Some("Claude needs your permission to use Bash"),
+            "{event}"
+        );
+    }
+}
+
+// Block 4, part 0 (5): the reminder only takes a session out of waiting.
+#[test]
+fn the_idle_reminder_changes_nothing_of_a_session_that_is_not_waiting() {
+    let world = World::new();
+    world.fire("prompt-submit", r#"{"prompt":"go"}"#, NOW);
+    world.fire(
+        "notification",
+        r#"{"notification_type":"idle_prompt"}"#,
+        NOW + 60,
     );
-    assert_eq!(session.unread, 1);
+    assert_eq!(world.executor_now().state, State::Working);
+}
+
+// Audit of block 4 (9): a session the app has just hibernated stays so,
+// whatever its program still reports while it leaves; the start of its
+// next run wakes it.
+#[test]
+fn late_news_of_a_hibernated_session_do_not_wake_it_and_its_next_start_does() {
+    let world = World::new();
+    world.fire("session-start", r#"{"source":"startup"}"#, NOW);
+    apply_state(
+        &world.store,
+        &world.executor.id,
+        State::Hibernated,
+        None,
+        None,
+    )
+    .unwrap();
+
+    world.fire("stop", "{}", NOW + 1);
+    world.fire("prompt-submit", r#"{"prompt":"late"}"#, NOW + 2);
+    world.fire(
+        "notification",
+        r#"{"message":"late","notification_type":"permission_prompt"}"#,
+        NOW + 3,
+    );
+    world.fire("session-end", "{}", NOW + 4);
+    assert_eq!(world.executor_now().state, State::Hibernated);
+
+    world.fire("session-start", r#"{"source":"resume"}"#, NOW + 10);
+    assert_eq!(world.executor_now().state, State::Idle);
 }

@@ -26,7 +26,7 @@ fn session_start_prints_the_additional_context_and_marks_idle() {
         .unwrap();
     assert!(context.contains("category \"Demo\""));
     assert!(context.contains("This session's name: demo-ejecutora"));
-    assert!(context.contains("Mother of the category: demo-planificadora"));
+    assert!(context.contains("Coordinator of the category: demo-planificadora"));
     assert!(context.contains("categories/demo/board.md"));
     assert!(context.chars().count() < 2000);
 
@@ -164,11 +164,11 @@ fn the_hooks_leave_the_preview_and_the_unread_count_on_the_card() {
     );
     assert_eq!(asked.unread, 0);
 
+    // What Claude asks for is on the card while it waits; the preview of
+    // what was said is kept under it.
     let blocked = fire("notification", "notification_permission.json");
-    assert_eq!(
-        blocked.preview.as_deref(),
-        Some("Claude needs your permission")
-    );
+    assert_eq!(blocked.card_line(), Some("Claude needs your permission"));
+    assert_eq!(blocked.preview, asked.preview);
     assert_eq!(blocked.unread, 1);
 
     let answered = fire("stop", "stop_with_last_message.json");
@@ -176,6 +176,7 @@ fn the_hooks_leave_the_preview_and_the_unread_count_on_the_card() {
         answered.preview.as_deref(),
         Some("I've completed the refactoring. Here's a summary of what changed.")
     );
+    assert_eq!(answered.notice, None);
     assert_eq!(answered.unread, 2);
 
     // A Stop without the last message keeps the preview and still counts.

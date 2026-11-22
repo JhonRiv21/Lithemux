@@ -21,6 +21,12 @@ impl SessionHost {
         self.phases.get(session_id)
     }
 
+    /// Whether the session was asked for while its last run was leaving,
+    /// and will open by itself when that is over.
+    pub fn reopens_when_closed(&self, session_id: &str) -> bool {
+        self.leaving.is_asked_for(session_id)
+    }
+
     pub fn is_running(&self, session_id: &str) -> bool {
         self.phase(session_id) == Some(&Phase::Running)
     }

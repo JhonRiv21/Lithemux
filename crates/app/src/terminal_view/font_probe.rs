@@ -3,7 +3,7 @@
 use gpui::{PlatformTextSystem, Point, RenderGlyphParams, font};
 
 use super::error::TerminalError;
-use super::paint::{FONT_FAMILY, FONT_SIZE};
+use super::look::{DEFAULT_FONT_FAMILY as FONT_FAMILY, font_size};
 
 const PROBE_CHARACTER: char = 'm';
 
@@ -26,7 +26,7 @@ pub fn probe_text_rendering(text_system: &dyn PlatformTextSystem) -> Result<(), 
     let params = RenderGlyphParams {
         font_id,
         glyph_id,
-        font_size: gpui::px(FONT_SIZE),
+        font_size: gpui::px(font_size()),
         subpixel_variant: Point::default(),
         scale_factor: 2.0,
         is_emoji: false,

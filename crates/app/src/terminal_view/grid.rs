@@ -114,7 +114,7 @@ fn cell_style(cell: &Cell, selected: bool, colors: &Colors) -> CellStyle {
         foreground = background;
     }
     if selected {
-        background = palette::SELECTION;
+        background = palette::selection();
         has_background = true;
     }
     CellStyle {

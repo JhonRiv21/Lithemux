@@ -1,0 +1,112 @@
+#!/bin/bash
+# Phase 2 acceptance, criteria 2 and 7 (docs/PLAN.md): the app with 20
+# sessions in 4 categories, 2 on show and the rest hibernated. Measures the
+# footprint, the idle CPU, which programs are alive and, with --network
+# <seconds>, that the app opens no connection in that time.
+#
+# Runs on a throwaway LITHEMUX_HOME with the fake claude of the tests: it
+# never touches the real one nor the user's sessions.
+#
+#   scripts/accept-phase2 [--network <seconds>] [--keep]
+set -euo pipefail
+
+repo="$(cd "$(dirname "$0")/.." && pwd)"
+network_seconds=0
+keep=no
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --network) network_seconds="$2"; shift 2 ;;
+    --keep) keep=yes; shift ;;
+    *) echo "unknown argument: $1" >&2; exit 2 ;;
+  esac
+done
+
+bin="$repo/target/release"
+for program in lithemux lithemux-app lithemux-hook; do
+  [ -x "$bin/$program" ] || { echo "build first: cargo build --release" >&2; exit 2; }
+done
+
+# Short, so that the socket fits next to the database.
+home="$(mktemp -d /tmp/lithemux-accept.XXXXXX)"
+work="$home/work"
+mkdir -p "$work"
+export LITHEMUX_HOME="$home/data"
+cli() { "$bin/lithemux" "$@" >/dev/null; }
+
+ids=()
+for category in alfa beta gamma delta; do
+  cli cat add "$category" --name "$category" --root "$work"
+  for number in 1 2 3 4 5; do
+    cli new "$category/s$number" --role "session $number of $category"
+  done
+done
+cli config set claude_path "$repo/crates/core/tests/fakes/fake-claude"
+echo 3600 > "$LITHEMUX_HOME/fake-claude.sleep"
+# A real scrollback in each terminal: more lines than it keeps (5000).
+echo 6000 > "$LITHEMUX_HOME/fake-claude.lines"
+
+db="$LITHEMUX_HOME/lithemux.db"
+# As after a day of work: every session has run and sleeps.
+sqlite3 "$db" "UPDATE sessions SET state = 'hibernated', last_activity_at = strftime('%s','now') - 3600"
+first="$(sqlite3 "$db" "SELECT json_group_array(id) FROM (SELECT id FROM sessions ORDER BY rowid LIMIT 10)")"
+second="$(sqlite3 "$db" "SELECT json_group_array(id) FROM (SELECT id FROM sessions ORDER BY rowid LIMIT 10 OFFSET 10)")"
+layout="{\"root\":{\"Split\":{\"id\":2,\"axis\":\"Horizontal\",\"share\":500,\"first\":{\"Pane\":1},\"second\":{\"Pane\":3}}},\"panes\":[{\"id\":1,\"tabs\":$first,\"active\":0},{\"id\":3,\"tabs\":$second,\"active\":0}],\"active_pane\":1}"
+sqlite3 "$db" "INSERT OR REPLACE INTO workspace_layout(id, layout) VALUES (1, '$layout')"
+
+env -i HOME="$HOME" PATH="/usr/bin:/bin" SHELL=/bin/zsh LITHEMUX_HOME="$LITHEMUX_HOME" \
+  "$bin/lithemux-app" > "$home/app.out" 2> "$home/app.err" &
+app=$!
+cleanup() {
+  kill "$app" 2>/dev/null || true
+  wait "$app" 2>/dev/null || true
+  [ "$keep" = yes ] || rm -rf "$home"
+}
+trap cleanup EXIT
+
+# Time for the two sessions on show to start and print their history.
+sleep 12
+echo "sessions: $(sqlite3 "$db" "SELECT count(*) FROM sessions") in $(sqlite3 "$db" "SELECT count(*) FROM categories") categories; app pid $app"
+
+alive="$( (pgrep -P "$app" || true) | wc -l | tr -d ' ')"
+echo "programs alive under the app: $alive (expected 2: the sessions on show)"
+runs="$(wc -l < "$LITHEMUX_HOME/fake-claude.runs" | tr -d ' ')"
+echo "claude launches since start: $runs (expected 2)"
+echo "states: $(sqlite3 "$db" "SELECT state || '=' || count(*) FROM sessions GROUP BY state" | tr '\n' ' ')"
+
+cpu_seconds() { ps -p "$app" -o cputime= | awk -F: '{ print ($1 * 60) + $2 }'; }
+before="$(cpu_seconds)"
+sleep 60
+after="$(cpu_seconds)"
+echo "idle cpu over 60 s: $(echo "$before $after" | awk '{ printf "%.2f s (%.2f %%)", $2 - $1, ($2 - $1) / 60 * 100 }') (limit 1 %)"
+footprint "$app" 2>/dev/null | awk '/phys_footprint:/ { print "footprint: " $2 " " $3 " (limit 200 MB)" } /phys_footprint_peak:/ { print "footprint peak: " $2 " " $3 }'
+
+if [ "$network_seconds" -gt 0 ]; then
+  echo "watching the network of pid $app for $network_seconds s..."
+  samples=$((network_seconds / 10))
+  seen=0
+  for _ in $(seq "$samples"); do
+    # Internet sockets of the app, of any kind and state.
+    open="$(lsof -nP -a -p "$app" -i 2>/dev/null | tail -n +2 || true)"
+    if [ -n "$open" ]; then
+      seen=$((seen + 1))
+      echo "$open"
+    fi
+    sleep 10
+  done
+  # What the kernel counted for the process over its whole life.
+  traffic="$(nettop -P -x -L 1 -J bytes_in,bytes_out -p "$app" 2>/dev/null | tail -n +2 || true)"
+  echo "samples with an internet socket: $seen of $samples (expected 0)"
+  echo "nettop, bytes in/out of the app: ${traffic:-none}"
+fi
+
+# Every program the app started, by the pid each fake claude recorded.
+started="$(awk '{ print $2 }' "$LITHEMUX_HOME/fake-claude.runs")"
+kill "$app"
+wait "$app" 2>/dev/null || true
+left=0
+for pid in $started; do
+  if kill -0 "$pid" 2>/dev/null; then
+    left=$((left + 1))
+  fi
+done
+echo "after quitting: $left of $(echo "$started" | wc -w | tr -d ' ') programs still alive (expected 0); states: $(sqlite3 "$db" "SELECT state || '=' || count(*) FROM sessions GROUP BY state" | tr '\n' ' ')"

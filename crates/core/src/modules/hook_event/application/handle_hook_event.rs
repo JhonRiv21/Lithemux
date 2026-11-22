@@ -2,14 +2,14 @@ use std::fmt::Display;
 
 use crate::modules::context::build_session_context;
 use crate::modules::hook_event::application::hook_ports::HookPorts;
-use crate::modules::hook_event::domain::card_note::card_note;
+use crate::modules::hook_event::domain::card_note::{CardNote, card_note};
 use crate::modules::hook_event::domain::hook_event::HookEvent;
 use crate::modules::hook_event::domain::hook_input::HookInput;
 use crate::modules::hook_event::domain::session_start_output::session_start_output;
 use crate::modules::hook_event::domain::transition::{Transition, transition};
 use crate::modules::session::{
     SessionError, SessionRepository, apply_state, follow_claude_session, move_state, note_message,
-    record_activity, record_claude_version,
+    note_request, record_activity, record_claude_version,
 };
 
 /// Handles one hook invocation and returns what to print on stdout, if
@@ -45,8 +45,7 @@ pub fn handle_hook_event(
         problem("updating the state", &error);
     }
     if let Some(note) = card_note(event, &input)
-        && let Err(error) =
-            note_message(sessions, session_id, note.message, note.asks_for_attention)
+        && let Err(error) = leave_on_the_card(sessions, session_id, note)
     {
         problem("updating the card", &error);
     }
@@ -55,6 +54,18 @@ pub fn handle_hook_event(
         .flatten();
     ports.notifier.notify(session_id, event);
     stdout
+}
+
+fn leave_on_the_card(
+    sessions: &dyn SessionRepository,
+    session_id: &str,
+    note: CardNote<'_>,
+) -> Result<(), SessionError> {
+    if note.is_pending {
+        note_request(sessions, session_id, note.message)
+    } else {
+        note_message(sessions, session_id, note.message, note.asks_for_attention)
+    }
 }
 
 fn apply_transition(

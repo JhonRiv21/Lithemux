@@ -78,23 +78,23 @@ fn invalid_slugs_missing_folders_and_duplicates_are_rejected() {
     );
 }
 
-// PLAN §0.2: one mother per category, from the command line
+// PLAN §0.2: one coordinator per category, from the command line
 #[test]
-fn a_second_mother_is_rejected() {
+fn a_second_coordinator_is_rejected() {
     let sandbox = Sandbox::new().with_demo();
-    let error = sandbox.fail(&["new", "demo/jefa", "--role", "x", "--mother"]);
-    assert!(error.contains("already has a mother"));
+    let error = sandbox.fail(&["new", "demo/jefa", "--role", "x", "--coordinator"]);
+    assert!(error.contains("already has a coordinator"));
     assert!(error.contains("planificadora"));
     assert!(
         sandbox
-            .fail(&["set", "demo/ejecutora", "--mother"])
-            .contains("already has a mother")
+            .fail(&["set", "demo/ejecutora", "--coordinator"])
+            .contains("already has a coordinator")
     );
 }
 
-// PLAN §0.6: status shows the tree mother -> children with state and activity
+// PLAN §0.6: status shows the tree coordinator -> other sessions with state and activity
 #[test]
-fn status_shows_the_mother_first_and_her_children_below() {
+fn status_shows_the_coordinator_first_and_the_other_sessions_below() {
     let sandbox = Sandbox::new().with_demo();
     let status = sandbox.run(&["status"]);
     let lines: Vec<&str> = status.lines().collect();
@@ -104,7 +104,7 @@ fn status_shows_the_mother_first_and_her_children_below() {
     assert!(lines[3].contains("demo-documental"));
     assert!(
         lines[2].find("demo-ejecutora") > lines[1].find("demo-planificadora"),
-        "children are indented under the mother"
+        "the other sessions are indented under the coordinator"
     );
     for line in &lines[1..4] {
         assert!(line.contains("new"), "{line}");
@@ -122,9 +122,9 @@ fn status_json_carries_names_kinds_and_states() {
     for expected in [
         "\"slug\": \"demo\"",
         "\"name\": \"demo-planificadora\"",
-        "\"kind\": \"mother\"",
+        "\"kind\": \"coordinator\"",
         "\"name\": \"demo-ejecutora\"",
-        "\"kind\": \"child\"",
+        "\"kind\": \"member\"",
         "\"state\": \"new\"",
         "\"open_pid\": null",
     ] {
@@ -138,14 +138,14 @@ fn context_prints_what_the_session_would_receive() {
     let sandbox = Sandbox::new().with_demo();
     let context = sandbox.run(&["context", "demo/ejecutora"]);
     assert!(context.contains("This session's name: demo-ejecutora"));
-    assert!(context.contains("Mother of the category: demo-planificadora"));
+    assert!(context.contains("Coordinator of the category: demo-planificadora"));
     assert!(context.contains("demo-documental"));
-    let mother = sandbox.run(&["context", "demo/planificadora"]);
-    assert!(mother.contains("mother of the category"));
-    assert!(mother.contains("demo-ejecutora"));
+    let coordinator = sandbox.run(&["context", "demo/planificadora"]);
+    assert!(coordinator.contains("coordinator session of the category"));
+    assert!(coordinator.contains("demo-ejecutora"));
 }
 
-// PLAN §0.6: set --role|--mother|--keep-alive|--model
+// PLAN §0.6: set --role|--coordinator|--keep-alive|--model
 #[test]
 fn set_changes_role_kind_keep_alive_and_model() {
     let sandbox = Sandbox::new().with_demo();
@@ -158,8 +158,8 @@ fn set_changes_role_kind_keep_alive_and_model() {
         "--model",
         "opus",
     ]);
-    sandbox.run(&["set", "demo/planificadora", "--mother", "false"]);
-    sandbox.run(&["set", "demo/documental", "--mother"]);
+    sandbox.run(&["set", "demo/planificadora", "--coordinator", "false"]);
+    sandbox.run(&["set", "demo/documental", "--coordinator"]);
     let json = sandbox.run(&["status", "--json"]);
     assert!(json.contains("\"role\": \"Documenta\""));
     assert!(json.contains("\"keep_alive\": true"));
@@ -167,7 +167,7 @@ fn set_changes_role_kind_keep_alive_and_model() {
     assert!(
         sandbox
             .run(&["context", "demo/ejecutora"])
-            .contains("Mother of the category: demo-documental")
+            .contains("Coordinator of the category: demo-documental")
     );
     assert!(
         sandbox

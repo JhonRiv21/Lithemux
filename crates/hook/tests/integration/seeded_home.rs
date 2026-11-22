@@ -14,7 +14,7 @@ use tempfile::TempDir;
 
 use crate::sandbox::hook;
 
-/// A real LITHEMUX_HOME with the category `demo`: a mother and one child.
+/// A real LITHEMUX_HOME with the category `demo`: a coordinator and one child.
 pub struct SeededHome {
     pub dir: TempDir,
     pub home: Home,
@@ -64,8 +64,8 @@ impl SeededHome {
                 .unwrap()
                 .1
         };
-        add("demo/planificadora", Kind::Mother);
-        let executor = add("demo/ejecutora", Kind::Child);
+        add("demo/planificadora", Kind::Coordinator);
+        let executor = add("demo/ejecutora", Kind::Member);
         drop(db);
         SeededHome {
             dir,

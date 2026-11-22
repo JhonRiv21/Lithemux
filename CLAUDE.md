@@ -1,6 +1,6 @@
 # lithemux
 
-Gestor ligero de sesiones de terminal y Claude Code, sin telemetría, con categorías madre/hijas. El plan vivo está en `docs/PLAN.md`; los reportes, en `docs/fases/`, y las decisiones, en `docs/decisiones.md`.
+Gestor ligero de sesiones de terminal y Claude Code, sin telemetría, con categorías que tienen una sesión coordinadora. El plan vivo está en `docs/PLAN.md`; los reportes, en `docs/fases/`, y las decisiones, en `docs/decisiones.md`.
 
 ## Reglas
 
@@ -33,7 +33,7 @@ crates/core/src/
 │   │   ├── ports/              traits que la aplicación necesita (CategoryRepository, Clock, ...). Solo firmas y tipos
 │   │   ├── infrastructure/     implementaciones reales de los ports (sqlite_category_repository.rs, ...)
 │   │   └── error.rs            errores del módulo (thiserror)
-│   ├── session/                misma forma; mother_policy.rs vive en session/domain
+│   ├── session/                misma forma; coordinator_policy.rs vive en session/domain
 │   ├── context/                domain: render PURO del contexto (plantillas es/en); application: build_session_context
 │   ├── launch/                 domain: LaunchPlan y reglas de argumentos; ports: ClaudeBinary, TranscriptLocator, SessionLock; infrastructure: implementaciones de macOS
 │   ├── hook_event/             domain: tipos del stdin documentado y la transición de estado; application: handle_hook_event
@@ -74,8 +74,8 @@ crates/core/src/
 
 No se persigue cobertura. Se prueba lo que puede fallar de verdad, **desde la especificación de `docs/PLAN.md`, no desde la implementación**.
 
-1. **Unitarias junto a la capa que prueban,** en una carpeta `test/` dentro de cada capa (`modules/session/domain/test/mother_policy_test.rs`, declarada con `#[cfg(test)] mod test;`). Nunca mezcladas en el archivo de producción.
-   - Nombres que se leen como la regla: `fn only_one_mother_per_category()`.
+1. **Unitarias junto a la capa que prueban,** en una carpeta `test/` dentro de cada capa (`modules/session/domain/test/coordinator_policy_test.rs`, declarada con `#[cfg(test)] mod test;`). Nunca mezcladas en el archivo de producción.
+   - Nombres que se leen como la regla: `fn only_one_coordinator_per_category()`.
    - Un comentario de una línea con la sección del plan que respaldan (`// PLAN §0.2`).
 2. **Casos de uso con puertos en memoria:** implementaciones `InMemory*` de cada port, que cumplen el mismo contrato que la de SQLite (comentario de una línea que lo diga). Viven en `crates/core/tests/support/` o en un módulo `#[cfg(test)]`, nunca en el código de producción.
 3. **Integración real** en `crates/<crate>/tests/integration/`:

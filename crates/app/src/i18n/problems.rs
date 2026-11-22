@@ -47,9 +47,11 @@ impl From<&SessionError> for Message {
             SessionError::MessagingNameTaken { name, owner } => {
                 Message::with("error.name_taken", "name", name).and("owner", owner)
             }
-            SessionError::MotherExists { category, mother } => {
-                Message::with("error.mother_exists", "category", category).and("mother", mother)
-            }
+            SessionError::CoordinatorExists {
+                category,
+                coordinator,
+            } => Message::with("error.coordinator_exists", "category", category)
+                .and("coordinator", coordinator),
             SessionError::Category(category) => category.into(),
             other => internal(other),
         }

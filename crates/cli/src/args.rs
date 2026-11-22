@@ -40,7 +40,8 @@ pub enum CliCommand {
         #[arg(long)]
         yes: bool,
     },
-    /// Read or change a setting (claude_path, context_language)
+    /// Read or change a setting (language, theme, claude_path, …; an unknown
+    /// key lists them all)
     Config {
         #[command(subcommand)]
         command: ConfigCommand,
@@ -97,9 +98,9 @@ pub struct NewArgs {
     /// What this session is for
     #[arg(long)]
     pub role: String,
-    /// Make it the mother of the category
+    /// Make it the coordinator of the category
     #[arg(long)]
-    pub mother: bool,
+    pub coordinator: bool,
     #[arg(long, value_enum, default_value = "claude")]
     pub profile: ProfileArg,
     /// Working directory, when different from the category root
@@ -114,9 +115,9 @@ pub struct SetArgs {
     pub target: String,
     #[arg(long)]
     pub role: Option<String>,
-    /// Make it the mother (`--mother false` turns it back into a child)
+    /// Make it the coordinator (`--coordinator false` makes it a plain member again)
     #[arg(long, num_args = 0..=1, default_missing_value = "true")]
-    pub mother: Option<bool>,
+    pub coordinator: Option<bool>,
     /// Never hibernate this session
     #[arg(long, num_args = 0..=1, default_missing_value = "true")]
     pub keep_alive: Option<bool>,

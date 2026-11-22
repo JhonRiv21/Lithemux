@@ -56,6 +56,10 @@ impl Leaving {
         self.reopen.insert(session_id.to_string(), (target, size));
     }
 
+    pub fn is_asked_for(&self, session_id: &str) -> bool {
+        self.reopen.contains_key(session_id)
+    }
+
     pub fn forget_reopen(&mut self, session_id: &str) {
         self.reopen.remove(session_id);
     }

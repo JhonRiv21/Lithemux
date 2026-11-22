@@ -102,7 +102,7 @@ fn a_session_is_created_from_what_the_user_typed() {
         (plain.slug.as_str(), plain.title.as_deref()),
         ("ejecutora", None)
     );
-    assert_eq!(plain.kind, Kind::Child);
+    assert_eq!(plain.kind, Kind::Member);
     assert!(plain.claude_session_id.is_some());
 
     let (_, titled) = board
@@ -142,22 +142,24 @@ fn every_new_terminal_is_a_shell_session_with_a_name_of_its_own() {
     assert_eq!(board.slugs(), ["terminal", "terminal-2", "terminal-3"]);
 }
 
-// PLAN §2.2: mark a session as mother, one per category.
+// PLAN §2.2: mark a session as coordinator, one per category.
 #[test]
-fn a_category_keeps_a_single_mother() {
+fn a_category_keeps_a_single_coordinator() {
     let board = Board::new();
     let first = board.world.add_session("uno", Profile::Claude);
     let second = board.world.add_session("dos", Profile::Claude);
-    board.actions().set_mother(&first.id, true).unwrap();
+    board.actions().set_coordinator(&first.id, true).unwrap();
     assert!(matches!(
-        board.actions().set_mother(&second.id, true),
-        Err(SidebarError::Session(SessionError::MotherExists { .. }))
+        board.actions().set_coordinator(&second.id, true),
+        Err(SidebarError::Session(
+            SessionError::CoordinatorExists { .. }
+        ))
     ));
-    assert_eq!(board.world.stored(&second.id).kind, Kind::Child);
+    assert_eq!(board.world.stored(&second.id).kind, Kind::Member);
 
-    board.actions().set_mother(&first.id, false).unwrap();
-    board.actions().set_mother(&second.id, true).unwrap();
-    assert_eq!(board.world.stored(&second.id).kind, Kind::Mother);
+    board.actions().set_coordinator(&first.id, false).unwrap();
+    board.actions().set_coordinator(&second.id, true).unwrap();
+    assert_eq!(board.world.stored(&second.id).kind, Kind::Coordinator);
 }
 
 // PLAN §2.2: keep_alive, pin, rename.
@@ -271,22 +273,22 @@ fn deleting_a_session_leaves_its_conversation_on_disk() {
 }
 
 // Audit of block 3 (6): «move up» moves a card one place among the cards
-// the user sees under its category. The mother is the header and a pinned
+// the user sees under its category. The coordinator is the header and a pinned
 // session is shown elsewhere: neither is a place to move past.
 #[test]
 fn moving_a_card_skips_the_siblings_that_are_not_shown_with_it() {
     let board = Board::new();
-    let ids: Vec<String> = ["madre", "b", "fijada", "d"]
+    let ids: Vec<String> = ["coordinadora", "b", "fijada", "d"]
         .iter()
         .map(|slug| board.world.add_session(slug, Profile::Claude).id)
         .collect();
-    board.actions().set_mother(&ids[0], true).unwrap();
+    board.actions().set_coordinator(&ids[0], true).unwrap();
     board.actions().set_pinned(&ids[2], true).unwrap();
     let shown = |board: &Board| -> Vec<String> {
         let sessions = board.loaded().1;
         let cards = sessions
             .into_iter()
-            .filter(|s| !s.is_pinned() && s.kind != Kind::Mother);
+            .filter(|s| !s.is_pinned() && s.kind != Kind::Coordinator);
         cards.map(|s| s.slug).collect()
     };
     assert_eq!(shown(&board), ["b", "d"]);

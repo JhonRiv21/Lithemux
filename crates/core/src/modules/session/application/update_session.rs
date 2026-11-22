@@ -1,6 +1,6 @@
 use crate::modules::category::Category;
+use crate::modules::session::domain::coordinator_policy::check_can_be_coordinator;
 use crate::modules::session::domain::kind::Kind;
-use crate::modules::session::domain::mother_policy::check_can_be_mother;
 use crate::modules::session::domain::session::Session;
 use crate::modules::session::error::SessionError;
 use crate::modules::session::ports::session_repository::SessionRepository;
@@ -19,12 +19,12 @@ pub fn set_kind(
     session: &Session,
     kind: Kind,
 ) -> Result<(), SessionError> {
-    if kind == Kind::Mother {
-        let current = sessions.find_mother(&category.id)?;
-        check_can_be_mother(current.as_ref(), Some(&session.id)).map_err(|mother| {
-            SessionError::MotherExists {
+    if kind == Kind::Coordinator {
+        let current = sessions.find_coordinator(&category.id)?;
+        check_can_be_coordinator(current.as_ref(), Some(&session.id)).map_err(|coordinator| {
+            SessionError::CoordinatorExists {
                 category: category.slug.clone(),
-                mother,
+                coordinator,
             }
         })?;
     }

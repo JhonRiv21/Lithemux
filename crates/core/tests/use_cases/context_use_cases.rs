@@ -37,14 +37,14 @@ fn context_language_wins_over_the_interface_language() {
 fn the_context_reflects_the_category_as_it_is_now() {
     let (store, boards) = (InMemoryStore::new(), InMemoryBoards::default());
     add_category(&store, &boards, "demo");
-    add_session(&store, &store, "demo/planificadora", Kind::Mother);
-    let executor = add_session(&store, &store, "demo/ejecutora", Kind::Child);
+    add_session(&store, &store, "demo/planificadora", Kind::Coordinator);
+    let executor = add_session(&store, &store, "demo/ejecutora", Kind::Member);
 
     let before = build_session_context(&ports(&store, &boards), &executor.id, NOW).unwrap();
     assert!(before.contains("demo-planificadora"));
     assert!(!before.contains("demo-documental"));
 
-    let documenter = add_session(&store, &store, "demo/documental", Kind::Child);
+    let documenter = add_session(&store, &store, "demo/documental", Kind::Member);
     apply_state(
         &store,
         &documenter.id,
@@ -60,7 +60,7 @@ fn the_context_reflects_the_category_as_it_is_now() {
     assert!(after.contains("/lithemux/categories/demo/board.md"));
     assert!(
         !after.contains("demo-ejecutora ("),
-        "a session is not its own sister"
+        "a session is not one of its own others"
     );
 }
 
@@ -70,11 +70,11 @@ fn the_context_only_knows_its_own_category() {
     let (store, boards) = (InMemoryStore::new(), InMemoryBoards::default());
     add_category(&store, &boards, "demo");
     add_category(&store, &boards, "otra");
-    let executor = add_session(&store, &store, "demo/ejecutora", Kind::Child);
-    add_session(&store, &store, "otra/planificadora", Kind::Mother);
+    let executor = add_session(&store, &store, "demo/ejecutora", Kind::Member);
+    add_session(&store, &store, "otra/planificadora", Kind::Coordinator);
     let text = build_session_context(&ports(&store, &boards), &executor.id, NOW).unwrap();
     assert!(!text.contains("otra-planificadora"));
-    assert!(text.contains("no mother"));
+    assert!(text.contains("no coordinator"));
 }
 
 // PLAN §0.4: an id lithemux does not know produces no context

@@ -38,7 +38,7 @@ fn host_with_a_running_session(dir: &Path) -> (SessionHost, String) {
     let new_session = NewSession {
         target: target.clone(),
         role: "role".to_string(),
-        kind: Kind::Child,
+        kind: Kind::Member,
         profile: Profile::Claude,
         cwd: None,
         model: None,
@@ -66,6 +66,7 @@ fn host_with_a_running_session(dir: &Path) -> (SessionHost, String) {
         shell: core_fake("fake-shell"),
         claude_config_dir: Some(dir.join("claude-config")),
         environment: vec![("PATH".into(), "/usr/bin:/bin".into())],
+        hibernate_grace: std::time::Duration::from_millis(300),
     };
     let (mut host, _changes) = SessionHost::start(config).unwrap();
     let Opened::Opening { session_id } = host.open(&target, GridSize::INITIAL).unwrap() else {

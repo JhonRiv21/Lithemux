@@ -10,6 +10,21 @@ use super::tree::{Group, Tree};
 use super::view::Sidebar;
 use crate::theme;
 
+/// The row of a category's name.
+fn category_frame(category_id: &str) -> Stateful<Div> {
+    div()
+        .id(id_of("category", category_id))
+        .flex()
+        .items_center()
+        .gap_1()
+        .px_1()
+        .pt_2()
+        .text_xs()
+        .text_color(rgb(theme::colors().text_muted))
+        .hover(|style| style.text_color(rgb(theme::colors().text)))
+        .drag_over::<CategoryDrag>(|style, _, _, _| style.bg(rgb(theme::colors().surface_active)))
+}
+
 impl Sidebar {
     /// The whole list: the pinned sessions, then every category.
     pub(super) fn render_list(
@@ -47,7 +62,7 @@ impl Sidebar {
             .px_1()
             .pt_1()
             .text_xs()
-            .text_color(rgb(theme::TEXT_FAINT))
+            .text_color(rgb(theme::colors().text_faint))
             .child(title)
             .into_any_element()
     }
@@ -57,7 +72,7 @@ impl Sidebar {
             .px_1()
             .py_2()
             .text_sm()
-            .text_color(rgb(theme::TEXT_FAINT))
+            .text_color(rgb(theme::colors().text_faint))
             .child(text)
             .into_any_element()
     }
@@ -81,9 +96,9 @@ impl Sidebar {
         if group.collapsed {
             return column.into_any_element();
         }
-        // The mother heads the category and the rest hang from it.
-        if let Some(mother) = &group.header {
-            column = column.child(self.render_card(mother, in_focus, false, cx));
+        // The coordinator heads the category and the rest hang from it.
+        if let Some(coordinator) = &group.header {
+            column = column.child(self.render_card(coordinator, in_focus, false, cx));
         }
         let hangs = group.header.is_some();
         for card in &group.cards {
@@ -108,17 +123,7 @@ impl Sidebar {
             category_id: group.category_id.clone(),
             name: group.name.clone().into(),
         };
-        div()
-            .id(id_of("category", &group.category_id))
-            .flex()
-            .items_center()
-            .gap_1()
-            .px_1()
-            .pt_2()
-            .text_xs()
-            .text_color(rgb(theme::TEXT_MUTED))
-            .hover(|style| style.text_color(rgb(theme::TEXT)))
-            .drag_over::<CategoryDrag>(|style, _, _, _| style.bg(rgb(theme::SURFACE_ACTIVE)))
+        category_frame(&group.category_id)
             .on_click(cx.listener(move |this, _, window, cx| {
                 this.run(
                     MenuCommand::SetCollapsed(toggled.clone(), !collapsed),
@@ -152,7 +157,7 @@ impl Sidebar {
             .id(id_of("add-session", category_id))
             .px_1()
             .rounded_sm()
-            .hover(|style| style.bg(rgb(theme::SURFACE_ACTIVE)))
+            .hover(|style| style.bg(rgb(theme::colors().surface_active)))
             .tooltip(crate::app_shell::tooltip::text(
                 self.texts.get("menu.new_claude_session"),
             ))

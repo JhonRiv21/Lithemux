@@ -37,7 +37,7 @@ fn open_runs_the_fixed_claude_with_the_planned_arguments_and_environment() {
         SqliteSettingsRepository::new(&db),
     );
     add_category(&categories, &FsBoardStore::new(&temp.home), "demo");
-    let session = add_session(&categories, &sessions, "demo/ejecutora", Kind::Child);
+    let session = add_session(&categories, &sessions, "demo/ejecutora", Kind::Member);
     let workdir = temp.dir.path().join("work");
     fs::create_dir_all(&workdir).unwrap();
     sessions_set_cwd(&db, &session.id, &workdir);

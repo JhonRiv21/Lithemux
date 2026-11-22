@@ -23,7 +23,7 @@ pub fn claude_session() -> Session {
         category_id: "cat-1".to_string(),
         slug: "ejecutora".to_string(),
         role: "implements the phases".to_string(),
-        kind: Kind::Child,
+        kind: Kind::Member,
         profile: Profile::Claude,
         cwd: None,
         claude_session_id: Some(CLAUDE_SESSION_ID.to_string()),
@@ -38,5 +38,6 @@ pub fn claude_session() -> Session {
         pin_sort: None,
         preview: None,
         unread: 0,
+        notice: None,
     }
 }

@@ -13,7 +13,7 @@ pub trait SessionRepository {
     fn list_all(&self) -> Result<Vec<Session>, SessionError>;
     fn find(&self, category_id: &str, slug: &str) -> Result<Option<Session>, SessionError>;
     fn find_by_id(&self, id: &str) -> Result<Option<Session>, SessionError>;
-    fn find_mother(&self, category_id: &str) -> Result<Option<Session>, SessionError>;
+    fn find_coordinator(&self, category_id: &str) -> Result<Option<Session>, SessionError>;
 
     fn update_role(&self, id: &str, role: &str) -> Result<(), SessionError>;
     fn update_kind(&self, id: &str, kind: Kind) -> Result<(), SessionError>;
@@ -55,6 +55,8 @@ pub trait SessionRepository {
         preview: Option<&str>,
         asks_for_attention: bool,
     ) -> Result<(), SessionError>;
+    /// What Claude waits for from the user; `None` once it no longer does.
+    fn update_notice(&self, id: &str, notice: Option<&str>) -> Result<(), SessionError>;
     fn clear_unread(&self, id: &str) -> Result<(), SessionError>;
 
     fn delete(&self, id: &str) -> Result<(), SessionError>;

@@ -1,0 +1,1 @@
+KeyBinding::new\(\s*"([a-z]+-)*shift-([a-z]+-)*[^a-z"]"

@@ -5,8 +5,11 @@ mod infrastructure;
 mod ports;
 
 pub use application::configure::{get_config, set_config, unset_config};
+pub use application::load_preferences::load_preferences;
 pub use application::read_setting::read_setting;
 pub use application::write_setting::write_setting;
+pub use domain::config_policy::{FONT_SIZES, HIBERNATE_HOURS, SCROLLBACK_LINES, checked_value};
+pub use domain::preferences::{InterfaceLanguage, Preferences, ThemeChoice};
 pub use domain::setting_key::SettingKey;
 pub use error::SettingsError;
 pub use infrastructure::sqlite_settings_repository::SqliteSettingsRepository;

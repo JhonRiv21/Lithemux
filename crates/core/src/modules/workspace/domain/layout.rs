@@ -134,6 +134,16 @@ impl Layout {
         }
     }
 
+    /// Shows the tab at that place of the focused pane, when it has one.
+    pub fn show_tab_at(&mut self, index: usize) {
+        let active = self.active_pane;
+        if let Some(pane) = self.pane_mut(active)
+            && index < pane.tabs.len()
+        {
+            pane.active = index;
+        }
+    }
+
     pub fn next_tab(&mut self) {
         let active = self.active_pane;
         if let Some(pane) = self.pane_mut(active) {

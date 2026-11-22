@@ -48,8 +48,8 @@ fn removing_a_category_removes_its_sessions() {
     let (store, boards) = (InMemoryStore::new(), InMemoryBoards::default());
     let demo = add_category(&store, &boards, "demo");
     let other = add_category(&store, &boards, "otra");
-    add_session(&store, &store, "demo/planificadora", Kind::Mother);
-    add_session(&store, &store, "otra/ejecutora", Kind::Child);
+    add_session(&store, &store, "demo/planificadora", Kind::Coordinator);
+    add_session(&store, &store, "otra/ejecutora", Kind::Member);
 
     remove_category(&store, "demo").unwrap();
 

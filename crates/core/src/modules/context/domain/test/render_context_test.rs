@@ -30,45 +30,45 @@ fn render_in(
     })
 }
 
-// PLAN §0.5: mother
+// PLAN §0.5: coordinator
 #[test]
-fn mother_context_in_english() {
+fn coordinator_context_in_english() {
     insta::assert_snapshot!(render(&planner(), &[executor(), documenter()], Lang::En));
 }
 
-// PLAN §0.5: mother
+// PLAN §0.5: coordinator
 #[test]
-fn mother_context_in_spanish() {
+fn coordinator_context_in_spanish() {
     insta::assert_snapshot!(render(&planner(), &[executor(), documenter()], Lang::Es));
 }
 
 // PLAN §0.5: child
 #[test]
-fn child_context_in_english() {
+fn member_context_in_english() {
     insta::assert_snapshot!(render(&executor(), &[planner(), documenter()], Lang::En));
 }
 
 // PLAN §0.5: child (the plan's reference example)
 #[test]
-fn child_context_in_spanish() {
+fn member_context_in_spanish() {
     insta::assert_snapshot!(render(&executor(), &[planner(), documenter()], Lang::Es));
 }
 
-// PLAN §0.5: without mother
+// PLAN §0.5: without coordinator
 #[test]
-fn motherless_context_in_english() {
+fn without_a_coordinator_context_in_english() {
     insta::assert_snapshot!(render(&executor(), &[documenter()], Lang::En));
 }
 
-// PLAN §0.5: without mother
+// PLAN §0.5: without coordinator
 #[test]
-fn motherless_context_in_spanish() {
+fn without_a_coordinator_context_in_spanish() {
     insta::assert_snapshot!(render(&executor(), &[documenter()], Lang::Es));
 }
 
-// PLAN §0.5: what a mother is told
+// PLAN §0.5: what a coordinator is told
 #[test]
-fn the_mother_learns_her_children_her_duty_and_the_board() {
+fn the_coordinator_learns_the_other_sessions_its_duty_and_the_board() {
     let text = render(&planner(), &[executor(), documenter()], Lang::Es);
     assert!(text.contains("«Selektal»"));
     assert!(text.contains("/Users/x/Linktic/RecruitLine"));
@@ -86,42 +86,42 @@ fn the_mother_learns_her_children_her_duty_and_the_board() {
 
 // PLAN §0.5: what a child is told
 #[test]
-fn the_child_learns_her_mother_her_sisters_and_to_report() {
+fn a_member_learns_its_coordinator_the_other_sessions_and_to_report() {
     let text = render(&executor(), &[planner(), documenter()], Lang::Es);
     assert!(text.contains("Nombre de esta sesión: selektal-ejecutora"));
-    assert!(text.contains("Madre de la categoría: selektal-planificadora"));
+    assert!(text.contains("Coordinadora de la categoría: selektal-planificadora"));
     assert!(text.contains("planifica, revisa y redacta prompts"));
-    assert!(text.contains("Hermanas:"));
+    assert!(text.contains("Las demás sesiones:"));
     assert!(text.contains("selektal-documental"));
-    assert!(text.contains("reporta a la madre"));
-    assert!(text.contains("fuera de su rol pasa por la madre"));
+    assert!(text.contains("reporta a la coordinadora"));
+    assert!(text.contains("fuera de su rol pasa por la coordinadora"));
     assert!(text.contains("solo lectura"));
     assert!(text.contains(BOARD));
     assert!(text.contains("`lithemux status selektal`"));
-    // The mother is named as mother, not listed again among the sisters.
+    // The coordinator is named as coordinator, not listed again among the others.
     assert_eq!(text.matches("selektal-planificadora (").count(), 1);
 }
 
-// PLAN §0.5: without mother the sessions are sisters that coordinate directly
+// PLAN §0.5: without coordinator the sessions coordinate directly
 #[test]
-fn without_mother_the_sessions_are_sisters() {
+fn without_coordinator_the_sessions_coordinate_directly() {
     let text = render(&executor(), &[documenter()], Lang::Es);
-    assert!(text.contains("no tiene madre"));
+    assert!(text.contains("no tiene sesión coordinadora"));
     assert!(text.contains("coordinan directamente entre sí"));
     assert!(text.contains("selektal-documental"));
-    assert!(!text.contains("reporta a la madre"));
+    assert!(!text.contains("reporta a la coordinadora"));
 }
 
 // PLAN §0.5: short, under 2,000 characters, even in a crowded category
 #[test]
 fn the_context_stays_under_two_thousand_characters() {
     let long_role = "hace muchas cosas distintas ".repeat(20);
-    let sisters: Vec<Session> = (0..40)
-        .map(|n| session(&format!("hija-{n}"), &long_role, Kind::Child))
+    let others: Vec<Session> = (0..40)
+        .map(|n| session(&format!("otra-{n}"), &long_role, Kind::Member))
         .chain([planner()])
         .collect();
     for lang in [Lang::En, Lang::Es] {
-        let text = render(&executor(), &sisters, lang);
+        let text = render(&executor(), &others, lang);
         assert!(text.chars().count() < MAX_CONTEXT_CHARS);
         assert!(text.contains("selektal-planificadora"));
         assert!(text.contains("`lithemux status selektal`"));
@@ -130,8 +130,8 @@ fn the_context_stays_under_two_thousand_characters() {
 
 // PLAN §0.3: a shell session has no hooks, so it cannot be messaged
 #[test]
-fn a_shell_sister_is_marked_as_not_reachable() {
-    let mut terminal = session("term", "terminal libre", Kind::Child);
+fn another_shell_session_is_marked_as_not_reachable() {
+    let mut terminal = session("term", "terminal libre", Kind::Member);
     terminal.profile = Profile::Shell;
     let text = render(&executor(), &[planner(), terminal], Lang::En);
     assert!(text.contains("selektal-term (shell terminal, not reachable with SendMessage"));
@@ -185,17 +185,17 @@ fn the_largest_context_without_a_list_fits() {
     huge.root_dir = format!("/{}", "r".repeat(500));
     let board = format!("/{}", "b".repeat(500));
     let role = "role ".repeat(100);
-    let mother = session(&"m".repeat(48), &role, Kind::Mother);
-    let me = session(&slug, &role, Kind::Child);
-    let sisters: Vec<Session> = (10..50)
-        .map(|n| session(&format!("{}{n}", "h".repeat(46)), &role, Kind::Child))
+    let coordinator = session(&"m".repeat(48), &role, Kind::Coordinator);
+    let me = session(&slug, &role, Kind::Member);
+    let others: Vec<Session> = (10..50)
+        .map(|n| session(&format!("{}{n}", "h".repeat(46)), &role, Kind::Member))
         .collect();
 
     for lang in [Lang::En, Lang::Es] {
         for (me, others) in [
-            (&me, [vec![mother.clone()], sisters.clone()].concat()),
-            (&mother, sisters.clone()),
-            (&me, sisters.clone()),
+            (&me, [vec![coordinator.clone()], others.clone()].concat()),
+            (&coordinator, others.clone()),
+            (&me, others.clone()),
         ] {
             let text = render_in(&huge, &board, me, &others, lang);
             assert!(

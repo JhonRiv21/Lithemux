@@ -33,7 +33,7 @@ impl World {
     fn new() -> Self {
         let store = InMemoryStore::new();
         add_category(&store, &InMemoryBoards::default(), "demo");
-        let executor = add_session(&store, &store, "demo/ejecutora", Kind::Child);
+        let executor = add_session(&store, &store, "demo/ejecutora", Kind::Member);
         World {
             store,
             probe: FakeShellProbe::new()
@@ -263,7 +263,7 @@ fn the_fallback_warning_reaches_the_user() {
 fn a_shell_session_runs_the_login_shell_without_claude() {
     let mut world = World::new();
     world.probe = FakeShellProbe::new();
-    let mut new = new_session("demo/term", Kind::Child);
+    let mut new = new_session("demo/term", Kind::Member);
     new.profile = Profile::Shell;
     let (_, terminal) = create_session(&world.store, &world.store, new, NOW).unwrap();
     let runner = RecordingRunner::exiting_with(0);

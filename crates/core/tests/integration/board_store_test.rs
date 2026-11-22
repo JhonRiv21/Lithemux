@@ -37,8 +37,12 @@ fn an_existing_board_is_never_overwritten() {
     let temp = TempHome::new();
     let boards = FsBoardStore::new(&temp.home);
     boards.ensure(&category()).unwrap();
-    fs::write(boards.path("selektal"), "# Selektal\n\nnotas de la madre\n").unwrap();
+    fs::write(
+        boards.path("selektal"),
+        "# Selektal\n\nnotas de la coordinadora\n",
+    )
+    .unwrap();
     boards.ensure(&category()).unwrap();
     let content = fs::read_to_string(boards.path("selektal")).unwrap();
-    assert!(content.contains("notas de la madre"));
+    assert!(content.contains("notas de la coordinadora"));
 }

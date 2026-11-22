@@ -9,24 +9,31 @@ const SPANISH: &str = include_str!("../../../../locales/es.toml");
 /// The texts of one language, by key (`section.name`).
 #[derive(Debug, Clone)]
 pub struct Texts {
+    language: Language,
     chosen: HashMap<String, String>,
     english: HashMap<String, String>,
 }
 
 impl Texts {
     pub fn of(language: Language) -> Self {
-        match language {
+        let texts = match language {
             Language::English => Self::from_files(ENGLISH, ""),
             Language::Spanish => Self::from_files(ENGLISH, SPANISH),
-        }
+        };
+        Texts { language, ..texts }
     }
 
     /// `english` is the reference; what `chosen` lacks is read from it.
     pub fn from_files(english: &str, chosen: &str) -> Self {
         Texts {
+            language: Language::English,
             chosen: entries(chosen),
             english: entries(english),
         }
+    }
+
+    pub fn language(&self) -> Language {
+        self.language
     }
 
     /// A message in this language.

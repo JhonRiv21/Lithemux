@@ -4,8 +4,8 @@ expression: "render(&planner(), &[executor(), documenter()], Lang::En)"
 ---
 lithemux: this session belongs to the category "Selektal" (root folder /Users/x/Linktic/RecruitLine).
 This session's name: selektal-planificadora. Role: planifica, revisa y redacta prompts.
-This session is the mother of the category: it coordinates the category and is the only one that writes the board.
-Children:
+This session is the coordinator session of the category: it coordinates the category and is the only one that writes the board.
+The other sessions:
 - selektal-ejecutora (role: implementa las fases que define la planificadora; state: idle, last activity 5 min ago)
 - selektal-documental (role: requerimientos; state: hibernated, last activity 3 days ago)
 Sessions talk to each other with SendMessage using those names.

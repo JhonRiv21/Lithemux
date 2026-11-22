@@ -10,10 +10,9 @@ use gpui::{
 };
 
 use super::grid::{CellStyle, CursorSnapshot, GridSnapshot, RunSnapshot};
+use super::look;
 use super::palette;
 
-pub(super) const FONT_FAMILY: &str = "Menlo";
-pub(super) const FONT_SIZE: f32 = 13.0;
 const LINE_HEIGHT_FACTOR: f32 = 1.2;
 const FOCUSED_CURSOR_ALPHA: f32 = 0.55;
 
@@ -31,9 +30,10 @@ pub(super) struct Frame {
 }
 
 pub(super) fn measure(window: &Window) -> FontMetrics {
-    let font = font(FONT_FAMILY);
-    let font_size = px(FONT_SIZE);
     let text_system = window.text_system();
+    // Whoever sets the look has checked that the machine has the font.
+    let font = font(SharedString::from(look::font_family()));
+    let font_size = px(look::font_size());
     let font_id = text_system.resolve_font(&font);
     let width = text_system
         .advance(font_id, font_size, 'm')
@@ -42,7 +42,7 @@ pub(super) fn measure(window: &Window) -> FontMetrics {
     FontMetrics {
         font,
         font_size,
-        cell: size(width, px((FONT_SIZE * LINE_HEIGHT_FACTOR).ceil())),
+        cell: size(width, px((look::font_size() * LINE_HEIGHT_FACTOR).ceil())),
     }
 }
 
@@ -88,7 +88,7 @@ pub(super) fn paint_frame(
     window: &mut Window,
     cx: &mut App,
 ) {
-    window.paint_quad(fill(bounds, color(palette::BACKGROUND, 1.0)));
+    window.paint_quad(fill(bounds, color(palette::background(), 1.0)));
     for (line, runs) in frame.snapshot.rows.iter().enumerate() {
         for run in runs {
             if let Some(background) = run.style.background {
@@ -185,7 +185,7 @@ fn paint_cursor(
     window: &mut Window,
 ) {
     let cell = cursor_bounds(bounds, metrics, cursor);
-    let solid = color(palette::CURSOR, 1.0);
+    let solid = color(palette::cursor(), 1.0);
     if !focused {
         window.paint_quad(outline(cell, solid, gpui::BorderStyle::Solid));
         return;
@@ -198,7 +198,7 @@ fn paint_cursor(
             size(cell.size.width, thin),
         ),
         _ => {
-            let translucent = color(palette::CURSOR, FOCUSED_CURSOR_ALPHA);
+            let translucent = color(palette::cursor(), FOCUSED_CURSOR_ALPHA);
             window.paint_quad(fill(cell, translucent));
             return;
         }
@@ -215,7 +215,7 @@ fn paint_marked(
     cx: &mut App,
 ) {
     let style = CellStyle {
-        foreground: palette::FOREGROUND,
+        foreground: palette::foreground(),
         background: None,
         bold: false,
         italic: false,
@@ -230,7 +230,7 @@ fn paint_marked(
     );
     let origin = cursor_bounds(bounds, metrics, cursor).origin;
     let area = Bounds::new(origin, size(shaped.width, metrics.cell.height));
-    window.paint_quad(fill(area, color(palette::BACKGROUND, 1.0)));
+    window.paint_quad(fill(area, color(palette::background(), 1.0)));
     let painted = shaped.paint(
         origin,
         metrics.cell.height,

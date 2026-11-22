@@ -38,5 +38,7 @@ Antes de revisar el repo, cada regla se prueba contra sus dos ejemplos. Si no ma
 | `H-003` | §2.1 (verificación de la planificadora), corregido en §2.2 | Arrancar gpui fuera de `app_shell/run.rs`, es decir, una ventana sin el gestor de sesiones ni el candado de instancia única |
 | `H-004` | auditoría del bloque 3 | Armar la ruta de `app.sock` fuera de `platform/paths/app_socket.rs` (un home largo dejaba a la app sin arrancar) |
 | `H-005` | auditoría del bloque 3 | Mostrar al usuario el `to_string()` de un error en vez de un texto de `locales` |
+| `H-007` | ronda de correcciones del bloque 4 | El vocabulario «madre/hijas» (`mother`, `child` como tipo de sesión, `sister`…) en el código, los textos o el README |
+| `H-006` | prueba con teclas reales del bloque 3, corregido en el bloque 4 | Un atajo con `shift-` y una tecla que no es letra (`cmd-shift-]`): gpui lo recibe como `cmd-}` y no coincide nunca |
 
 El funcionamiento del mecanismo se prueba en `crates/core/tests/findings_lint.rs` con una regla de muestra en un directorio temporal.

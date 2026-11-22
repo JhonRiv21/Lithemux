@@ -69,13 +69,15 @@ fn finish(mut child: Child) {
     child.wait().unwrap();
 }
 
-// PLAN §2.2
+// Block 4, part 0 (1): Claude Code itself listens on a local port, one per
+// session, that is of no use to the user. A card shows what the session
+// started, never the port of its own program.
 #[test]
-fn the_port_a_program_listens_on_is_found() {
+fn the_port_of_the_program_itself_is_not_one_of_its_ports() {
     let mut child = run_again_as(LISTENS);
-    let port = port_announced_by(&mut child);
+    port_announced_by(&mut child);
     let found = listening_ports(&[child.id()]);
-    assert_eq!(found.get(&child.id()), Some(&vec![port]));
+    assert_eq!(found.get(&child.id()), Some(&Vec::new()));
     finish(child);
 }
 
@@ -94,8 +96,8 @@ fn the_port_of_a_program_started_by_the_program_is_found() {
 fn the_ports_of_other_programs_are_not_given_to_it() {
     let ours = TcpListener::bind("127.0.0.1:0").unwrap();
     let our_port = ours.local_addr().unwrap().port();
-    let mut first = run_again_as(LISTENS);
-    let mut second = run_again_as(LISTENS);
+    let mut first = run_again_as(STARTS_ONE_THAT_LISTENS);
+    let mut second = run_again_as(STARTS_ONE_THAT_LISTENS);
     let (first_port, second_port) = (
         port_announced_by(&mut first),
         port_announced_by(&mut second),
@@ -111,7 +113,7 @@ fn the_ports_of_other_programs_are_not_given_to_it() {
 // PLAN §2.2
 #[test]
 fn a_program_that_ended_has_no_ports() {
-    let mut child = run_again_as(LISTENS);
+    let mut child = run_again_as(STARTS_ONE_THAT_LISTENS);
     port_announced_by(&mut child);
     let pid = child.id();
     finish(child);
@@ -122,4 +124,11 @@ fn a_program_that_ended_has_no_ports() {
 #[test]
 fn the_page_of_a_port_is_on_localhost() {
     assert_eq!(local_page_url(52844), "http://localhost:52844");
+}
+
+// PLAN §2.4: on this machine the kernel answers with a level.
+#[test]
+fn the_memory_pressure_of_this_machine_can_be_read() {
+    use lithemux_core::platform::process::memory_pressure::memory_pressure;
+    assert!(memory_pressure().is_some());
 }

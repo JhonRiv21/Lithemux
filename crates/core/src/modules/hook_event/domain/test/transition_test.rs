@@ -17,6 +17,16 @@ fn session_start(source: &str) -> HookInput {
     }
 }
 
+/// What a running session reports: it applies unless the app has
+/// hibernated the session meanwhile (audit of block 4).
+fn reports(state: State, touches_activity: bool) -> Option<Transition> {
+    Some(Transition::Set {
+        state,
+        touches_activity,
+        preserves: Some(State::Hibernated),
+    })
+}
+
 fn sets(state: State, touches_activity: bool) -> Option<Transition> {
     Some(Transition::Set {
         state,
@@ -55,7 +65,7 @@ fn a_compaction_only_counts_as_activity() {
 fn prompt_submit_marks_the_session_working() {
     assert_eq!(
         transition(HookEvent::PromptSubmit, &HookInput::default()),
-        sets(State::Working, true)
+        reports(State::Working, true)
     );
 }
 
@@ -64,7 +74,7 @@ fn prompt_submit_marks_the_session_working() {
 fn stop_returns_the_session_to_idle() {
     assert_eq!(
         transition(HookEvent::Stop, &HookInput::default()),
-        sets(State::Idle, true)
+        reports(State::Idle, true)
     );
 }
 
@@ -92,18 +102,21 @@ fn a_permission_request_marks_the_session_waiting() {
     ] {
         assert_eq!(
             transition(HookEvent::Notification, &notification(kind)),
-            sets(State::Waiting, false),
+            reports(State::Waiting, false),
             "{kind}"
         );
     }
 }
 
-// docs/decisiones.md: idle_prompt would break hibernation
+// docs/decisiones.md: idle_prompt would break hibernation. It never puts a
+// session in waiting, nor touches one that is in any other state: since
+// block 4 it only moves one out of waiting (see the test below).
 #[test]
 fn an_idle_prompt_does_not_mark_the_session_waiting() {
-    assert_eq!(
-        transition(HookEvent::Notification, &notification("idle_prompt")),
-        None
+    let change = transition(HookEvent::Notification, &notification("idle_prompt"));
+    assert!(
+        matches!(change, Some(Transition::Move { from: State::Waiting, to }) if to != State::Waiting),
+        "{change:?}"
     );
 }
 
@@ -130,5 +143,54 @@ fn session_end_marks_ended_but_preserves_hibernated() {
             touches_activity: false,
             preserves: Some(State::Hibernated),
         })
+    );
+}
+
+// Block 4, part 0 (5): nothing documented fires when the user dismisses a
+// permission prompt. The idle reminder, 60 s later, says Claude is idle:
+// a session still marked as waiting is not waiting any more.
+#[test]
+fn the_idle_reminder_takes_a_session_out_of_waiting() {
+    assert_eq!(
+        transition(HookEvent::Notification, &notification("idle_prompt")),
+        Some(Transition::Move {
+            from: State::Waiting,
+            to: State::Idle,
+        })
+    );
+}
+
+// Audit of block 4 (9): the app writes `hibernated` and then tells the
+// program to leave. Whatever that program still reports on its way out is
+// late news: only a new start of the session takes it out of hibernation.
+#[test]
+fn only_a_session_start_takes_a_session_out_of_hibernation() {
+    let late = [
+        (HookEvent::Stop, HookInput::default()),
+        (HookEvent::PromptSubmit, HookInput::default()),
+        (HookEvent::Notification, notification("permission_prompt")),
+        (HookEvent::SessionEnd, HookInput::default()),
+    ];
+    for (event, input) in late {
+        match transition(event, &input) {
+            Some(Transition::Set { preserves, .. }) => {
+                assert_eq!(preserves, Some(State::Hibernated), "{event:?}");
+            }
+            other => panic!("{event:?}: {other:?}"),
+        }
+    }
+    for event in [HookEvent::PostToolUse, HookEvent::PostToolUseFailure] {
+        assert!(matches!(
+            transition(event, &HookInput::default()),
+            Some(Transition::Move {
+                from: State::Waiting,
+                ..
+            })
+        ));
+    }
+    // Waking: the resumed `claude` reports its start, and that counts.
+    assert_eq!(
+        transition(HookEvent::SessionStart, &session_start("resume")),
+        sets(State::Idle, true)
     );
 }

@@ -6,14 +6,14 @@ pub trait Phrases {
     fn belongs_to(&self, category_name: &str, root_dir: &str) -> String;
     fn identity(&self, name: &str, role: &str) -> String;
 
-    fn is_mother(&self) -> &'static str;
-    fn mother_is(&self, entry: &str) -> String;
-    fn no_mother(&self) -> &'static str;
+    fn is_coordinator(&self) -> &'static str;
+    fn coordinator_is(&self, entry: &str) -> String;
+    fn no_coordinator(&self) -> &'static str;
 
-    fn children_heading(&self) -> &'static str;
-    fn no_children(&self) -> &'static str;
-    fn sisters_heading(&self) -> &'static str;
-    fn no_sisters(&self) -> &'static str;
+    fn members_heading(&self) -> &'static str;
+    fn no_members(&self) -> &'static str;
+    fn others_heading(&self) -> &'static str;
+    fn no_others(&self) -> &'static str;
     fn more(&self, hidden: usize) -> String;
 
     /// `age` is `None` for a session that was never active.
@@ -27,10 +27,10 @@ pub trait Phrases {
     ) -> String;
 
     fn messaging(&self) -> &'static str;
-    fn child_reporting(&self) -> &'static str;
+    fn member_reporting(&self) -> &'static str;
 
-    fn board_of_mother(&self, board: &str) -> String;
-    fn board_of_child(&self, board: &str) -> String;
+    fn board_of_coordinator(&self, board: &str) -> String;
+    fn board_of_member(&self, board: &str) -> String;
     fn board_shared(&self, board: &str) -> String;
 
     fn snapshot_note(&self, category_slug: &str) -> String;

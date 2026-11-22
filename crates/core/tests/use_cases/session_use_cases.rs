@@ -22,7 +22,7 @@ fn a_new_claude_session_starts_new_with_its_own_conversation_id() {
     let (category, session) = create_session(
         &store,
         &store,
-        new_session("demo/ejecutora", Kind::Child),
+        new_session("demo/ejecutora", Kind::Member),
         NOW,
     )
     .unwrap();
@@ -40,59 +40,64 @@ fn a_new_claude_session_starts_new_with_its_own_conversation_id() {
 #[test]
 fn a_shell_session_has_no_conversation_id() {
     let store = store_with(&["demo"]);
-    let mut new = new_session("demo/term", Kind::Child);
+    let mut new = new_session("demo/term", Kind::Member);
     new.profile = Profile::Shell;
     let (_, session) = create_session(&store, &store, new, NOW).unwrap();
     assert_eq!(session.claude_session_id, None);
 }
 
-// PLAN §0.2: one_mother_per_category
+// PLAN §0.2: one_coordinator_per_category
 #[test]
-fn only_one_mother_per_category() {
+fn only_one_coordinator_per_category() {
     let store = store_with(&["demo", "otra"]);
-    add_session(&store, &store, "demo/planificadora", Kind::Mother);
-    let second = create_session(&store, &store, new_session("demo/jefa", Kind::Mother), NOW);
+    add_session(&store, &store, "demo/planificadora", Kind::Coordinator);
+    let second = create_session(
+        &store,
+        &store,
+        new_session("demo/jefa", Kind::Coordinator),
+        NOW,
+    );
     assert!(matches!(
         second,
-        Err(SessionError::MotherExists { category, mother })
-            if category == "demo" && mother == "planificadora"
+        Err(SessionError::CoordinatorExists { category, coordinator })
+            if category == "demo" && coordinator == "planificadora"
     ));
-    // Another category can have its own mother.
-    add_session(&store, &store, "otra/planificadora", Kind::Mother);
+    // Another category can have its own coordinator.
+    add_session(&store, &store, "otra/planificadora", Kind::Coordinator);
 }
 
-// PLAN §0.2: a category may have no mother
+// PLAN §0.2: a category may have no coordinator
 #[test]
-fn a_category_can_live_without_a_mother() {
+fn a_category_can_live_without_a_coordinator() {
     let store = store_with(&["demo"]);
-    add_session(&store, &store, "demo/uno", Kind::Child);
-    add_session(&store, &store, "demo/dos", Kind::Child);
+    add_session(&store, &store, "demo/uno", Kind::Member);
+    add_session(&store, &store, "demo/dos", Kind::Member);
     let category = lithemux_core::modules::category::get_category(&store, "demo").unwrap();
     let all = list_sessions(&store, &category).unwrap();
-    assert!(all.iter().all(|s| s.kind == Kind::Child));
+    assert!(all.iter().all(|s| s.kind == Kind::Member));
 }
 
 // PLAN §0.2: UNIQUE(category_id, slug)
 #[test]
 fn a_session_slug_is_unique_inside_its_category() {
     let store = store_with(&["demo", "otra"]);
-    add_session(&store, &store, "demo/ejecutora", Kind::Child);
+    add_session(&store, &store, "demo/ejecutora", Kind::Member);
     let again = create_session(
         &store,
         &store,
-        new_session("demo/ejecutora", Kind::Child),
+        new_session("demo/ejecutora", Kind::Member),
         NOW,
     );
     assert!(matches!(again, Err(SessionError::AlreadyExists(_))));
-    add_session(&store, &store, "otra/ejecutora", Kind::Child);
+    add_session(&store, &store, "otra/ejecutora", Kind::Member);
 }
 
 // PLAN §0.2: the messaging name is unique in the whole system
 #[test]
 fn a_messaging_name_cannot_be_taken_twice_across_categories() {
     let store = store_with(&["a-b", "a"]);
-    add_session(&store, &store, "a-b/c", Kind::Child);
-    let clash = create_session(&store, &store, new_session("a/b-c", Kind::Child), NOW);
+    add_session(&store, &store, "a-b/c", Kind::Member);
+    let clash = create_session(&store, &store, new_session("a/b-c", Kind::Member), NOW);
     assert!(matches!(
         clash,
         Err(SessionError::MessagingNameTaken { name, owner })
@@ -107,31 +112,31 @@ fn a_session_needs_an_existing_category() {
     let result = create_session(
         &store,
         &store,
-        new_session("nada/ejecutora", Kind::Child),
+        new_session("nada/ejecutora", Kind::Member),
         NOW,
     );
     assert!(matches!(result, Err(SessionError::Category(_))));
 }
 
-// PLAN §0.6: `set --mother` respects one mother per category
+// PLAN §0.6: `set --coordinator` respects one coordinator per category
 #[test]
-fn promoting_a_child_fails_while_another_mother_exists() {
+fn promoting_a_member_fails_while_another_coordinator_exists() {
     let store = store_with(&["demo"]);
-    let mother = add_session(&store, &store, "demo/planificadora", Kind::Mother);
-    let child = add_session(&store, &store, "demo/ejecutora", Kind::Child);
+    let coordinator = add_session(&store, &store, "demo/planificadora", Kind::Coordinator);
+    let child = add_session(&store, &store, "demo/ejecutora", Kind::Member);
     let category = lithemux_core::modules::category::get_category(&store, "demo").unwrap();
 
     assert!(matches!(
-        set_kind(&store, &category, &child, Kind::Mother),
-        Err(SessionError::MotherExists { .. })
+        set_kind(&store, &category, &child, Kind::Coordinator),
+        Err(SessionError::CoordinatorExists { .. })
     ));
-    set_kind(&store, &category, &mother, Kind::Child).unwrap();
-    set_kind(&store, &category, &child, Kind::Mother).unwrap();
+    set_kind(&store, &category, &coordinator, Kind::Member).unwrap();
+    set_kind(&store, &category, &child, Kind::Coordinator).unwrap();
 
     let target = SessionRef::parse("demo/ejecutora").unwrap();
     assert_eq!(
         get_session(&store, &store, &target).unwrap().1.kind,
-        Kind::Mother
+        Kind::Coordinator
     );
 }
 
@@ -139,7 +144,7 @@ fn promoting_a_child_fails_while_another_mother_exists() {
 #[test]
 fn role_keep_alive_and_model_can_be_changed() {
     let store = store_with(&["demo"]);
-    let session = add_session(&store, &store, "demo/ejecutora", Kind::Child);
+    let session = add_session(&store, &store, "demo/ejecutora", Kind::Member);
     set_role(&store, &session, "otro rol").unwrap();
     set_keep_alive(&store, &session, true).unwrap();
     set_model(&store, &session, Some("opus")).unwrap();
@@ -160,7 +165,7 @@ fn role_keep_alive_and_model_can_be_changed() {
 #[test]
 fn a_removed_session_is_gone() {
     let store = store_with(&["demo"]);
-    let session = add_session(&store, &store, "demo/ejecutora", Kind::Child);
+    let session = add_session(&store, &store, "demo/ejecutora", Kind::Member);
     remove_session(&store, &session).unwrap();
     let target = SessionRef::parse("demo/ejecutora").unwrap();
     assert!(matches!(
@@ -173,7 +178,7 @@ fn a_removed_session_is_gone() {
 #[test]
 fn a_new_conversation_id_replaces_the_stored_one_and_reports_the_old_one() {
     let store = store_with(&["demo"]);
-    let session = add_session(&store, &store, "demo/ejecutora", Kind::Child);
+    let session = add_session(&store, &store, "demo/ejecutora", Kind::Member);
     let old = session.claude_session_id.clone().unwrap();
     let new = "11111111-2222-4333-8444-555555555555";
 
@@ -196,7 +201,7 @@ fn a_new_conversation_id_replaces_the_stored_one_and_reports_the_old_one() {
 #[test]
 fn a_malformed_conversation_id_is_ignored() {
     let store = store_with(&["demo"]);
-    let session = add_session(&store, &store, "demo/ejecutora", Kind::Child);
+    let session = add_session(&store, &store, "demo/ejecutora", Kind::Member);
     assert_eq!(
         follow_claude_session(&store, &session.id, "../../etc/passwd").unwrap(),
         None

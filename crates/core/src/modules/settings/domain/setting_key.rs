@@ -4,6 +4,11 @@ pub enum SettingKey {
     ContextLanguage,
     ClaudePath,
     HibernateAfterHours,
+    MemoryValve,
+    Scrollback,
+    FontFamily,
+    FontSize,
+    Theme,
     /// Written by the launcher, not by the user: the `claude` the
     /// interactive shell reported last.
     LastClaudePath,
@@ -16,6 +21,11 @@ impl SettingKey {
             SettingKey::ContextLanguage => "context_language",
             SettingKey::ClaudePath => "claude_path",
             SettingKey::HibernateAfterHours => "hibernate_after_hours",
+            SettingKey::MemoryValve => "memory_valve",
+            SettingKey::Scrollback => "scrollback",
+            SettingKey::FontFamily => "font_family",
+            SettingKey::FontSize => "font_size",
+            SettingKey::Theme => "theme",
             SettingKey::LastClaudePath => "last_claude_path",
         }
     }

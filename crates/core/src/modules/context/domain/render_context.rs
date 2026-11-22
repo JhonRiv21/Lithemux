@@ -59,7 +59,8 @@ fn compose(scene: &Scene<'_>, shown: usize) -> String {
 }
 
 /// Who the session works with, how they talk and who keeps the board: one
-/// wording for a mother, one for her children and one for sisters alone.
+/// wording for a coordinator, one for the sessions it coordinates and one for
+/// sessions without a coordinator.
 fn family(scene: &Scene<'_>, shown: usize) -> Vec<String> {
     let Scene {
         input,
@@ -67,35 +68,35 @@ fn family(scene: &Scene<'_>, shown: usize) -> Vec<String> {
         board,
         ..
     } = scene;
-    let mother = input.others.iter().find(|s| s.kind == Kind::Mother);
+    let coordinator = input.others.iter().find(|s| s.kind == Kind::Coordinator);
     let mut lines = Vec::new();
-    if input.me.kind == Kind::Mother {
-        lines.push(phrases.is_mother().to_string());
+    if input.me.kind == Kind::Coordinator {
+        lines.push(phrases.is_coordinator().to_string());
         lines.extend(others(
             scene,
-            phrases.children_heading(),
-            phrases.no_children(),
+            phrases.members_heading(),
+            phrases.no_members(),
             shown,
         ));
         lines.push(phrases.messaging().to_string());
-        lines.push(phrases.board_of_mother(board));
-    } else if let Some(mother) = mother {
-        lines.push(phrases.mother_is(&describe(scene, mother)));
+        lines.push(phrases.board_of_coordinator(board));
+    } else if let Some(coordinator) = coordinator {
+        lines.push(phrases.coordinator_is(&describe(scene, coordinator)));
         lines.extend(others(
             scene,
-            phrases.sisters_heading(),
-            phrases.no_sisters(),
+            phrases.others_heading(),
+            phrases.no_others(),
             shown,
         ));
-        let reporting = phrases.child_reporting();
+        let reporting = phrases.member_reporting();
         lines.push(format!("{} {reporting}", phrases.messaging()));
-        lines.push(phrases.board_of_child(board));
+        lines.push(phrases.board_of_member(board));
     } else {
-        lines.push(phrases.no_mother().to_string());
+        lines.push(phrases.no_coordinator().to_string());
         lines.extend(others(
             scene,
-            phrases.sisters_heading(),
-            phrases.no_sisters(),
+            phrases.others_heading(),
+            phrases.no_others(),
             shown,
         ));
         lines.push(phrases.messaging().to_string());
@@ -104,14 +105,14 @@ fn family(scene: &Scene<'_>, shown: usize) -> Vec<String> {
     lines
 }
 
-/// The sessions that are not the mother: the first `shown`, then how many
+/// The sessions that are not the coordinator: the first `shown`, then how many
 /// were left out.
 fn others(scene: &Scene<'_>, heading: &str, empty: &str, shown: usize) -> Vec<String> {
     let rest: Vec<&Session> = scene
         .input
         .others
         .iter()
-        .filter(|s| s.kind != Kind::Mother)
+        .filter(|s| s.kind != Kind::Coordinator)
         .collect();
     if rest.is_empty() {
         return vec![empty.to_string()];

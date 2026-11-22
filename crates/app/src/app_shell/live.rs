@@ -7,10 +7,10 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::Duration;
 
-use gpui::{AppContext, Context, Task};
+use gpui::{App, AppContext, Context, Task};
 use lithemux_core::modules::category::Category;
 use lithemux_core::modules::session::{Session, SessionRef, SqliteSessionRepository, mark_read};
-use lithemux_core::modules::settings::{SettingKey, SqliteSettingsRepository, read_setting};
+use lithemux_core::modules::settings::Preferences;
 use lithemux_core::platform::paths::home::Home;
 use lithemux_core::platform::process::listening_ports::listening_ports;
 use lithemux_core::platform::store::connection::Db;
@@ -41,7 +41,11 @@ fn ports_by_session(
 pub struct Live {
     pub host: SessionHost,
     pub texts: Rc<Texts>,
-    db: Db,
+    /// The settings, as last read.
+    pub(super) preferences: Preferences,
+    /// The font last asked for and the one in use for it.
+    pub(super) checked_font: Option<(String, String)>,
+    pub(super) db: Db,
     home: Home,
     user_home: Option<PathBuf>,
     categories: Vec<Category>,
@@ -60,9 +64,6 @@ impl Live {
         changes: async_channel::Receiver<()>,
         cx: &mut Context<Self>,
     ) -> Self {
-        let language = read_setting(&SqliteSettingsRepository::new(&db), SettingKey::Language)
-            .ok()
-            .flatten();
         Self::attend_the_host(changes, cx);
         // cmd+q and the quit event of macOS end here: the programs are
         // ended, and waited for, before the app is gone. Signals do the
@@ -75,7 +76,9 @@ impl Live {
         let refresh = Self::keep_refreshing(cx);
         let mut live = Live {
             host,
-            texts: Rc::new(Texts::of(Language::from_setting(language.as_deref()))),
+            texts: Rc::new(Texts::of(Language::English)),
+            preferences: Preferences::default(),
+            checked_font: None,
             db,
             user_home: std::env::var_os("HOME").map(PathBuf::from),
             home,
@@ -85,7 +88,7 @@ impl Live {
             notice: None,
             _refresh: refresh,
         };
-        live.reload();
+        live.reload(cx);
         live
     }
 
@@ -98,7 +101,7 @@ impl Live {
                     for warning in live.host.take_warnings() {
                         eprintln!("lithemux-app: {warning}");
                     }
-                    live.reload();
+                    live.reload(cx);
                     cx.notify();
                 });
                 if attended.is_err() {
@@ -116,7 +119,7 @@ impl Live {
             loop {
                 cx.background_executor().timer(REFRESH_EVERY).await;
                 let Ok(running) = live.update(cx, |live, cx| {
-                    if live.reload() {
+                    if live.reload(cx) {
                         cx.notify();
                     }
                     live.host.running_programs()
@@ -141,6 +144,11 @@ impl Live {
         })
     }
 
+    /// Where lithemux keeps its files.
+    pub fn home_folder(&self) -> PathBuf {
+        self.home.path().to_path_buf()
+    }
+
     pub fn db(&self) -> &Db {
         &self.db
     }
@@ -152,10 +160,12 @@ impl Live {
         }
     }
 
-    /// Reads the board again. Returns whether it changed.
-    pub fn reload(&mut self) -> bool {
+    /// Reads the board and the settings again. Returns whether anything
+    /// changed.
+    pub fn reload(&mut self, cx: &App) -> bool {
+        let settings_changed = self.follow_the_settings(cx);
         // What was removed from another terminal stops running here.
-        let closed = self.host.close_removed();
+        let closed = self.host.close_removed() || settings_changed;
         match self.actions().load() {
             Ok((categories, sessions)) => {
                 let changed = closed || categories != self.categories || sessions != self.sessions;
@@ -181,7 +191,7 @@ impl Live {
             .as_ref()
             .err()
             .map(|error| self.texts.say(&error.into()));
-        self.reload();
+        self.reload(cx);
         cx.notify();
         outcome.ok()
     }
@@ -240,7 +250,7 @@ impl Live {
 
     pub fn close(&mut self, session_id: &str, cx: &mut Context<Self>) {
         self.host.close(session_id);
-        self.reload();
+        self.reload(cx);
         cx.notify();
     }
 
@@ -252,7 +262,7 @@ impl Live {
         if let Err(error) = mark_read(&SqliteSessionRepository::new(&self.db), session_id) {
             self.notice = Some(self.texts.say(&(&error).into()));
         }
-        self.reload();
+        self.reload(cx);
         cx.notify();
     }
 }

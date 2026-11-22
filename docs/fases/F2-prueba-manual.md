@@ -126,8 +126,8 @@ Lo que sigue **no tiene test automático** (es el cableado de la interfaz, D-44)
 
 1. «Nueva categoría»: escribe un nombre, «Elegir carpeta», «Crear». Aparece la categoría.
 2. El `+` de la categoría: escribe `Mi API` y Enter. Se crea la sesión, se abre en el panel y arranca `claude`.
-3. Clic derecho en la tarjeta: «Renombrar», «Fijar» (sube a «Fijadas»), «Marcar como madre» (pasa a ser la cabecera y las demás cuelgan), «Mantener viva», «Subir»/«Bajar».
-4. Marca otra sesión de la misma categoría como madre: debe negarse con un aviso abajo.
+3. Clic derecho en la tarjeta: «Renombrar», «Fijar» (sube a «Fijadas»), «Hacer coordinadora» (pasa a ser la cabecera y las demás cuelgan), «Mantener viva», «Subir»/«Bajar».
+4. Haz coordinadora a otra sesión de la misma categoría: debe negarse con un aviso abajo.
 5. Arrastra una tarjeta sobre otra de su categoría: toma su lugar. Arrastra una categoría sobre otra.
 6. Clic en el nombre de la categoría: se contrae y se expande.
 7. Clic derecho, «Borrar»: pide confirmación; al aceptar, la sesión se cierra y desaparece.
@@ -166,14 +166,16 @@ Lo que sigue **no tiene test automático** (es el cableado de la interfaz, D-44)
 
 - [ ] PASA  - [ ] FALLA
 
-### K. El layout se restaura
+### K. El layout se restaura y lo visible se reanuda (cambió en el bloque 4)
 
-1. Deja dos o tres paneles con varias pestañas y un divisor movido. `cmd+q`.
-2. Abre la app de nuevo: mismos paneles, pestañas, tamaños y foco. **Ningún `claude` arranca solo:** cada pestaña muestra su estado y el botón «Open».
-3. Abre una segunda `./target/release/lithemux-app` desde otra terminal: sale con `lithemux is already running (pid …)` y no aparece otra ventana.
-4. Español. El cambio de idioma llega con la ventana de Ajustes (§2.6) y `lithemux config` todavía no acepta `language`. Para verlo ahora, con la app cerrada:
-   `sqlite3 "$HOME/Library/Application Support/lithemux/lithemux.db" "insert or replace into settings(key,value) values('language','es')"`
-   (ajusta la ruta a la que diga `lithemux doctor` en «database»). Al abrir la app, todo sale en español. Para volver: el mismo comando con `'en'`.
+1. Deja dos o tres paneles con varias pestañas de `claude`, una terminal y un divisor movido. Háblale a cada `claude` para que tenga conversación. `cmd+q`.
+2. `./target/release/lithemux status`: las sesiones de `claude` que estaban abiertas dicen `hibernated`.
+3. Abre la app de nuevo: mismos paneles, pestañas, tamaños y foco.
+   - **La pestaña a la vista de cada panel se reanuda sola,** con «resuming» un momento y su conversación de antes.
+   - Las pestañas de `claude` que no están a la vista siguen «hibernated» y **no** arrancan (`pgrep -fl claude` lo confirma).
+   - La terminal arranca de nuevo en su carpeta.
+4. Haz clic en una pestaña hibernada: se reanuda con su conversación.
+5. Abre una segunda `./target/release/lithemux-app` desde otra terminal: sale con `lithemux is already running (pid …)`.
 
 - [ ] PASA  - [ ] FALLA
 
@@ -181,7 +183,64 @@ Lo que sigue **no tiene test automático** (es el cableado de la interfaz, D-44)
 
 1. **Home largo.** `LITHEMUX_HOME="$HOME/una-carpeta-con-un-nombre-muy-largo/otra-carpeta-con-un-nombre-muy-largo/otra-mas-con-un-nombre-largo" ./target/release/lithemux-app`: la app arranca (antes salía con «path must be shorter than SUN_LEN»). Crea una categoría y una sesión: su tarjeta cambia de estado al usarla, señal de que el hook encuentra el socket.
 2. **Borrar lo abierto.** Con una sesión de `claude` abierta en la app: `./target/release/lithemux rm prueba/uno --yes` debe negarse con «already open (pid …)». Con una **terminal** abierta en la app, `lithemux rm` de esa sesión de shell sí la borra, y en unos segundos la app cierra su pestaña y su programa.
-3. **Subir y bajar.** En una categoría con madre y con alguna sesión fijada, «Subir»/«Bajar» mueven la tarjeta un lugar entre las que se ven debajo de la categoría, sin «saltos que no hacen nada».
-4. **Errores en español.** Con la interfaz en español, marca una segunda madre: el aviso sale en español.
+3. **Subir y bajar.** En una categoría con sesión coordinadora y con alguna sesión fijada, «Subir»/«Bajar» mueven la tarjeta un lugar entre las que se ven debajo de la categoría, sin «saltos que no hacen nada».
+4. **Errores en español.** Con la interfaz en español, haz coordinadora a una segunda sesión: el aviso sale en español.
+
+- [ ] PASA  - [ ] FALLA
+
+## Bloque 4 · Ciclo de vida, ajustes y cierre de la fase
+
+### M. Lo que salió de la prueba del bloque 3
+
+1. **Puertos.** La tarjeta de una sesión de `claude` recién abierta no muestra ningún puerto (antes mostraba el del propio `claude`). En una terminal: `for p in 8765 8766 8767 8768 8769; do python3 -m http.server $p & done`. La tarjeta muestra tres puertos y «+2», sin salirse.
+2. **Pestañas con teclado, en tu teclado latinoamericano:** `cmd+shift+→` y `cmd+shift+←` cambian de pestaña; `cmd+1`, `cmd+2`… van a esa pestaña; `cmd+alt+→`/`←` cambian de panel.
+3. **Panel estrecho:** con 3 o 4 paneles, las pestañas conservan su nombre (o lo acortan con «…») y son los botones del panel los que desaparecen.
+4. **Permiso rechazado:** haz que Claude pida un permiso y pulsa Esc. La tarjeta sigue en «waiting» con el aviso (limitación conocida, D-48) hasta que pase algo en la sesión. Escríbele algo: el aviso desaparece y vuelve lo último que se dijo. Cierra la sesión: la tarjeta no dice nada del permiso.
+5. **Markdown:** tras una respuesta con negritas o código, la vista previa de la tarjeta no muestra `**` ni comillas invertidas.
+6. **Barra de título:** tiene el color del tema.
+
+- [ ] PASA  - [ ] FALLA
+
+### N. Hibernar y despertar
+
+1. Con la app abierta y una sesión de `claude` en una pestaña que **no** esté a la vista: `./target/release/lithemux config set hibernate_after_hours 1`. Espera una hora sin tocarla (o déjalo para un día normal de uso con el valor por defecto). Debe pasar a «hibernated» y su `claude` debe desaparecer de `pgrep -fl claude`.
+2. Haz clic en su pestaña: «resuming» y vuelve con su conversación.
+3. Una sesión con «Keep alive» o que esté a la vista no se hiberna.
+4. Sal de `claude` con `/exit` en una pestaña: queda «ended» con el botón «Resume»; al pulsarlo se reanuda.
+5. `./target/release/lithemux config unset hibernate_after_hours` para volver a 48.
+
+- [ ] PASA  - [ ] FALLA
+
+### O. Ajustes, idioma y menú
+
+1. `cmd+,` abre Ajustes. Cambia el idioma a Español: la ventana principal, la de Ajustes y la barra de menús cambian al momento. Vuelve a English.
+2. Tema: Claro, Oscuro y Sistema. Con Sistema, cambia la apariencia de macOS (Ajustes del sistema → Aspecto): la app la sigue.
+3. Tamaño de fuente `16` y Enter: las terminales cambian al momento. Un valor inválido (`400`) deja un aviso y no cambia nada. Vacío y Enter vuelve a 13.
+4. Fuente `Monaco` y Enter: cambia. Una fuente que no existe: se sigue viendo Menlo.
+5. Desde una terminal: `./target/release/lithemux config set language es`. En unos segundos la app pasa a español sin tocarla.
+6. Barra de menús: Archivo, Edición (Copiar y Pegar funcionan en la terminal), Visualización, Ventana, Ayuda → «Abrir la carpeta de datos».
+
+- [ ] PASA  - [ ] FALLA
+
+### P. Criterios de aceptación de la fase (PLAN, cierre de la Fase 2)
+
+1. **Criterio 2, con el `claude` falso:** `cargo build --release && scripts/accept-phase2`. Debe decir: 2 programas vivos, CPU en reposo por debajo del 1 % y footprint por debajo de 200 MB.
+2. **Criterio 2, con tu `claude`:** crea 20 sesiones en 4 categorías, abre todas en dos paneles, cierra y abre la app. Solo 2 `claude` vivos (`pgrep -fl claude | wc -l`, descontando los de tus otras terminales); en el Monitor de Actividad, `lithemux-app` por debajo de 200 MB y de 1 % de CPU en reposo.
+3. **Criterio 3:** `cmd+q` y abrir: paso K.
+4. **Criterio 4: reinicia el Mac** con la app abierta y sesiones en marcha. Al volver, abre la app: mismos paneles; las visibles se reanudan con su conversación; las demás, hibernadas; `lithemux status` no muestra ninguna como `working` o `idle` sin estar abierta.
+5. **Criterio 5:** crea una sesión coordinadora y otras dos desde la app, ábrelas y pregúntale a una de las otras quién es la coordinadora de su categoría: debe saberlo, igual que con `lithemux open`.
+6. **Criterio 6:** recorre la app entera en español y en inglés (paso O.1).
+7. **Criterio 7:** `scripts/accept-phase2 --network 600` (10 minutos): «samples with an internet socket: 0». Con tu `claude`: Little Snitch o `nettop -p $(pgrep lithemux-app)` durante 10 minutos; las conexiones de los `claude` son de Claude, no de la app.
+
+- [ ] PASA  - [ ] FALLA
+
+### Q. Ronda de correcciones del bloque 4
+
+1. **Nombres:** `./target/release/lithemux new prueba/coord --role "coordina" --coordinator`; `lithemux status` la muestra con `◆`. En la app, su tarjeta lleva «coordinator»/«coordinadora». Pregúntale a otra sesión de la categoría quién coordina: responde con «sesión coordinadora», sin «madre».
+2. **Tu base de datos se migra sola** al abrir la app o la CLI: `lithemux doctor` dice `schema v4` y las sesiones siguen ahí, con su coordinadora.
+3. **Salir durante una hibernación:** con una sesión recién hibernada (paso N), sal con `cmd+q` antes de 5 s. `pgrep -fl claude` no debe mostrar ningún `claude` de la app.
+4. **Válvula en «aviso»:** con la Mac en presión de memoria «warning» (`sysctl -n kern.memorystatus_vm_pressure_level` da `2`) y una sesión `idle` fuera de la vista que lleve más de 30 min quieta, debe hibernarse sola en el minuto siguiente. Una en «waiting» no.
+5. **Una sesión en «waiting» abandonada** también se hiberna pasadas las horas de `hibernate_after_hours`.
+6. **Ajustes desde la CLI:** con la ventana de Ajustes abierta, `lithemux config set font_size 15`: el campo «Font size» pasa a 15 en unos segundos.
 
 - [ ] PASA  - [ ] FALLA

@@ -53,6 +53,7 @@ fn session(id: &str, slug: &str, kind: Kind) -> Session {
         pin_sort: None,
         preview: None,
         unread: 0,
+        notice: None,
     }
 }
 
@@ -71,7 +72,7 @@ fn the_database_uses_wal_a_250_ms_busy_timeout_and_user_version() {
     assert_eq!(pragma(&db, "journal_mode"), "wal");
     assert_eq!(pragma(&db, "busy_timeout"), "250");
     assert_eq!(pragma(&db, "foreign_keys"), "1");
-    assert_eq!(db.schema_version().unwrap(), 2);
+    assert_eq!(db.schema_version().unwrap(), 4);
 }
 
 // PLAN §0.2: migrations run once
@@ -82,7 +83,7 @@ fn reopening_keeps_the_data_and_the_schema_version() {
         .insert(&category("c1", "demo"))
         .unwrap();
     let reopened = temp.db();
-    assert_eq!(reopened.schema_version().unwrap(), 2);
+    assert_eq!(reopened.schema_version().unwrap(), 4);
     assert_eq!(
         SqliteCategoryRepository::new(&reopened)
             .list()
@@ -113,24 +114,24 @@ fn a_newer_schema_is_refused() {
     assert!(Db::open(&temp.home).is_err());
 }
 
-// PLAN §0.2: CREATE UNIQUE INDEX one_mother_per_category
+// PLAN §0.2: CREATE UNIQUE INDEX one_coordinator_per_category
 #[test]
-fn the_database_itself_refuses_a_second_mother() {
+fn the_database_itself_refuses_a_second_coordinator() {
     let db = TempHome::new().db();
     SqliteCategoryRepository::new(&db)
         .insert(&category("c1", "demo"))
         .unwrap();
     let sessions = SqliteSessionRepository::new(&db);
     sessions
-        .insert(&session("s1", "una", Kind::Mother))
+        .insert(&session("s1", "una", Kind::Coordinator))
         .unwrap();
     assert!(
         sessions
-            .insert(&session("s2", "otra", Kind::Mother))
+            .insert(&session("s2", "otra", Kind::Coordinator))
             .is_err()
     );
     sessions
-        .insert(&session("s3", "hija", Kind::Child))
+        .insert(&session("s3", "otra", Kind::Member))
         .unwrap();
 }
 
@@ -143,11 +144,11 @@ fn the_database_enforces_uniqueness_and_allowed_values() {
     assert!(categories.insert(&category("c2", "demo")).is_err());
     let sessions = SqliteSessionRepository::new(&db);
     sessions
-        .insert(&session("s1", "hija", Kind::Child))
+        .insert(&session("s1", "otra", Kind::Member))
         .unwrap();
     assert!(
         sessions
-            .insert(&session("s2", "hija", Kind::Child))
+            .insert(&session("s2", "otra", Kind::Member))
             .is_err()
     );
     let bad_kind = db.conn().execute(
@@ -158,7 +159,7 @@ fn the_database_enforces_uniqueness_and_allowed_values() {
     assert!(bad_kind.is_err());
     let bad_profile = db.conn().execute(
         "INSERT INTO sessions(id, category_id, slug, role, kind, profile) \
-         VALUES ('s9', 'c1', 'x', 'r', 'child', 'codex')",
+         VALUES ('s9', 'c1', 'x', 'r', 'member', 'codex')",
         [],
     );
     assert!(bad_profile.is_err());

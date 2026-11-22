@@ -114,7 +114,7 @@ impl SidebarActions<'_> {
         let new = NewSession {
             target: SessionRef::parse(&format!("{}/{slug}", category.slug))?,
             role: role.to_string(),
-            kind: Kind::Child,
+            kind: Kind::Member,
             profile,
             cwd: None,
             model: None,
@@ -143,10 +143,14 @@ impl SidebarActions<'_> {
         }
     }
 
-    /// Refused by `core` when the category already has another mother.
-    pub fn set_mother(&self, id: &str, mother: bool) -> Result<(), SidebarError> {
+    /// Refused by `core` when the category already has another coordinator.
+    pub fn set_coordinator(&self, id: &str, coordinator: bool) -> Result<(), SidebarError> {
         let (category, session) = self.session(id)?;
-        let kind = if mother { Kind::Mother } else { Kind::Child };
+        let kind = if coordinator {
+            Kind::Coordinator
+        } else {
+            Kind::Member
+        };
         Ok(set_kind(&self.sessions(), &category, &session, kind)?)
     }
 
@@ -161,7 +165,7 @@ impl SidebarActions<'_> {
 
     /// The list the session is ordered in (the pinned ones, or its
     /// category) and, of it, the cards shown together with the session:
-    /// in a category, the mother is the header and the pinned ones are
+    /// in a category, the coordinator is the header and the pinned ones are
     /// shown elsewhere.
     fn siblings(&self, session: &Session) -> Result<(Vec<String>, Vec<String>), SidebarError> {
         let list = if session.is_pinned() {
@@ -172,7 +176,7 @@ impl SidebarActions<'_> {
         let shown = list
             .iter()
             .filter(|other| {
-                session.is_pinned() || !(other.is_pinned() || other.kind == Kind::Mother)
+                session.is_pinned() || !(other.is_pinned() || other.kind == Kind::Coordinator)
             })
             .map(|other| other.id.clone())
             .collect();

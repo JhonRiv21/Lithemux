@@ -13,6 +13,7 @@ mod launch_use_cases;
 mod prepare_launch_use_cases;
 mod remembered_claude_use_cases;
 mod resolve_claude_use_cases;
+mod restart_use_cases;
 mod session_use_cases;
 mod settings_use_cases;
 mod shell_budget_use_cases;

@@ -13,13 +13,19 @@ const EVERY_STATE: [State; 6] = [
 ];
 
 // PLAN §2.2 (carried from 2.1): while a session is opening the label says
-// so, not its last saved state.
+// so, not its last saved state. PLAN §2.4: one that wakes from hibernation
+// says «resuming».
 #[test]
-fn a_session_that_is_opening_says_opening_whatever_was_saved() {
+fn a_session_that_is_opening_says_so_whatever_was_saved() {
     for state in EVERY_STATE {
+        let expected = if state == State::Hibernated {
+            Status::Resuming
+        } else {
+            Status::Opening
+        };
         assert_eq!(
             status_of(Some(&Phase::Opening), state, Profile::Claude),
-            Status::Opening,
+            expected,
             "{state:?}"
         );
     }
@@ -28,14 +34,31 @@ fn a_session_that_is_opening_says_opening_whatever_was_saved() {
 // PLAN §2.2 (carried from 2.1): the saved state is from the run before
 // until Claude reports the new one.
 #[test]
-fn a_relaunched_session_does_not_show_ended_before_claude_reports() {
-    for stale in [State::Ended, State::Hibernated, State::New] {
+fn a_relaunched_session_does_not_show_its_old_state_before_claude_reports() {
+    for stale in [State::Ended, State::New] {
         assert_eq!(
             status_of(Some(&Phase::Running), stale, Profile::Claude),
             Status::Opening,
             "{stale:?}"
         );
     }
+    assert_eq!(
+        status_of(Some(&Phase::Running), State::Hibernated, Profile::Claude),
+        Status::Resuming
+    );
+}
+
+// PLAN §2.4: «El usuario solo ve un indicador de "reanudando".»
+#[test]
+fn resuming_is_only_for_a_claude_session_that_was_hibernated() {
+    assert_eq!(
+        status_of(Some(&Phase::Opening), State::Hibernated, Profile::Shell),
+        Status::Opening
+    );
+    assert_eq!(
+        status_of(None, State::Hibernated, Profile::Claude),
+        Status::Hibernated
+    );
 }
 
 // PLAN §2.2 (carried from 2.1)
@@ -72,6 +95,7 @@ fn a_running_claude_shows_what_it_reported() {
 fn only_waiting_for_the_user_is_highlighted() {
     let all = [
         Status::Opening,
+        Status::Resuming,
         Status::Closing,
         Status::Working,
         Status::Idle,

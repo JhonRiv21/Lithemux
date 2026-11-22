@@ -1,0 +1,5 @@
+        KeyBinding::new("cmd-shift-]", NextTab, context),
+        KeyBinding::new("cmd-shift-[", PreviousTab, context),
+        KeyBinding::new("ctrl-shift-1", First, None),
+        KeyBinding::new("shift-cmd-]", NextTab, context),
+        KeyBinding::new("cmd-shift-alt-[", PreviousTab, context),

@@ -11,7 +11,20 @@ pub fn apply_state(
     last_activity_at: Option<i64>,
     preserve: Option<State>,
 ) -> Result<(), SessionError> {
-    sessions.update_state(session_id, state, last_activity_at, preserve)
+    sessions.update_state(session_id, state, last_activity_at, preserve)?;
+    forget_the_notice_unless_waiting(sessions, session_id, state)
+}
+
+/// What Claude was waiting for stands only while it waits.
+fn forget_the_notice_unless_waiting(
+    sessions: &dyn SessionRepository,
+    session_id: &str,
+    state: State,
+) -> Result<(), SessionError> {
+    if state == State::Waiting {
+        return Ok(());
+    }
+    sessions.update_notice(session_id, None)
 }
 
 /// Counts as activity and leaves the state as it is.
@@ -30,7 +43,8 @@ pub fn move_state(
     from: State,
     to: State,
 ) -> Result<(), SessionError> {
-    sessions.move_state(session_id, from, to)
+    sessions.move_state(session_id, from, to)?;
+    forget_the_notice_unless_waiting(sessions, session_id, to)
 }
 
 pub fn record_claude_version(

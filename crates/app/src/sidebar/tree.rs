@@ -1,5 +1,5 @@
 //! The sidebar as data: pinned sessions on top, then each category with
-//! its mother as header and the rest hanging from it.
+//! its coordinator as header and the rest hanging from it.
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -23,7 +23,7 @@ pub struct Card {
     pub unread: i64,
     pub cwd: String,
     pub ports: Vec<u16>,
-    pub is_mother: bool,
+    pub is_coordinator: bool,
     pub is_pinned: bool,
     pub keep_alive: bool,
     pub is_shell: bool,
@@ -34,7 +34,7 @@ pub struct Group {
     pub category_id: String,
     pub name: String,
     pub collapsed: bool,
-    /// The mother, when the category has one that is not pinned.
+    /// The coordinator, when the category has one that is not pinned.
     pub header: Option<Card>,
     pub cards: Vec<Card>,
 }
@@ -61,7 +61,7 @@ pub fn build(board: &Board<'_>) -> Tree {
         address: format!("{}/{}", category.slug, session.slug),
         category_id: category.id.clone(),
         title: session.display_title().to_string(),
-        preview: session.preview.clone(),
+        preview: session.card_line().map(str::to_string),
         status: status_of(
             (board.phases)(&session.id).as_ref(),
             session.state,
@@ -70,7 +70,7 @@ pub fn build(board: &Board<'_>) -> Tree {
         unread: session.unread,
         cwd: cwd_label(session.effective_cwd(category), board.home),
         ports: board.ports.get(&session.id).cloned().unwrap_or_default(),
-        is_mother: session.kind == Kind::Mother,
+        is_coordinator: session.kind == Kind::Coordinator,
         is_pinned: session.is_pinned(),
         keep_alive: session.keep_alive,
         is_shell: session.profile == Profile::Shell,
@@ -93,7 +93,7 @@ pub fn build(board: &Board<'_>) -> Tree {
             let card = card_of(category, session);
             match session.pin_sort {
                 Some(place) => pinned.push((place, card)),
-                None if card.is_mother => group.header = Some(card),
+                None if card.is_coordinator => group.header = Some(card),
                 None => group.cards.push(card),
             }
         }
