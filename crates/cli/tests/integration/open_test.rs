@@ -1,8 +1,8 @@
+use rustix::process::Signal;
 use std::fs;
-use std::process::Stdio;
-use std::time::{Duration, Instant};
 
 use crate::sandbox::Sandbox;
+use crate::signals;
 
 fn arg_after(log: &[String], flag: &str) -> Option<String> {
     let position = log.iter().position(|line| line == &format!("arg={flag}"))?;
@@ -31,6 +31,8 @@ fn open_launches_claude_with_the_session_name_hooks_and_environment() {
         "Stop",
         "Notification",
         "SessionEnd",
+        "PostToolUse",
+        "PostToolUseFailure",
     ] {
         assert!(settings.contains(event), "{event} missing in {settings}");
     }
@@ -99,19 +101,7 @@ fn opening_the_same_session_twice_fails_while_the_first_is_alive() {
     sandbox.use_fake_claude();
     fs::write(sandbox.home().join("fake-claude.sleep"), "5").unwrap();
 
-    let mut first = sandbox
-        .std_command(&["open", "demo/ejecutora"])
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .unwrap();
-    let log = sandbox.home().join("fake-claude.log");
-    let deadline = Instant::now() + Duration::from_secs(10);
-    while !log.exists() && Instant::now() < deadline {
-        std::thread::sleep(Duration::from_millis(20));
-    }
-    assert!(log.exists(), "the first session started");
+    let mut first = sandbox.open_in_background("demo/ejecutora");
 
     let error = sandbox.fail(&["open", "demo/ejecutora"]);
     assert!(error.contains("already open"), "{error}");
@@ -124,9 +114,10 @@ fn opening_the_same_session_twice_fails_while_the_first_is_alive() {
         .unwrap();
     assert!(executor.contains("open (pid "), "{executor}");
 
-    first.kill().unwrap();
+    // Ending the first one the way a terminal does frees the session.
+    signals::send(first.id(), Signal::TERM);
     first.wait().unwrap();
-    // The lock dies with the process that held it.
+    signals::wait_until_gone(sandbox.fake_claude_number("fake-claude.pid"));
     fs::remove_file(sandbox.home().join("fake-claude.sleep")).unwrap();
     sandbox.run(&["open", "demo/ejecutora"]);
 }
@@ -166,4 +157,32 @@ fn open_explains_when_claude_cannot_be_found() {
 fn open_fails_for_a_session_that_does_not_exist() {
     let sandbox = Sandbox::new().with_demo();
     assert!(sandbox.fail(&["open", "demo/nadie"]).contains("not found"));
+}
+
+// PLAN §2.0 bug 7: the child runs in another directory, so a relative
+// LITHEMUX_HOME would point somewhere else for it and for its hooks
+#[test]
+fn a_relative_lithemux_home_reaches_the_child_as_an_absolute_path() {
+    let sandbox = Sandbox::new().with_demo();
+    sandbox.use_fake_claude();
+
+    let output = sandbox
+        .lithemux(&["open", "demo/ejecutora"])
+        .current_dir(sandbox.dir.path())
+        .env("LITHEMUX_HOME", "home")
+        .output()
+        .unwrap();
+
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let log = sandbox.fake_claude_log();
+    let home = log[2].trim_start_matches("home_env=");
+    assert!(std::path::Path::new(home).is_absolute(), "{home}");
+    assert_eq!(
+        std::fs::canonicalize(home).unwrap(),
+        sandbox.home().canonicalize().unwrap()
+    );
 }

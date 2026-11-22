@@ -1,0 +1,13 @@
+#!/bin/sh
+# Test double for an interactive login shell on a real terminal. Like zsh or
+# bash with `-i`, it changes the settings of the terminal that controls it;
+# a process doing that from a background process group is stopped by the
+# kernel (SIGTTOU). With no controlling terminal there is nothing to touch.
+# Like fake-shell-lingering, it finds the fake `claude` on its PATH.
+stty sane < /dev/tty 2> /dev/null
+PATH="$(dirname "$0")/on-path:/usr/bin:/bin"
+export PATH
+case "$1" in
+  -lic | -lc) exec /bin/sh -c "$2" ;;
+  *) exec /bin/sh ;;
+esac

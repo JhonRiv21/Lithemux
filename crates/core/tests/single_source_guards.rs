@@ -1,7 +1,13 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+#[path = "guards/process_spawning.rs"]
+mod process_spawning;
 #[path = "guards/real_programs.rs"]
 mod real_programs;
+// Shared with the architecture test; this binary does not use all of it.
+#[allow(dead_code)]
+#[path = "guards/tokens.rs"]
+mod tokens;
 
 use std::collections::BTreeSet;
 use std::fs;
@@ -191,11 +197,8 @@ fn real_programs_fixture(name: &str) -> PathBuf {
 }
 
 fn fixture_files(dir: &Path) -> Vec<PathBuf> {
-    let mut files: Vec<PathBuf> = fs::read_dir(dir)
-        .unwrap()
-        .flatten()
-        .map(|entry| entry.path())
-        .collect();
+    let mut files = Vec::new();
+    rust_sources(dir, &mut files);
     files.sort();
     files
 }
@@ -233,7 +236,15 @@ fn the_real_programs_guard_flags_real_shells_and_the_real_claude() {
     let rules: BTreeSet<&str> = violations.iter().map(|v| v.rule).collect();
     assert_eq!(
         rules,
-        BTreeSet::from(["real-claude", "real-shell", "shell-by-name", "shell-env"])
+        BTreeSet::from([
+            "inherited-env",
+            "machine-env",
+            "real-claude",
+            "real-shell",
+            "shell-by-name",
+            "shell-env",
+            "workspace-binary"
+        ])
     );
 }
 
@@ -257,4 +268,146 @@ fn no_test_runs_a_real_shell_or_the_real_claude() {
             .collect::<Vec<_>>()
             .join("\n")
     );
+}
+
+fn process_spawning_fixture(name: &str) -> Vec<(String, String)> {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/guard-fixtures/process-spawning")
+        .join(name);
+    let mut files = Vec::new();
+    every_file(&dir, &mut files);
+    files.sort();
+    files
+        .into_iter()
+        .map(|path| {
+            let name = path.file_name().unwrap().to_string_lossy().to_string();
+            (name, fs::read_to_string(path).unwrap())
+        })
+        .collect()
+}
+
+/// Every file, whatever its extension: code can be pulled in from any.
+fn every_file(dir: &Path, files: &mut Vec<PathBuf>) {
+    for entry in fs::read_dir(dir).unwrap().flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            every_file(&path, files);
+        } else {
+            files.push(path);
+        }
+    }
+}
+
+// The guard itself: every way the audit found around the textual H-001.
+#[test]
+fn the_process_guard_flags_every_way_of_naming_a_process_builder() {
+    let bad = process_spawning_fixture("bad");
+    assert!(bad.len() >= 11, "{} bad examples", bad.len());
+    for (file, source) in bad {
+        let mentions = process_spawning::mentions_of_a_process_builder(&file, &source);
+        assert!(!mentions.is_empty(), "{file} was not flagged");
+    }
+}
+
+// The guard itself: similar names, strings and comments are not mentions.
+#[test]
+fn the_process_guard_accepts_code_that_goes_through_the_filter() {
+    for (file, source) in process_spawning_fixture("good") {
+        let mentions = process_spawning::mentions_of_a_process_builder(&file, &source);
+        assert!(mentions.is_empty(), "{mentions:?}");
+    }
+}
+
+// findings/H-001 + docs/decisiones.md D-22: only three files of production
+// code may name a type that starts processes.
+#[test]
+fn production_code_names_a_process_builder_only_where_the_filter_is() {
+    let crates = workspace().join("crates");
+    let mut files = Vec::new();
+    for entry in fs::read_dir(&crates).unwrap().flatten() {
+        let src = entry.path().join("src");
+        if src.is_dir() {
+            every_file(&src, &mut files);
+        }
+    }
+    assert!(files.len() > 150, "found {} files", files.len());
+    assert!(
+        files
+            .iter()
+            .any(|path| path.extension().is_none_or(|ext| ext != "rs")),
+        "files that are not Rust are scanned too"
+    );
+    let mut mentions = Vec::new();
+    let mut allowed_seen = 0;
+    for path in files {
+        let file = path
+            .strip_prefix(&crates)
+            .unwrap()
+            .to_string_lossy()
+            .replace('\\', "/");
+        if process_spawning::ALLOWED_FILES.contains(&file.as_str()) {
+            allowed_seen += 1;
+            continue;
+        }
+        let Ok(source) = fs::read_to_string(&path) else {
+            continue;
+        };
+        mentions.extend(process_spawning::mentions_of_a_process_builder(
+            &file, &source,
+        ));
+    }
+    assert_eq!(allowed_seen, process_spawning::ALLOWED_FILES.len());
+    assert!(
+        mentions.is_empty(),
+        "processes may only be built where the environment filter is applied:\n{}",
+        mentions
+            .iter()
+            .map(|m| format!("  {}:{} names `{}`", m.file, m.line, m.name))
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
+}
+
+/// The lines of one `[table]` of a Cargo manifest, without comments.
+fn manifest_table(manifest: &str, table: &str) -> Vec<String> {
+    manifest
+        .lines()
+        .skip_while(|line| line.trim() != format!("[{table}]"))
+        .skip(1)
+        .take_while(|line| !line.trim_start().starts_with('['))
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+        .map(str::to_string)
+        .collect()
+}
+
+// docs/decisiones.md D-27: cargo cannot inherit the workspace lints and
+// override one, so `core` repeats them. This keeps the copy honest: the
+// same lints as the workspace, and `unsafe_code` the only difference.
+#[test]
+fn core_has_the_lints_of_the_workspace_except_for_unsafe_code() {
+    let workspace_manifest = fs::read_to_string(workspace().join("Cargo.toml")).unwrap();
+    let core_manifest = fs::read_to_string(workspace().join("crates/core/Cargo.toml")).unwrap();
+
+    assert_eq!(
+        manifest_table(&core_manifest, "lints.clippy"),
+        manifest_table(&workspace_manifest, "workspace.lints.clippy")
+    );
+    assert_eq!(
+        manifest_table(&workspace_manifest, "workspace.lints.rust"),
+        ["unsafe_code = \"forbid\""]
+    );
+    assert_eq!(
+        manifest_table(&core_manifest, "lints.rust"),
+        ["unsafe_code = \"deny\""]
+    );
+    for other in ["cli", "hook", "app"] {
+        let manifest =
+            fs::read_to_string(workspace().join(format!("crates/{other}/Cargo.toml"))).unwrap();
+        assert_eq!(
+            manifest_table(&manifest, "lints"),
+            ["workspace = true"],
+            "{other}"
+        );
+    }
 }

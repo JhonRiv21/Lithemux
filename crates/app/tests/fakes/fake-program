@@ -60,6 +60,14 @@ case "$1" in
     printf '\033]11;#112233\033\\\033]11;?\033\\ready\n'
     exec cat -v
     ;;
+  inherited-marks)
+    # Counts what must never be inherited from the session the app runs in.
+    printf 'marks:%s home:%s\n' \
+      "$(env | grep -c -E '^(CLAUDECODE|CLAUDE_CODE_CHILD_SESSION|CMUX_)')" "$HOME"
+    ;;
+  working-directory)
+    printf 'cwd:%s\n' "$(pwd -P)"
+    ;;
   environment)
     printf 'term:%s color:%s\n' "$TERM" "$COLORTERM"
     exec cat

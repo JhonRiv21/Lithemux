@@ -21,15 +21,17 @@ fn unreadable_input_is_the_same_as_no_input() {
     }
 }
 
-// PLAN §0.3: the five subcommands wired in the settings JSON
+// PLAN §0.3 + §2.0 bug 4 + D-20: the subcommands wired in the settings JSON
 #[test]
-fn the_five_subcommands_are_recognized() {
+fn every_wired_subcommand_is_recognized() {
     for (subcommand, event) in [
         ("session-start", HookEvent::SessionStart),
         ("prompt-submit", HookEvent::PromptSubmit),
         ("stop", HookEvent::Stop),
         ("notification", HookEvent::Notification),
         ("session-end", HookEvent::SessionEnd),
+        ("post-tool-use", HookEvent::PostToolUse),
+        ("post-tool-use-failure", HookEvent::PostToolUseFailure),
     ] {
         assert_eq!(HookEvent::parse(subcommand), Some(event));
         assert_eq!(event.as_str(), subcommand);

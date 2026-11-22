@@ -2,8 +2,12 @@
 # Test double for the `claude` CLI. No test runs the real one.
 # It answers `--version` and, inside a lithemux session, records how it was
 # called in $LITHEMUX_HOME/fake-claude.log. Two optional files in
-# $LITHEMUX_HOME steer it: fake-claude.sleep (seconds to stay alive) and
-# fake-claude.exit (exit code).
+# $LITHEMUX_HOME steer it: fake-claude.sleep (seconds to stay alive),
+# fake-claude.exit (exit code) and fake-claude.leave-behind (seconds that a
+# process it starts outlives it; its pid goes to fake-claude.left-behind.pid).
+# Its own pid goes to fake-claude.pid and the names of its environment
+# variables to fake-claude.env (with their values, to fake-claude.environment).
+# How it stands with its terminal goes to fake-claude.terminal.
 if [ "$1" = "--version" ]; then
   echo "9.9.9 (Claude Code)"
   exit 0
@@ -17,6 +21,19 @@ if [ -n "$LITHEMUX_HOME" ]; then
       echo "arg=$arg"
     done
   } > "$LITHEMUX_HOME/fake-claude.log"
+  env | cut -d= -f1 > "$LITHEMUX_HOME/fake-claude.env"
+  env > "$LITHEMUX_HOME/fake-claude.environment"
+  terminal=""
+  [ -t 0 ] && terminal="${terminal}stdin=terminal\n"
+  [ -t 1 ] && terminal="${terminal}stdout=terminal\n"
+  # Only a process in the foreground of its terminal may change its settings.
+  stty sane < /dev/tty 2> /dev/null && terminal="${terminal}foreground=yes\n"
+  printf "$terminal" > "$LITHEMUX_HOME/fake-claude.terminal"
+  echo $$ > "$LITHEMUX_HOME/fake-claude.pid"
+  if [ -f "$LITHEMUX_HOME/fake-claude.leave-behind" ]; then
+    sleep "$(cat "$LITHEMUX_HOME/fake-claude.leave-behind")" > /dev/null 2>&1 &
+    echo $! > "$LITHEMUX_HOME/fake-claude.left-behind.pid"
+  fi
   if [ -f "$LITHEMUX_HOME/fake-claude.sleep" ]; then
     sleep "$(cat "$LITHEMUX_HOME/fake-claude.sleep")"
   fi

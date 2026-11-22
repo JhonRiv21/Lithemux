@@ -1,5 +1,10 @@
+pub mod claude_inspection;
+pub mod hook_inspection;
 pub mod inspect_claude;
+pub mod inspect_hook;
 pub mod launch_ports;
 pub mod open_session;
 pub mod plan_launch;
 pub mod resolve_claude;
+pub mod resolved_claude;
+pub mod shell_budget;

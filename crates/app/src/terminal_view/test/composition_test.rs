@@ -65,3 +65,31 @@ fn the_text_being_composed_is_reported_in_utf16_units() {
     assert_eq!(composition.marked_range_utf16(), Some(2..3));
     assert_eq!(composition.cursor_utf16(), 3);
 }
+
+// PLAN §2.0 point 20: the very first composition of a view that just got the
+// focus, in the shapes macOS may deliver it, is one accented letter
+#[test]
+fn the_first_dead_key_of_a_fresh_view_composes_like_any_other() {
+    for replaced in [None, Some(0..1)] {
+        let mut composition = Composition::default();
+        assert_eq!(composition.marked_range_utf16(), None);
+
+        composition.mark("´");
+        assert_eq!(composition.marked_range_utf16(), Some(0..1));
+        assert_eq!(composition.document(), "´");
+
+        assert_eq!(composition.commit(replaced, "á"), "á".as_bytes());
+        assert_eq!(composition.marked_range_utf16(), None);
+    }
+}
+
+// PLAN §2.0 point 20: the same right after text typed without composing
+#[test]
+fn a_dead_key_after_plain_text_erases_nothing_that_was_sent() {
+    let mut composition = Composition::default();
+    composition.commit(None, "l");
+    composition.mark("´");
+    assert_eq!(composition.marked_range_utf16(), Some(1..2));
+
+    assert_eq!(composition.commit(Some(1..2), "á"), "á".as_bytes());
+}

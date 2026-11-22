@@ -1,9 +1,15 @@
 use crate::modules::settings::domain::config_policy::{checked_value, configurable_key};
 use crate::modules::settings::domain::setting_key::SettingKey;
 
-// PLAN §0.6: `lithemux config` knows two keys
+// PLAN §0.6 + D-28: `lithemux config` knows the two keys of the user and the
+// one the launcher writes
 #[test]
-fn only_claude_path_and_context_language_are_configurable() {
+fn the_command_line_knows_three_settings() {
+    assert_eq!(
+        configurable_key("last_claude_path"),
+        Some(SettingKey::LastClaudePath)
+    );
+    assert!(checked_value(SettingKey::LastClaudePath, "/bin/anything").is_err());
     assert_eq!(
         configurable_key("claude_path"),
         Some(SettingKey::ClaudePath)

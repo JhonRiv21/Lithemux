@@ -20,12 +20,15 @@ pub fn open_session(
     target: &SessionRef,
 ) -> Result<i32, LaunchError> {
     let (category, session) = get_session(ports.categories, ports.sessions, target)?;
-    let plan = plan_launch(ports, environment, &category, &session)?;
     if session.profile == Profile::Shell {
         // A plain shell has no conversation to protect.
+        let plan = plan_launch(ports, environment, &category, &session)?;
         return ports.runner.run(&plan, &mut |_| {});
     }
+    // Locked before the plan is made: whether to resume depends on the
+    // transcript, and that answer is only safe while nobody else can start.
     let mut lock = ports.locks.acquire(&session.id)?;
+    let plan = plan_launch(ports, environment, &category, &session)?;
     // Best effort: a missing version never blocks or delays the launch.
     if let Some(version) = ports
         .shell

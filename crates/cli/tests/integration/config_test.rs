@@ -76,3 +76,24 @@ fn doctor_reports_the_claude_it_would_use() {
     assert!(report.contains("schema v1"), "{report}");
     assert!(report.contains("data directory"), "{report}");
 }
+
+// docs/decisiones.md D-28: the claude that lithemux remembers can be seen
+// and forgotten, but only lithemux writes it
+#[test]
+fn the_remembered_claude_can_be_read_and_cleared_but_not_set() {
+    let sandbox = Sandbox::new().with_fake_shell("fake-shell-lingering");
+    sandbox.lithemux(&["doctor"]).output().unwrap();
+
+    let doctor = sandbox.lithemux(&["doctor"]).output().unwrap();
+    let doctor = String::from_utf8_lossy(&doctor.stdout).to_string();
+    let remembered = sandbox.run(&["config", "get", "last_claude_path"]);
+    assert!(remembered.contains("fakes/on-path/"), "{remembered}");
+    assert!(doctor.contains("claude remembered"), "{doctor}");
+
+    let refused = sandbox.fail(&["config", "set", "last_claude_path", "/bin/anything"]);
+    assert!(refused.contains("only be read or unset"), "{refused}");
+
+    sandbox.run(&["config", "unset", "last_claude_path"]);
+    let cleared = sandbox.run(&["config", "get", "last_claude_path"]);
+    assert!(!cleared.contains("on-path"), "{cleared}");
+}

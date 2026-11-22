@@ -29,6 +29,9 @@ pub fn plan_launch(
         ports.notices.warn(warning);
     }
     let hook_bin = ports.hook_binary.path()?;
+    if !ports.shell.is_executable(&hook_bin) {
+        return Err(LaunchError::HookNotExecutable(hook_bin));
+    }
     let transcript_exists = session
         .claude_session_id
         .as_deref()

@@ -4,7 +4,7 @@ use serde_json::{Value, json};
 
 use crate::modules::launch::domain::hooks_settings::hooks_settings_json;
 
-// PLAN §0.3: the JSON of hooks, literally as specified
+// PLAN §0.3 + §2.0 bug 4: the JSON of hooks, literally as specified
 #[test]
 fn the_settings_json_matches_the_plan() {
     let actual: Value =
@@ -14,19 +14,21 @@ fn the_settings_json_matches_the_plan() {
         "UserPromptSubmit":[{"hooks":[{"type":"command","command":"/abs/lithemux-hook prompt-submit","timeout":2}]}],
         "Stop":[{"hooks":[{"type":"command","command":"/abs/lithemux-hook stop","timeout":2}]}],
         "Notification":[{"hooks":[{"type":"command","command":"/abs/lithemux-hook notification","timeout":2}]}],
-        "SessionEnd":[{"hooks":[{"type":"command","command":"/abs/lithemux-hook session-end","timeout":2}]}]}});
+        "SessionEnd":[{"hooks":[{"type":"command","command":"/abs/lithemux-hook session-end","timeout":2}]}],
+        "PostToolUse":[{"hooks":[{"type":"command","command":"/abs/lithemux-hook post-tool-use","timeout":2}]}],
+        "PostToolUseFailure":[{"hooks":[{"type":"command","command":"/abs/lithemux-hook post-tool-use-failure","timeout":2}]}]}});
     assert_eq!(actual, expected);
 }
 
-// PLAN §0.3: only five events, nothing as frequent as PreToolUse
+// PLAN §0.3 + §2.0 bug 4 + D-20: the five events plus the two that close a
+// tool call, never PreToolUse
 #[test]
-fn only_five_events_and_no_pre_tool_use() {
+fn seven_events_and_no_pre_tool_use() {
     let settings: Value =
         serde_json::from_str(&hooks_settings_json(Path::new("/abs/lithemux-hook"))).unwrap();
     let hooks = settings["hooks"].as_object().unwrap();
-    assert_eq!(hooks.len(), 5);
+    assert_eq!(hooks.len(), 7);
     assert!(!hooks.contains_key("PreToolUse"));
-    assert!(!hooks.contains_key("PostToolUse"));
 }
 
 // PLAN §0.3: hook commands run through a shell, so a path with spaces must survive

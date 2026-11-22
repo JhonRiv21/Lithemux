@@ -21,8 +21,10 @@ gpui = { git = "https://github.com/zed-industries/zed", rev = "d01b134cddf5e4f71
 gpui_platform = { git = "https://github.com/zed-industries/zed", rev = "d01b134cddf5e4f71964deb2d6f81cdb38fcf1e7", default-features = false, features = ["font-kit", "runtime_shaders"] }
 insta = "1.49"
 portable-pty = "0.9"
+proc-macro2 = { version = "1", features = ["span-locations"] }
 rusqlite = { version = "0.43", features = ["bundled"] }
-rustix = { version = "1.1", features = ["process"] }
+rustix = { version = "1.1", features = ["net", "process"] }
+syn = { version = "2", features = ["full", "visit"] }
 signal-hook = { version = "0.3", default-features = false, features = ["iterator"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

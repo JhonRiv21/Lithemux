@@ -1,5 +1,5 @@
 use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ShellMode {
@@ -12,12 +12,16 @@ pub enum ShellMode {
 
 /// Asks the user's shell and file system about `claude`.
 pub trait ShellProbe {
-    /// Stdout of running `script` in the user's shell with stdin closed, or
-    /// `None` when it fails or takes longer than `timeout`.
+    /// What `script` printed in the user's shell with stdin closed, without
+    /// anything the shell's own startup or exit printed around it. `None`
+    /// when it fails or takes longer than `timeout`.
     fn run(&self, mode: ShellMode, script: &str, timeout: Duration) -> Option<String>;
     fn is_executable(&self, path: &Path) -> bool;
     /// Raw output of `<claude> --version`, or `None` on failure or timeout.
     fn version_output(&self, claude_bin: &Path, timeout: Duration) -> Option<String>;
-    /// The user's temporary directory (`$TMPDIR`), when known.
-    fn temp_dir(&self) -> Option<PathBuf>;
+    /// The clock the waits are measured with.
+    fn now(&self) -> Instant;
+    /// The folders where files are temporary on this machine: a `claude`
+    /// found there is something another tool put on the PATH.
+    fn temporary_roots(&self) -> Vec<PathBuf>;
 }

@@ -5,6 +5,7 @@ use std::ops::Range;
 
 use gpui::{Bounds, Context, EntityInputHandler, Pixels, Point, UTF16Selection, Window, point};
 
+use super::ime_log::{size_of, trace};
 use super::view::TerminalView;
 
 impl EntityInputHandler for TerminalView {
@@ -19,7 +20,12 @@ impl EntityInputHandler for TerminalView {
         let end = range_utf16.end.min(units.len());
         let start = range_utf16.start.min(end);
         adjusted_range.replace(start..end);
-        Some(String::from_utf16_lossy(&units[start..end]))
+        let text = String::from_utf16_lossy(&units[start..end]);
+        trace(format_args!(
+            "text_for_range {range_utf16:?} -> {}",
+            size_of(&text)
+        ));
+        Some(text)
     }
 
     fn selected_text_range(
@@ -29,6 +35,7 @@ impl EntityInputHandler for TerminalView {
         _: &mut Context<Self>,
     ) -> Option<UTF16Selection> {
         let cursor = self.composition.cursor_utf16();
+        trace(format_args!("selected_text_range -> {cursor}"));
         Some(UTF16Selection {
             range: cursor..cursor,
             reversed: false,
@@ -36,10 +43,16 @@ impl EntityInputHandler for TerminalView {
     }
 
     fn marked_text_range(&self, _: &mut Window, _: &mut Context<Self>) -> Option<Range<usize>> {
-        self.composition.marked_range_utf16()
+        let marked = self.composition.marked_range_utf16();
+        trace(format_args!("marked_text_range -> {marked:?}"));
+        marked
     }
 
     fn unmark_text(&mut self, _: &mut Window, cx: &mut Context<Self>) {
+        trace(format_args!(
+            "unmark_text (composing {})",
+            size_of(self.composition.marked())
+        ));
         self.composition.unmark();
         cx.notify();
     }
@@ -51,19 +64,29 @@ impl EntityInputHandler for TerminalView {
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let bytes = self.composition.commit(range_utf16, text);
+        let composing = size_of(self.composition.marked());
+        let bytes = self.composition.commit(range_utf16.clone(), text);
+        trace(format_args!(
+            "replace_text_in_range {range_utf16:?} {} (composing {composing}) -> {} bytes sent",
+            size_of(text),
+            bytes.len()
+        ));
         self.send(bytes, cx);
         cx.notify();
     }
 
     fn replace_and_mark_text_in_range(
         &mut self,
-        _: Option<Range<usize>>,
+        range_utf16: Option<Range<usize>>,
         new_text: &str,
-        _: Option<Range<usize>>,
+        selected_utf16: Option<Range<usize>>,
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        trace(format_args!(
+            "replace_and_mark_text_in_range {range_utf16:?} {} selected {selected_utf16:?}",
+            size_of(new_text)
+        ));
         self.composition.mark(new_text);
         cx.notify();
     }

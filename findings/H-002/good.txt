@@ -1,0 +1,3 @@
+    detach_from_terminal(&mut command);
+    let unsafety = "none";
+    // The workspace has a single `unsafe`, in platform/process.

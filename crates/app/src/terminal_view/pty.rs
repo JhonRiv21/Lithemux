@@ -1,5 +1,6 @@
 //! The child process and its pseudo terminal.
 
+use std::ffi::OsString;
 use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -7,9 +8,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use portable_pty::{CommandBuilder, MasterPty, PtySize, native_pty_system};
+use portable_pty::{Child, CommandBuilder, MasterPty, PtySize, native_pty_system};
 use rustix::process::{Pid, Signal, kill_process_group};
 
+use super::child_env::child_env;
 use super::error::TerminalError;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -64,6 +66,7 @@ impl GridSize {
 /// How long a program gets to leave after the hangup before it is killed.
 const HANGUP_GRACE: Duration = Duration::from_millis(200);
 const REAP_POLL: Duration = Duration::from_millis(10);
+const ROOT: &str = "/";
 
 pub struct PtyProcess {
     master: Box<dyn MasterPty + Send>,
@@ -83,32 +86,26 @@ impl PtyProcess {
         command: &ShellCommand,
         size: GridSize,
     ) -> Result<(Self, PtyStreams), TerminalError> {
+        Self::spawn_in(command, size, std::env::vars_os())
+    }
+
+    /// `inherited` is the environment of the process that starts the
+    /// terminal; the program gets what `child_env` makes of it.
+    pub(super) fn spawn_in(
+        command: &ShellCommand,
+        size: GridSize,
+        inherited: impl Iterator<Item = (OsString, OsString)>,
+    ) -> Result<(Self, PtyStreams), TerminalError> {
         let pair = native_pty_system()
             .openpty(size.pty_size())
             .map_err(|error| TerminalError::OpenPty(error.to_string()))?;
-
-        let mut builder = CommandBuilder::new(&command.program);
-        if !command.inherit_env {
-            builder.env_clear();
-        }
-        builder.args(&command.args);
-        if let Some(cwd) = &command.cwd {
-            builder.cwd(cwd);
-        }
-        builder.env("TERM", "xterm-256color");
-        builder.env("COLORTERM", "truecolor");
-        builder.env("TERM_PROGRAM", "lithemux");
-        for (name, value) in &command.env {
-            builder.env(name, value);
-        }
-
-        let mut child =
-            pair.slave
-                .spawn_command(builder)
-                .map_err(|error| TerminalError::Spawn {
-                    program: command.program.clone(),
-                    message: error.to_string(),
-                })?;
+        let child = pair
+            .slave
+            .spawn_command(builder(command, inherited))
+            .map_err(|error| TerminalError::Spawn {
+                program: command.program.clone(),
+                message: error.to_string(),
+            })?;
         let attach = |error: anyhow::Error| TerminalError::Attach(error.to_string());
         let streams = PtyStreams {
             reader: pair.master.try_clone_reader().map_err(attach)?,
@@ -118,20 +115,11 @@ impl PtyProcess {
             .process_id()
             .and_then(|pid| i32::try_from(pid).ok())
             .and_then(Pid::from_raw);
-        let reaped = Arc::new(AtomicBool::new(false));
-        // Reaps the child so it does not stay around as a zombie.
-        thread::spawn({
-            let reaped = Arc::clone(&reaped);
-            move || {
-                let _ = child.wait();
-                reaped.store(true, Ordering::Release);
-            }
-        });
         Ok((
             Self {
                 master: pair.master,
                 group,
-                reaped,
+                reaped: reap_in_background(child),
             },
             streams,
         ))
@@ -141,6 +129,51 @@ impl PtyProcess {
         // A PTY whose child is gone refuses the resize; nothing to do then.
         let _ = self.master.resize(size.pty_size());
     }
+}
+
+fn builder(
+    command: &ShellCommand,
+    inherited: impl Iterator<Item = (OsString, OsString)>,
+) -> CommandBuilder {
+    let env = child_env(command, inherited);
+    let mut builder = CommandBuilder::new(&command.program);
+    builder.env_clear();
+    builder.args(&command.args);
+    builder.cwd(working_directory(command, &env));
+    for (name, value) in env {
+        builder.env(name, value);
+    }
+    builder
+}
+
+/// Where the program starts, always a directory that exists: the one the
+/// command asks for, else the user's home, else the root. Left to itself the
+/// PTY library uses `HOME` unchecked, and a home that is gone then keeps the
+/// terminal from starting with an error that names the program.
+fn working_directory(command: &ShellCommand, env: &[(OsString, OsString)]) -> PathBuf {
+    let home = env
+        .iter()
+        .find(|(name, _)| name == "HOME")
+        .map(|(_, home)| PathBuf::from(home));
+    [command.cwd.clone(), home]
+        .into_iter()
+        .flatten()
+        .find(|directory| directory.is_dir())
+        .unwrap_or_else(|| PathBuf::from(ROOT))
+}
+
+/// Waits for the child so it does not stay around as a zombie; the flag is
+/// set once its pid is free to be someone else's.
+fn reap_in_background(mut child: Box<dyn Child + Send + Sync>) -> Arc<AtomicBool> {
+    let reaped = Arc::new(AtomicBool::new(false));
+    thread::spawn({
+        let reaped = Arc::clone(&reaped);
+        move || {
+            let _ = child.wait();
+            reaped.store(true, Ordering::Release);
+        }
+    });
+    reaped
 }
 
 impl Drop for PtyProcess {

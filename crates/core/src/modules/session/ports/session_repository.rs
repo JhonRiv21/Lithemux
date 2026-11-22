@@ -30,5 +30,12 @@ pub trait SessionRepository {
         unless: Option<State>,
     ) -> Result<(), SessionError>;
 
+    /// Records activity without touching the state. Unknown ids are ignored.
+    fn touch_activity(&self, id: &str, at: i64) -> Result<(), SessionError>;
+
+    /// Moves a session to `to` only while it is in `from`; anything else,
+    /// unknown ids included, is left alone.
+    fn move_state(&self, id: &str, from: State, to: State) -> Result<(), SessionError>;
+
     fn delete(&self, id: &str) -> Result<(), SessionError>;
 }

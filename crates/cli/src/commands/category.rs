@@ -1,8 +1,7 @@
-use std::path::Path;
-
-use anyhow::{Context, bail};
+use anyhow::bail;
 use lithemux_core::modules::category::{
-    BoardStore, NewCategory, Slug, create_category, get_category, list_categories, remove_category,
+    BoardStore, FsDirectories, NewCategory, Slug, create_category, get_category, list_categories,
+    locate_directory, remove_category,
 };
 use lithemux_core::platform::clock::system_clock::now_unix;
 
@@ -20,7 +19,7 @@ pub fn add(args: CatAddArgs) -> anyhow::Result<()> {
         NewCategory {
             slug: Slug::parse(&args.slug)?,
             name: args.name,
-            root_dir: existing_dir(&args.root)?,
+            root_dir: locate_directory(&FsDirectories, &args.root)?,
             color: args.color,
         },
         now_unix(),
@@ -53,14 +52,4 @@ pub fn remove(slug: &str, yes: bool) -> anyhow::Result<()> {
     remove_category(&wiring.categories(), slug)?;
     output::category::removed(&category, &wiring.boards().path(&category.slug));
     Ok(())
-}
-
-pub fn existing_dir(path: &Path) -> anyhow::Result<String> {
-    let absolute = path
-        .canonicalize()
-        .with_context(|| format!("{} is not an existing directory", path.display()))?;
-    if !absolute.is_dir() {
-        bail!("{} is not a directory", absolute.display());
-    }
-    Ok(absolute.display().to_string())
 }

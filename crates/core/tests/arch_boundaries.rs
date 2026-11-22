@@ -1,7 +1,13 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+#[path = "arch/foreign_domain_types.rs"]
+mod foreign_domain_types;
 #[path = "arch/rules.rs"]
 mod rules;
+// Shared with the other guards; this binary does not use all of it.
+#[allow(dead_code)]
+#[path = "guards/tokens.rs"]
+mod tokens;
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -111,4 +117,86 @@ fn a_feature_door_exists_only_in_the_app_crate() {
             describe(&violations)
         );
     }
+}
+
+// PLAN §2.0 point 12 (audit I2): a door also re-exports use cases, and a
+// domain may only take the types a door exposes from its own domain,
+// however the path to them is written
+#[test]
+fn a_domain_cannot_take_a_use_case_from_any_door_by_any_spelling() {
+    let violations = check(&fixture("bad"));
+    for (file, line) in [
+        ("session/domain/domain_purity_foreign_use_case.rs", 1),
+        (
+            "session/domain/domain_purity_foreign_use_case_grouped.rs",
+            3,
+        ),
+        (
+            "session/domain/domain_purity_foreign_use_case_through_the_module.rs",
+            4,
+        ),
+        (
+            "session/domain/domain_purity_foreign_use_case_under_an_alias.rs",
+            4,
+        ),
+        (
+            "session/domain/domain_purity_foreign_use_case_through_super.rs",
+            2,
+        ),
+        (
+            "session/domain/domain_purity_foreign_use_case_inside_a_macro.rs",
+            4,
+        ),
+        ("category/domain/domain_purity_own_use_case.rs", 1),
+        (
+            "session/domain/domain_purity_foreign_use_case_as_a_raw_identifier.rs",
+            1,
+        ),
+    ] {
+        let found: Vec<&Violation> = violations
+            .iter()
+            .filter(|violation| violation.file.ends_with(file))
+            .collect();
+        assert_eq!(found.len(), 1, "{file}:\n{}", describe(&violations));
+        assert_eq!(found[0].rule, "domain-purity");
+        assert_eq!(found[0].line, line, "{file}");
+        assert!(found[0].detail.contains("create_category"), "{file}");
+    }
+}
+
+// Audit I2: a use case cannot reach the door dressed as a domain name
+#[test]
+fn a_domain_cannot_reexport_what_is_not_its_own() {
+    let violations = check(&fixture("bad"));
+    let found: Vec<&Violation> = violations
+        .iter()
+        .filter(|violation| {
+            violation
+                .file
+                .ends_with("domain_purity_reexported_use_case.rs")
+        })
+        .collect();
+    assert!(
+        found.iter().any(|v| v.detail.contains("re-exports")),
+        "{}",
+        describe(&violations)
+    );
+    assert!(found.iter().all(|v| v.rule == "domain-purity"));
+}
+
+// Audit of the delta: a glob over every module brings every door in at once
+#[test]
+fn a_domain_cannot_import_every_module_at_once() {
+    let violations = check(&fixture("bad"));
+    assert!(
+        violations.iter().any(|violation| {
+            violation
+                .file
+                .ends_with("domain_purity_every_module_at_once.rs")
+                && violation.rule == "domain-purity"
+                && violation.line == 1
+        }),
+        "{}",
+        describe(&violations)
+    );
 }

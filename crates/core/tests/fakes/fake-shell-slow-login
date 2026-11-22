@@ -1,0 +1,14 @@
+#!/bin/sh
+# Test double for a machine where the interactive shell fails at once and
+# the plain login shell is slow to answer: a profile that takes a second
+# and a half.
+PATH="$(dirname "$0")/on-path:/usr/bin:/bin"
+export PATH
+case "$1" in
+  -lic) exit 1 ;;
+  -lc)
+    sleep 1.5
+    exec /bin/sh -c "$2"
+    ;;
+  *) exec /bin/sh ;;
+esac

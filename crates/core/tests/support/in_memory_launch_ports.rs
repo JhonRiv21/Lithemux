@@ -18,6 +18,15 @@ impl HookBinary for FixedHookBinary {
     }
 }
 
+/// A hook binary at a path the test chose.
+pub struct HookBinaryAt(pub PathBuf);
+
+impl HookBinary for HookBinaryAt {
+    fn path(&self) -> Result<PathBuf, LaunchError> {
+        Ok(self.0.clone())
+    }
+}
+
 // Same contract as ClaudeProjectsTranscriptLocator.
 #[derive(Default)]
 pub struct InMemoryTranscripts {

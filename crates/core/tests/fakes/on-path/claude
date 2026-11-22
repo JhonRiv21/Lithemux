@@ -1,0 +1,4 @@
+#!/bin/sh
+# What `command -v claude` finds in fake-shell-lingering: the fake, never the
+# real one.
+exec "$(dirname "$0")/../fake-claude" "$@"

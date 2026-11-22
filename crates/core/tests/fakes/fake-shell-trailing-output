@@ -1,0 +1,15 @@
+#!/bin/sh
+# Test double for a login shell that prints after it answered: an exit hook
+# of the profile, or a job that reports when the shell is done. What it
+# prints is a path that looks exactly like an answer.
+PATH="$(dirname "$0")/on-path:/usr/bin:/bin"
+export PATH
+case "$1" in
+  -lic | -lc)
+    /bin/sh -c "$2"
+    status=$?
+    echo "$(dirname "$0")/decoy/claude"
+    exit $status
+    ;;
+  *) exec /bin/sh ;;
+esac

@@ -21,6 +21,7 @@ name = "integration"
 path = "tests/integration/main.rs"
 
 [dependencies]
+lithemux-core.workspace = true
 alacritty_terminal.workspace = true
 anyhow.workspace = true
 async-channel.workspace = true

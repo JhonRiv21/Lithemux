@@ -1,23 +1,42 @@
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use lithemux_core::modules::launch::{ShellMode, ShellProbe};
+use lithemux_core::modules::launch::{ShellMode, ShellProbe, TEMPORARY_ROOTS};
 
 // Same contract as LoginShellProbe: `None` stands for a failure or a timeout.
-#[derive(Default)]
+// Its clock is made up: a question takes what `taking` says, or nothing when
+// it is answered and its whole wait when it is not.
 pub struct FakeShellProbe {
     outputs: HashMap<(ShellMode, String), String>,
     executables: Vec<PathBuf>,
     versions: HashMap<PathBuf, String>,
-    temp_dir: Option<PathBuf>,
+    temporary_roots: Vec<PathBuf>,
+    costs: HashMap<ShellMode, Duration>,
+    started: Instant,
+    elapsed: Cell<Duration>,
     pub calls: RefCell<Vec<(ShellMode, String, Duration)>>,
 }
 
 impl FakeShellProbe {
     pub fn new() -> Self {
-        Self::default()
+        FakeShellProbe {
+            outputs: HashMap::new(),
+            executables: Vec::new(),
+            versions: HashMap::new(),
+            temporary_roots: TEMPORARY_ROOTS.iter().map(PathBuf::from).collect(),
+            costs: HashMap::new(),
+            started: Instant::now(),
+            elapsed: Cell::new(Duration::ZERO),
+            calls: RefCell::new(Vec::new()),
+        }
+    }
+
+    /// How long every question in that shell mode takes, answered or not.
+    pub fn taking(mut self, mode: ShellMode, time: Duration) -> Self {
+        self.costs.insert(mode, time);
+        self
     }
 
     /// What `script` prints in that shell mode. A mode without output behaves
@@ -40,7 +59,7 @@ impl FakeShellProbe {
     }
 
     pub fn temp_dir(mut self, path: &str) -> Self {
-        self.temp_dir = Some(PathBuf::from(path));
+        self.temporary_roots.push(PathBuf::from(path));
         self
     }
 }
@@ -50,7 +69,19 @@ impl ShellProbe for FakeShellProbe {
         self.calls
             .borrow_mut()
             .push((mode, script.to_string(), timeout));
-        self.outputs.get(&(mode, script.to_string())).cloned()
+        let answer = self.outputs.get(&(mode, script.to_string())).cloned();
+        let unanswered = if answer.is_some() {
+            Duration::ZERO
+        } else {
+            timeout
+        };
+        let took = self.costs.get(&mode).copied().unwrap_or(unanswered);
+        self.elapsed.set(self.elapsed.get() + took);
+        answer
+    }
+
+    fn now(&self) -> Instant {
+        self.started + self.elapsed.get()
     }
 
     fn is_executable(&self, path: &Path) -> bool {
@@ -61,7 +92,7 @@ impl ShellProbe for FakeShellProbe {
         self.versions.get(claude_bin).cloned()
     }
 
-    fn temp_dir(&self) -> Option<PathBuf> {
-        self.temp_dir.clone()
+    fn temporary_roots(&self) -> Vec<PathBuf> {
+        self.temporary_roots.clone()
     }
 }

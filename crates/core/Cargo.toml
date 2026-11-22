@@ -19,7 +19,16 @@ uuid.workspace = true
 
 [dev-dependencies]
 insta.workspace = true
+proc-macro2.workspace = true
+syn.workspace = true
 tempfile.workspace = true
 
-[lints]
-workspace = true
+# The workspace forbids `unsafe`; this crate denies it instead, so that the
+# single documented exception in platform/process/detached.rs can be allowed
+# where it is (docs/decisiones.md D-27). Keep the rest equal to the workspace.
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"

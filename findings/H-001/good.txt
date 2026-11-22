@@ -1,0 +1,3 @@
+    let output = command_without_session_markers(path).arg("stop").output();
+    let mut command = ShellCommand::new(program);
+    let session = TerminalSession::spawn(&command, GridSize::INITIAL)?;

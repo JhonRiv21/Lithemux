@@ -1,17 +1,9 @@
-use crate::modules::category::{BoardStore, CategoryRepository};
+use crate::modules::context::application::context_ports::ContextPorts;
 use crate::modules::context::application::resolve_language::resolve_language;
 use crate::modules::context::domain::context_input::ContextInput;
 use crate::modules::context::domain::render_context::render_context;
 use crate::modules::context::error::ContextError;
-use crate::modules::session::{Session, SessionRepository, find_session_by_id, list_sessions};
-use crate::modules::settings::SettingsRepository;
-
-pub struct ContextPorts<'a> {
-    pub categories: &'a dyn CategoryRepository,
-    pub sessions: &'a dyn SessionRepository,
-    pub settings: &'a dyn SettingsRepository,
-    pub boards: &'a dyn BoardStore,
-}
+use crate::modules::session::{Session, find_session_by_id, list_sessions};
 
 /// Built from stored state on every call, so it reflects the category as it
 /// is right now.

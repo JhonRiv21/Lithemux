@@ -13,6 +13,11 @@ pub enum LaunchError {
     #[error("could not find `claude`: {0}")]
     ClaudeNotFound(String),
 
+    #[error(
+        "{0} is missing or not executable; reinstall lithemux so that lithemux-hook sits next to this binary"
+    )]
+    HookNotExecutable(PathBuf),
+
     #[error("session \"{0}\" has no Claude session id")]
     MissingClaudeSessionId(String),
 

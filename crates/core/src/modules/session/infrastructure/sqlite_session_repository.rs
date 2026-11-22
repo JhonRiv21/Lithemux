@@ -172,6 +172,20 @@ impl SessionRepository for SqliteSessionRepository<'_> {
         )
     }
 
+    fn touch_activity(&self, id: &str, at: i64) -> Result<(), SessionError> {
+        self.execute(
+            "UPDATE sessions SET last_activity_at = ?2 WHERE id = ?1",
+            params![id, at],
+        )
+    }
+
+    fn move_state(&self, id: &str, from: State, to: State) -> Result<(), SessionError> {
+        self.execute(
+            "UPDATE sessions SET state = ?3 WHERE id = ?1 AND state = ?2",
+            params![id, from.as_str(), to.as_str()],
+        )
+    }
+
     fn delete(&self, id: &str) -> Result<(), SessionError> {
         self.execute("DELETE FROM sessions WHERE id = ?1", [id])
     }

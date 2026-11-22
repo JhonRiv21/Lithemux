@@ -1,4 +1,4 @@
-use rusqlite::Connection;
+use rusqlite::{Connection, TransactionBehavior};
 
 use crate::platform::store::error::StoreError;
 
@@ -41,7 +41,22 @@ pub fn user_version(conn: &Connection) -> Result<i64, StoreError> {
     Ok(conn.pragma_query_value(None, "user_version", |row| row.get(0))?)
 }
 
+/// Safe to run from several processes at once: the write lock is taken
+/// before the version is trusted, so only the first one migrates.
 pub fn migrate(conn: &mut Connection) -> Result<(), StoreError> {
+    if checked_version(conn)? >= SCHEMA_VERSION {
+        return Ok(());
+    }
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    if checked_version(&tx)? < 1 {
+        tx.execute_batch(MIGRATION_1)?;
+        tx.pragma_update(None, "user_version", 1)?;
+    }
+    tx.commit()?;
+    Ok(())
+}
+
+fn checked_version(conn: &Connection) -> Result<i64, StoreError> {
     let found = user_version(conn)?;
     if found > SCHEMA_VERSION {
         return Err(StoreError::SchemaTooNew {
@@ -49,11 +64,5 @@ pub fn migrate(conn: &mut Connection) -> Result<(), StoreError> {
             supported: SCHEMA_VERSION,
         });
     }
-    if found < 1 {
-        let tx = conn.transaction()?;
-        tx.execute_batch(MIGRATION_1)?;
-        tx.pragma_update(None, "user_version", 1)?;
-        tx.commit()?;
-    }
-    Ok(())
+    Ok(found)
 }

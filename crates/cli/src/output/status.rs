@@ -1,8 +1,6 @@
 use lithemux_core::modules::category::Category;
-use lithemux_core::modules::session::{Kind, Session};
+use lithemux_core::modules::session::{ActivityAge, Kind, Session};
 use serde::Serialize;
-
-use crate::output::elapsed;
 
 #[derive(Serialize)]
 pub struct SessionStatus {
@@ -98,8 +96,15 @@ fn row(status: &SessionStatus, marker: &str, name_width: usize, now: i64) -> Str
         "{marker}{:name_width$}  {:10}  {:12}  {:16}  {}",
         status.name,
         session.state.as_str(),
-        elapsed::since(now, session.last_activity_at),
+        last_activity(now, session.last_activity_at),
         open,
         session.role
+    )
+}
+
+fn last_activity(now: i64, at: Option<i64>) -> String {
+    at.map_or_else(
+        || "never".to_string(),
+        |at| ActivityAge::between(now, at).to_string(),
     )
 }

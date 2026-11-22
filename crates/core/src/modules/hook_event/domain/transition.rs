@@ -11,35 +11,54 @@ pub const WAITING_NOTIFICATIONS: [&str; 3] = [
     "elicitation_url_dialog",
 ];
 
+/// `SessionStart` sources that open a conversation. `compact` is not one:
+/// it fires in the middle of a turn.
+const COMPACT_SOURCE: &str = "compact";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Transition {
-    pub state: State,
-    /// Whether the event counts as activity (`last_activity_at`).
-    pub touches_activity: bool,
-    /// A current state that the transition must leave alone.
-    pub preserves: Option<State>,
+pub enum Transition {
+    Set {
+        state: State,
+        /// Whether the event counts as activity (`last_activity_at`).
+        touches_activity: bool,
+        /// A current state that the transition must leave alone.
+        preserves: Option<State>,
+    },
+    /// Counts as activity; the state stays as it is.
+    Activity,
+    /// Applies only to a session that is in `from`.
+    Move { from: State, to: State },
 }
 
 /// What an event does to the session's state; `None` when it changes nothing.
 pub fn transition(event: HookEvent, input: &HookInput) -> Option<Transition> {
-    let change = |state, touches_activity| Transition {
+    let set = |state, touches_activity| Transition::Set {
         state,
         touches_activity,
         preserves: None,
     };
     match event {
-        HookEvent::SessionStart | HookEvent::Stop => Some(change(State::Idle, true)),
-        HookEvent::PromptSubmit => Some(change(State::Working, true)),
+        HookEvent::SessionStart if input.source.as_deref() == Some(COMPACT_SOURCE) => {
+            Some(Transition::Activity)
+        }
+        HookEvent::SessionStart | HookEvent::Stop => Some(set(State::Idle, true)),
+        HookEvent::PromptSubmit => Some(set(State::Working, true)),
         HookEvent::Notification => input
             .notification_type
             .as_deref()
             .filter(|kind| WAITING_NOTIFICATIONS.contains(kind))
-            .map(|_| change(State::Waiting, false)),
+            .map(|_| set(State::Waiting, false)),
         // The app writes `hibernated` before it stops a session on purpose.
-        HookEvent::SessionEnd => Some(Transition {
+        HookEvent::SessionEnd => Some(Transition::Set {
             state: State::Ended,
             touches_activity: false,
             preserves: Some(State::Hibernated),
+        }),
+        // The permission was granted and the tool ran, well or badly: the
+        // turn goes on.
+        HookEvent::PostToolUse | HookEvent::PostToolUseFailure => Some(Transition::Move {
+            from: State::Waiting,
+            to: State::Working,
         }),
     }
 }

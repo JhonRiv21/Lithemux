@@ -1,8 +1,13 @@
 use crate::modules::settings::domain::setting_key::SettingKey;
 
-/// The settings a user can change from the command line.
-pub const CONFIGURABLE_KEYS: [SettingKey; 2] =
-    [SettingKey::ClaudePath, SettingKey::ContextLanguage];
+/// The settings the command line knows. The user changes the first two;
+/// `last_claude_path` is written by the launcher and can only be read or
+/// unset from here.
+pub const CONFIGURABLE_KEYS: [SettingKey; 3] = [
+    SettingKey::ClaudePath,
+    SettingKey::ContextLanguage,
+    SettingKey::LastClaudePath,
+];
 
 pub fn configurable_key(name: &str) -> Option<SettingKey> {
     CONFIGURABLE_KEYS
@@ -20,6 +25,7 @@ pub fn checked_value(key: SettingKey, value: &str) -> Result<String, &'static st
             language @ ("es" | "en") => Ok(language.to_string()),
             _ => Err("expected `es` or `en`"),
         },
+        SettingKey::LastClaudePath => Err("lithemux writes this one; it can only be read or unset"),
         _ => Err("this setting cannot be changed from the command line"),
     }
 }

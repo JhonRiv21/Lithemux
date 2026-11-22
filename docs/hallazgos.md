@@ -10,7 +10,9 @@ scripts/lint-findings --staged   # solo lo que está en stage (lo usa el pre-com
 scripts/lint-findings ARCHIVO... # archivos concretos
 ```
 
-Códigos de salida: `0` limpio, `1` hay hallazgos, `2` una regla está rota.
+Códigos de salida: `0` limpio, `1` hay hallazgos, `2` una regla está rota o no había nada que revisar.
+
+Sin argumentos, el lint lista los archivos con git. Si la lista sale vacía (no hay repositorio, por ejemplo) **falla**: no revisar nada no es lo mismo que no encontrar nada. La salida dice cuántos archivos revisó.
 
 ## Cómo es una regla
 
@@ -20,6 +22,7 @@ Una carpeta `findings/H-00N/` con:
 |---|---|
 | `pattern` | una expresión regular extendida (`grep -E`) |
 | `paths` | opcional: regex que debe cumplir la ruta del archivo; por defecto `\.rs$` |
+| `exclude` | opcional: regex de las rutas que la regla deja en paz (el único lugar donde el patrón es legítimo) |
 | `bad.txt` | un ejemplo que la regla **debe** marcar |
 | `good.txt` | un ejemplo que la regla **debe** dejar pasar |
 | `README.md` | la fase en que apareció y el porqué |
@@ -28,4 +31,9 @@ Antes de revisar el repo, cada regla se prueba contra sus dos ejemplos. Si no ma
 
 ## Estado
 
-El mecanismo arranca con **cero reglas**. Su funcionamiento se prueba en `crates/core/tests/findings_lint.rs` con una regla de muestra en un directorio temporal.
+| Regla | Fase | Qué impide |
+|---|---|---|
+| `H-001` | F1 (prueba manual), corregido en §2.0 | Lanzar un proceso sin quitarle los marcadores de sesión de Claude Code y de cmux |
+| `H-002` | §2.0 | `unsafe` fuera de `platform/process/detached.rs`, su única excepción |
+
+El funcionamiento del mecanismo se prueba en `crates/core/tests/findings_lint.rs` con una regla de muestra en un directorio temporal.

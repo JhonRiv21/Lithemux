@@ -1,0 +1,13 @@
+#!/bin/sh
+# Test double for a login shell whose profile leaves a process behind that
+# keeps the shell's stdout open, like a `.zshrc` that starts something with
+# `&`. Unlike fake-shell, it finds a `claude` (the fake one) on its PATH.
+# The pids of what it leaves behind go to $LITHEMUX_HOME/left-behind.pids.
+sleep 30 &
+[ -n "$LITHEMUX_HOME" ] && echo $! >> "$LITHEMUX_HOME/left-behind.pids"
+PATH="$(dirname "$0")/on-path:/usr/bin:/bin"
+export PATH
+case "$1" in
+  -lic | -lc) exec /bin/sh -c "$2" ;;
+  *) exec /bin/sh ;;
+esac

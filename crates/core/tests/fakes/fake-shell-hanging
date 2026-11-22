@@ -1,0 +1,3 @@
+#!/bin/sh
+# Test double for a login shell whose profile never finishes, in any mode.
+sleep 30

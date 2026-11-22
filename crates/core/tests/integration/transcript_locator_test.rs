@@ -9,7 +9,9 @@ use lithemux_core::modules::launch::{
 use lithemux_core::modules::session::Kind;
 
 use crate::support::fake_shell_probe::FakeShellProbe;
-use crate::support::in_memory_launch_ports::{FixedHookBinary, InMemoryLocks, RecordingRunner};
+use crate::support::in_memory_launch_ports::{
+    FixedHookBinary, HOOK_PATH, InMemoryLocks, RecordingRunner,
+};
 use crate::support::in_memory_store::{InMemoryBoards, InMemoryStore};
 use crate::support::recording_ports::RecordingNotices;
 use crate::support::sample_data::{add_category, add_session};
@@ -62,11 +64,14 @@ fn the_launcher_resumes_only_when_the_transcript_exists_on_disk() {
     let claude_id = session.claude_session_id.clone().unwrap();
     let category = get_category(&store, "demo").unwrap();
 
-    let probe = FakeShellProbe::new().executable("/bin/claude").answers(
-        ShellMode::LoginInteractive,
-        "command -v claude",
-        "/bin/claude",
-    );
+    let probe = FakeShellProbe::new()
+        .executable("/bin/claude")
+        .executable(HOOK_PATH)
+        .answers(
+            ShellMode::LoginInteractive,
+            "command -v claude",
+            "/bin/claude",
+        );
     let runner = RecordingRunner::exiting_with(0);
     let locator = ClaudeProjectsTranscriptLocator::in_config_dir(home.path().join(".claude"));
     let ports = LaunchPorts {

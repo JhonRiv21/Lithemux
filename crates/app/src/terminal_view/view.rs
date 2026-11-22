@@ -2,16 +2,17 @@
 
 use gpui::{
     App, Bounds, ClipboardItem, Context, ElementInputHandler, FocusHandle, Focusable, IntoElement,
-    KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point, Render,
-    ScrollEvent, Size, Subscription, Task, Window, canvas, div, prelude::*,
+    KeyDownEvent, MouseButton, Pixels, Render, Size, Subscription, Task, Window, canvas, div,
+    prelude::*,
 };
 
 use super::composition::Composition;
 use super::grid::CursorSnapshot;
+use super::ime_log::{kind_of_key, trace};
 use super::keys::{KeyModifiers, KeyPress};
 use super::paint::{FontMetrics, Frame, measure, paint_frame};
 use super::pty::GridSize;
-use super::session::{GridPoint, SelectionKind, TerminalSession};
+use super::session::TerminalSession;
 
 /// Where the grid was painted last, to map pointer positions to cells.
 #[derive(Clone, Copy)]
@@ -22,12 +23,12 @@ pub(super) struct Placement {
 }
 
 pub struct TerminalView {
-    session: TerminalSession,
-    focus_handle: FocusHandle,
+    pub(super) session: TerminalSession,
+    pub(super) focus_handle: FocusHandle,
     pub(super) composition: Composition,
     pub(super) placement: Option<Placement>,
-    selecting: bool,
-    wheel_remainder: f32,
+    pub(super) selecting: bool,
+    pub(super) wheel_remainder: f32,
     _repaint_on_output: Task<()>,
     _focus_subscriptions: [Subscription; 2],
 }
@@ -88,6 +89,7 @@ impl TerminalView {
     }
 
     fn report_focus(&mut self, focused: bool, cx: &mut Context<Self>) {
+        trace(format_args!("focus {focused}"));
         self.session.report_focus(focused);
         cx.notify();
     }
@@ -136,7 +138,22 @@ impl TerminalView {
             "v" if only_platform => self.paste(cx),
             "c" if only_platform => self.copy(cx),
             key => {
-                if !self.session.press(KeyPress { key, modifiers }) {
+                let sent = self.session.press(KeyPress { key, modifiers });
+                trace(format_args!(
+                    "key_down {} {modifiers:?} held {} -> {}",
+                    kind_of_key(
+                        key,
+                        keystroke.key_char.is_some(),
+                        modifiers.control || modifiers.platform
+                    ),
+                    event.is_held,
+                    if sent {
+                        "sent as a key"
+                    } else {
+                        "left to the input method"
+                    }
+                ));
+                if !sent {
                     return;
                 }
                 self.composition.reset();
@@ -159,85 +176,6 @@ impl TerminalView {
         if let Some(text) = self.session.selected_text() {
             cx.write_to_clipboard(ClipboardItem::new_string(text));
         }
-    }
-
-    fn cell_at(&self, position: Point<Pixels>) -> Option<GridPoint> {
-        let placement = self.placement?;
-        let x = f32::from(position.x - placement.bounds.origin.x).max(0.0);
-        let y = f32::from(position.y - placement.bounds.origin.y).max(0.0);
-        let cell_width = f32::from(placement.cell.width);
-        let column = x / cell_width;
-        Some(GridPoint {
-            line: (y / f32::from(placement.cell.height)) as usize,
-            column: column as usize,
-            right_half: column.fract() > 0.5,
-        })
-    }
-
-    fn on_mouse_down(
-        &mut self,
-        event: &MouseDownEvent,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        window.focus(&self.focus_handle, cx);
-        let Some(at) = self.cell_at(event.position) else {
-            return;
-        };
-        let kind = match event.click_count {
-            0 | 1 => SelectionKind::Cells,
-            2 => SelectionKind::Words,
-            _ => SelectionKind::Lines,
-        };
-        self.session.start_selection(kind, at);
-        self.selecting = true;
-        cx.notify();
-    }
-
-    fn on_mouse_move(&mut self, event: &MouseMoveEvent, _: &mut Window, cx: &mut Context<Self>) {
-        if !self.selecting || event.pressed_button != Some(MouseButton::Left) {
-            return;
-        }
-        if let Some(to) = self.cell_at(event.position) {
-            self.session.extend_selection(to);
-            cx.notify();
-        }
-    }
-
-    fn on_mouse_up(&mut self, _: &MouseUpEvent, _: &mut Window, cx: &mut Context<Self>) {
-        self.selecting = false;
-        // A click without a drag leaves an empty selection behind.
-        if self.session.selected_text().is_none() {
-            self.session.clear_selection();
-        }
-        cx.notify();
-    }
-
-    fn on_scroll(&mut self, event: &ScrollEvent, _: &mut Window, cx: &mut Context<Self>) {
-        let Some(placement) = self.placement else {
-            return;
-        };
-        let cell_height = f32::from(placement.cell.height);
-        let moved = f32::from(event.delta.pixel_delta(placement.cell.height).y);
-        let total = self.wheel_remainder + moved / cell_height;
-        let lines = total.trunc();
-        self.wheel_remainder = total - lines;
-        let lines = lines as i32;
-        if lines == 0 {
-            return;
-        }
-        if self.session.modes().wheel_as_arrows {
-            let press = KeyPress {
-                key: if lines > 0 { "up" } else { "down" },
-                modifiers: KeyModifiers::default(),
-            };
-            for _ in 0..lines.unsigned_abs() {
-                self.session.press(press);
-            }
-        } else {
-            self.session.scroll(lines);
-        }
-        cx.notify();
     }
 }
 

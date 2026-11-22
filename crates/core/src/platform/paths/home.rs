@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::platform::paths::error::PathsError;
+use crate::platform::paths::fs_error::FsError;
 
 pub const HOME_ENV: &str = "LITHEMUX_HOME";
 pub const SESSION_ENV: &str = "LITHEMUX_SESSION_ID";
@@ -24,10 +25,23 @@ impl Home {
             .ok_or(PathsError::NoDataDir)
     }
 
+    /// Always absolute: the value is handed on to children that run in
+    /// other directories.
     pub fn env_override() -> Option<PathBuf> {
         std::env::var_os(HOME_ENV)
             .filter(|value| !value.is_empty())
             .map(PathBuf::from)
+            .map(|path| std::path::absolute(&path).unwrap_or(path))
+    }
+
+    /// Creates the directory when needed and proves that files can be
+    /// written in it.
+    pub fn check_writable(&self) -> Result<(), FsError> {
+        let probe = self.0.join(".write-probe");
+        std::fs::create_dir_all(&self.0)
+            .and_then(|()| std::fs::write(&probe, b""))
+            .and_then(|()| std::fs::remove_file(&probe))
+            .map_err(|error| FsError::new(format!("writing in {}", self.0.display()), error))
     }
 
     pub fn path(&self) -> &Path {

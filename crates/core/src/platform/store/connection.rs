@@ -9,6 +9,9 @@ use crate::platform::store::error::StoreError;
 use crate::platform::store::migrations;
 
 const BUSY_TIMEOUT: Duration = Duration::from_millis(250);
+/// Creating and migrating happens once and may queue behind other processes
+/// doing the same, so it waits longer than everyday queries.
+const SETUP_BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub struct Db {
     conn: Connection,
@@ -20,10 +23,11 @@ impl Db {
         fs::create_dir_all(home.path())
             .map_err(|e| FsError::new(format!("creating {}", home.path().display()), e))?;
         let mut conn = Connection::open(home.db_path())?;
-        conn.busy_timeout(BUSY_TIMEOUT)?;
+        conn.busy_timeout(SETUP_BUSY_TIMEOUT)?;
         conn.pragma_update(None, "journal_mode", "WAL")?;
         conn.pragma_update(None, "foreign_keys", "ON")?;
         migrations::migrate(&mut conn)?;
+        conn.busy_timeout(BUSY_TIMEOUT)?;
         Ok(Db { conn })
     }
 

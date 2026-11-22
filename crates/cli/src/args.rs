@@ -10,11 +10,11 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 )]
 pub struct Cli {
     #[command(subcommand)]
-    pub command: Command,
+    pub command: CliCommand,
 }
 
 #[derive(Subcommand)]
-pub enum Command {
+pub enum CliCommand {
     /// Manage categories
     Cat {
         #[command(subcommand)]

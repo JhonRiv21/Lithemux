@@ -12,6 +12,8 @@ use lithemux_core::platform::paths::home::Home;
 use lithemux_core::platform::store::connection::Db;
 use tempfile::TempDir;
 
+use crate::sandbox::hook;
+
 /// A real LITHEMUX_HOME with the category `demo`: a mother and one child.
 pub struct SeededHome {
     pub dir: TempDir,
@@ -88,13 +90,6 @@ impl SeededHome {
             .env("LITHEMUX_SESSION_ID", &self.executor.id);
         command
     }
-}
-
-/// The hook binary with a clean environment.
-pub fn hook() -> Command {
-    let mut command = Command::cargo_bin("lithemux-hook").unwrap();
-    command.env_clear();
-    command
 }
 
 pub fn fixture(name: &str) -> String {

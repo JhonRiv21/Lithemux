@@ -90,6 +90,14 @@ No se persigue cobertura. Se prueba lo que puede fallar de verdad, **desde la es
 6. **Guardas de fuente única:**
    - un test que falla si alguna ruta interna de `~/.claude/` aparece fuera de `launch/infrastructure/transcript_locator.rs` (la única lectura permitida, PLAN principio 4);
    - otro que falla si aparece un cliente HTTP o un SDK de telemetría en `Cargo.lock`.
+   - **Las guardas protegen contra errores honestos, no contra la evasión deliberada.** Deben atrapar lo que alguien escribiría sin mala intención:
+     - alias (`use x as y`);
+     - globs;
+     - rutas relativas;
+     - macros de uso común (`env!`, `cargo_bin!`);
+     - el mismo patrón en otra forma sintáctica.
+     
+     Lo que solo existe para esquivar (`r#ident`, `extern crate self as x`, `concat!` para armar nombres, `include!` o `#[path]` hacia archivos que no son `.rs`) se documenta como fuera de alcance. Normalizar `r#` y escanear todo `src/` es barato y se hace igual.
 7. **Lint de hallazgos:** `scripts/lint-findings` (o un test `tests/findings_lint.rs`). Cada bug que llegue a un commit o a la revisión de una fase se vuelve una regla `H-00N`:
    - con la fase en que apareció, el porqué, un ejemplo `bad` que debe marcar y uno `good` que debe dejar pasar;
    - antes de revisar el repo, cada regla se prueba contra sus dos ejemplos;

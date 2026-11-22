@@ -287,6 +287,14 @@ Informe en `docs/fases/F1-reporte.md` con la tabla de resultados.
 
 Se ejecuta con la tecnología que salga de la Fase 1. Las subfases se describen para gpui.
 
+Por su tamaño, la Fase 2 se ejecuta en **cuatro bloques**, cada uno con su checklist de cierre, su auditoría independiente y su commit:
+1. §2.0;
+2. §2.1;
+3. §2.2 y §2.3;
+4. §2.4 a §2.6.
+
+Los criterios de aceptación de la fase se verifican al cerrar el último bloque.
+
 ### 2.0 Correcciones de la auditoría de la Fase 0 (antes de cualquier otra cosa)
 
 La auditoría independiente del commit `ac69f71` encontró estos fallos.
@@ -387,6 +395,8 @@ La auditoría independiente del commit `ac69f71` encontró estos fallos.
 - Scrollback por defecto: 10.000 líneas, configurable.
 - Solo los paneles visibles se pintan. Las terminales ocultas no consumen GPU.
 - El lanzamiento usa `core::launch`, con candado incluido.
+- **Entorno heredado de cmux:** adelantado a la §2.0 con la auditoría de ese bloque (D-22). Ya no es trabajo de esta subfase.
+- El SessionHost es el dueño del PTY y **mata al hijo al cerrar** la sesión o la app. Así se cierra el riesgo de doble reanudación que queda en la CLI cuando el padre muere por `SIGKILL` (D-03, §2.0 punto 14).
 - Servidor de socket en `<home>/app.sock`: recibe los eventos del hook y actualiza el estado en vivo. La fuente de verdad sigue siendo la BD.
 
 ### 2.2 Barra lateral
@@ -488,6 +498,50 @@ Al abrir la app:
 
 - Perfiles genéricos definidos por configuración (comando, args, si soporta resume, adaptador de hooks): Codex, modelos locales (Ollama) y comandos propios.
 - Port a Windows: ConPTY (portable-pty), rutas, socket → named pipe, señales → `TerminateProcess`, y presión de memoria con la API de Windows.
+
+---
+
+## Fase 5 — Panel de estadísticas de uso (futuro lejano; se planifica en detalle al llegar)
+
+**Objetivo:** ver cuántos tokens gasta Jhon, en qué y cuándo, sin leer archivos internos de Claude Code y sin que nada salga de la máquina.
+
+### Fuente de datos
+
+- **La exportación OpenTelemetry documentada de Claude Code,** apuntada a un receptor **local** de la app.
+  - Se activa con `CLAUDE_CODE_ENABLE_TELEMETRY=1`, `OTEL_METRICS_EXPORTER`/`OTEL_LOGS_EXPORTER=otlp`, `OTEL_EXPORTER_OTLP_PROTOCOL=http/json` y `OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:<puerto>`, en el entorno del `claude` que lanza `core::launch`.
+  - Los datos van de Claude a lithemux, dentro de la máquina; no salen a ningún servicio. Hay que verificar al llegar que esa variable no active también ningún envío propio de Anthropic. Si lo hace, la fase se replantea.
+- **Qué trae, según la documentación de entonces** (verificar al llegar):
+  - tokens por tipo (input, output, cache read, cache creation) y por modelo;
+  - costo estimado;
+  - eventos de petición a la API con duración;
+  - uso de herramientas;
+  - el `session.id`, que se cruza con nuestras sesiones y categorías.
+- **El receptor:** un listener mínimo en `127.0.0.1`, solo OTLP/HTTP con JSON, implementado sin un framework HTTP para no romper la guarda de Cargo.lock.
+  - Es la única excepción al principio de «cero red»: solo loopback.
+  - Va en un único módulo, con una guarda que lo verifique.
+  - Requiere su propia decisión documentada.
+- **Persistencia:** los datos se agregan en la BD (`usage_events` crudos con retención configurable, más agregados por día).
+- **Limitación conocida:** solo hay datos desde que se activa. El histórico anterior está en los transcripts, que son formato interno. Un importador opcional, de una sola vez y marcado como frágil, se decide al llegar a esta fase; no se hace por defecto.
+
+### Vistas
+
+- **Mapa de calor anual estilo GitHub:** una celda por día, con la intensidad según los tokens (o el costo, a elegir) y el detalle del día al pasar el puntero.
+- **Totales por día, semana y mes,** con comparación contra el periodo anterior.
+- **Tops:**
+  - modelos más usados;
+  - sesiones y categorías («agentes») que más gastan;
+  - subagentes, si los eventos los distinguen.
+- **Desglose:**
+  - input frente a output y cache;
+  - tiempo de respuesta (duración de las peticiones);
+  - tiempo activo por sesión, a partir de los estados working/idle que ya registra el hook.
+- Filtros por categoría, sesión, modelo y rango de fechas.
+- Exportar a CSV o XLSX, local.
+
+### Riesgos
+
+- Los nombres de las métricas y de los atributos de OTel pueden cambiar entre versiones de Claude Code: se aíslan en un traductor con tests de contrato.
+- El volumen de eventos: hay que agregar y podar para que la BD no crezca sin límite.
 
 ---
 

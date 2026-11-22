@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use crate::platform::paths::fs_error::FsError;
 use crate::platform::store::error::StoreError;
 
@@ -17,6 +19,9 @@ pub enum CategoryError {
 
     #[error("category \"{0}\" not found")]
     NotFound(String),
+
+    #[error("{0} is not an existing directory")]
+    NotADirectory(PathBuf),
 
     #[error(transparent)]
     Store(#[from] StoreError),

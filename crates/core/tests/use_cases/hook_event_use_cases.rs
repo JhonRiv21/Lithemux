@@ -231,3 +231,71 @@ fn garbage_on_stdin_still_updates_the_state() {
     assert_eq!(world.fire("stop", "<<not json>>", NOW), None);
     assert_eq!(world.executor_now().state, State::Idle);
 }
+
+fn put_executor_in(world: &World, state: State, at: i64) {
+    apply_state(&world.store, &world.executor.id, state, Some(at), None).unwrap();
+}
+
+// PLAN §2.0 bug 3: a compaction happens in the middle of a turn
+#[test]
+fn a_compaction_keeps_the_state_and_still_delivers_the_context() {
+    for state in [State::Working, State::Waiting] {
+        let world = World::new();
+        put_executor_in(&world, state, NOW);
+
+        let stdout = world.fire("session-start", r#"{"source":"compact"}"#, NOW + 60);
+
+        let session = world.executor_now();
+        assert_eq!(session.state, state);
+        assert_eq!(session.last_activity_at, Some(NOW + 60));
+        assert!(stdout.unwrap().contains("demo-ejecutora"));
+    }
+}
+
+// PLAN §2.0 bug 4: approving the permission lets the tool run
+#[test]
+fn a_finished_tool_takes_a_waiting_session_back_to_working() {
+    let world = World::new();
+    put_executor_in(&world, State::Waiting, NOW);
+
+    let stdout = world.fire("post-tool-use", "{}", NOW + 5);
+
+    assert_eq!(stdout, None);
+    assert_eq!(world.executor_now().state, State::Working);
+}
+
+// PLAN §2.0 bug 4: "sin tocar ningún otro estado"
+#[test]
+fn a_finished_tool_changes_no_state_other_than_waiting() {
+    for state in [
+        State::New,
+        State::Working,
+        State::Idle,
+        State::Hibernated,
+        State::Ended,
+    ] {
+        let world = World::new();
+        put_executor_in(&world, state, NOW);
+
+        world.fire("post-tool-use", "{}", NOW + 5);
+
+        let session = world.executor_now();
+        assert_eq!(session.state, state);
+        assert_eq!(session.last_activity_at, Some(NOW));
+        assert!(world.log.lines.borrow().is_empty());
+    }
+}
+
+// docs/decisiones.md D-20: a tool that fails after its permission was
+// granted also lets the turn go on
+#[test]
+fn a_failed_tool_takes_a_waiting_session_back_to_working_too() {
+    let world = World::new();
+    put_executor_in(&world, State::Waiting, NOW);
+
+    let stdout = world.fire("post-tool-use-failure", "{}", NOW + 5);
+
+    assert_eq!(stdout, None);
+    assert_eq!(world.executor_now().state, State::Working);
+    assert!(world.log.lines.borrow().is_empty());
+}

@@ -158,3 +158,28 @@ fn the_database_enforces_uniqueness_and_allowed_values() {
     );
     assert!(bad_profile.is_err());
 }
+
+// PLAN §2.0 bug 2 (audit M9): a start that finds the database busy for a
+// moment waits instead of failing
+#[test]
+fn opening_waits_for_a_database_that_is_busy_for_a_moment() {
+    let temp = TempHome::new();
+    std::fs::create_dir_all(temp.home.path()).unwrap();
+    let path = temp.home.db_path();
+    let (locked, wait_for_lock) = std::sync::mpsc::channel();
+    let holder = std::thread::spawn(move || {
+        let mut conn = rusqlite::Connection::open(path).unwrap();
+        let tx = conn
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Exclusive)
+            .unwrap();
+        locked.send(()).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(700));
+        tx.commit().unwrap();
+    });
+    wait_for_lock.recv().unwrap();
+
+    let opened = Db::open(&temp.home);
+
+    holder.join().unwrap();
+    assert!(opened.is_ok(), "{:?}", opened.err());
+}

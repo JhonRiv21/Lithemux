@@ -162,6 +162,18 @@ impl SessionRepository for InMemoryStore {
         })
     }
 
+    fn touch_activity(&self, id: &str, at: i64) -> Result<(), SessionError> {
+        self.update(id, |s| s.last_activity_at = Some(at))
+    }
+
+    fn move_state(&self, id: &str, from: State, to: State) -> Result<(), SessionError> {
+        self.update(id, |s| {
+            if s.state == from {
+                s.state = to;
+            }
+        })
+    }
+
     fn delete(&self, id: &str) -> Result<(), SessionError> {
         self.sessions.borrow_mut().retain(|s| s.id != id);
         Ok(())

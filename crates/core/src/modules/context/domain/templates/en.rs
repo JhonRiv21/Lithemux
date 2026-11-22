@@ -1,26 +1,14 @@
 use crate::modules::context::domain::templates::phrases::Phrases;
-use crate::modules::session::State;
+use crate::modules::session::{ActivityAge, State};
 
 pub struct En;
 
 impl En {
-    fn last_activity(elapsed: Option<i64>) -> String {
-        let Some(seconds) = elapsed else {
-            return "no activity yet".to_string();
-        };
-        let (minutes, hours, days) = (seconds / 60, seconds / 3600, seconds / 86_400);
-        let ago = if minutes < 1 {
-            "just now".to_string()
-        } else if hours < 1 {
-            format!("{minutes} min ago")
-        } else if days < 1 {
-            format!("{hours} h ago")
-        } else if days == 1 {
-            "1 day ago".to_string()
-        } else {
-            format!("{days} days ago")
-        };
-        format!("last activity {ago}")
+    fn last_activity(age: Option<ActivityAge>) -> String {
+        match age {
+            Some(age) => format!("last activity {age}"),
+            None => "no activity yet".to_string(),
+        }
     }
 }
 
@@ -72,7 +60,7 @@ impl Phrases for En {
         name: &str,
         role: &str,
         state: State,
-        elapsed: Option<i64>,
+        age: Option<ActivityAge>,
         shell: bool,
     ) -> String {
         let shell = if shell {
@@ -83,7 +71,7 @@ impl Phrases for En {
         format!(
             "{name} ({shell}role: {role}; state: {}, {})",
             state.as_str(),
-            Self::last_activity(elapsed)
+            Self::last_activity(age)
         )
     }
 

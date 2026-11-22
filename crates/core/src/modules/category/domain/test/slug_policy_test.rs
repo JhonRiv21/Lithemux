@@ -40,3 +40,10 @@ fn slug_newtype_only_holds_valid_slugs() {
     assert_eq!(Slug::parse("demo").unwrap().as_str(), "demo");
     assert!(Slug::parse("Demo").is_err());
 }
+
+// docs/decisiones.md D-07: at most 48 characters
+#[test]
+fn slug_is_capped_at_forty_eight_characters() {
+    assert!(is_valid_slug(&"a".repeat(48)));
+    assert!(!is_valid_slug(&"a".repeat(49)));
+}

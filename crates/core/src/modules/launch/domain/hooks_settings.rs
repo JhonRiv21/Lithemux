@@ -8,8 +8,10 @@ pub struct HookBinding {
     pub timeout_secs: u32,
 }
 
-/// Only five events. `PreToolUse` is left out on purpose: it fires too often.
-pub const HOOK_BINDINGS: [HookBinding; 5] = [
+/// Seven events. `PreToolUse` is left out on purpose: it would run before
+/// every tool. `PostToolUse` and `PostToolUseFailure` are in only to leave
+/// `waiting` once a permission was granted.
+pub const HOOK_BINDINGS: [HookBinding; 7] = [
     HookBinding {
         claude_event: "SessionStart",
         subcommand: "session-start",
@@ -33,6 +35,16 @@ pub const HOOK_BINDINGS: [HookBinding; 5] = [
     HookBinding {
         claude_event: "SessionEnd",
         subcommand: "session-end",
+        timeout_secs: 2,
+    },
+    HookBinding {
+        claude_event: "PostToolUse",
+        subcommand: "post-tool-use",
+        timeout_secs: 2,
+    },
+    HookBinding {
+        claude_event: "PostToolUseFailure",
+        subcommand: "post-tool-use-failure",
         timeout_secs: 2,
     },
 ];

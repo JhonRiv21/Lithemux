@@ -1,4 +1,5 @@
 use anyhow::bail;
+use lithemux_core::modules::category::{FsDirectories, locate_directory};
 use lithemux_core::modules::context::{ContextPorts, build_session_context};
 use lithemux_core::modules::session::{
     Kind, NewSession, Profile, SessionRef, create_session, get_session, remove_session,
@@ -7,7 +8,6 @@ use lithemux_core::modules::session::{
 use lithemux_core::platform::clock::system_clock::now_unix;
 
 use crate::args::{NewArgs, ProfileArg, SetArgs};
-use crate::commands::category::existing_dir;
 use crate::output;
 use crate::prompt;
 use crate::wiring::Wiring;
@@ -30,7 +30,11 @@ pub fn new(args: NewArgs) -> anyhow::Result<()> {
                 ProfileArg::Claude => Profile::Claude,
                 ProfileArg::Shell => Profile::Shell,
             },
-            cwd: args.cwd.as_deref().map(existing_dir).transpose()?,
+            cwd: args
+                .cwd
+                .as_deref()
+                .map(|cwd| locate_directory(&FsDirectories, cwd))
+                .transpose()?,
             model: args.model,
         },
         now_unix(),

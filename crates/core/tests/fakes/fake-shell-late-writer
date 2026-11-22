@@ -1,0 +1,16 @@
+#!/bin/sh
+# Test double for a login shell whose profile starts jobs that write a path
+# to the shell's stdout around the moment the shell answers and after it is
+# gone. With job control
+# (`set -m`, as in an interactive shell) the job has its own process group,
+# so killing the shell's group does not reach it.
+set -m 2> /dev/null
+for delay in 0 0.001 0.002 0.003 0.004 0.006 0.008 0.012 0.016 0.024; do
+  (sleep "$delay"; echo /bin/ls) &
+done
+PATH="$(dirname "$0")/on-path:/usr/bin:/bin"
+export PATH
+case "$1" in
+  -lic | -lc) exec /bin/sh -c "$2" ;;
+  *) exec /bin/sh ;;
+esac

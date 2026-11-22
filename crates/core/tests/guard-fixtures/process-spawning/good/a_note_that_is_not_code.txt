@@ -1,0 +1,2 @@
+Every process goes through command_without_session_markers; a ShellCommand
+describes what a terminal runs. Unbalanced ( and ' on purpose.

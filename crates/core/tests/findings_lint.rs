@@ -39,7 +39,7 @@ fn source(dir: &TempDir, name: &str, text: &str) -> PathBuf {
     path
 }
 
-// CLAUDE.md «Pruebas» 7: the mechanism starts with zero rules, and the repo is clean
+// CLAUDE.md «Pruebas» 7: the repo is clean under its own rules
 #[test]
 fn the_repository_passes_its_own_findings_lint() {
     let output = lint(None, &[]);
@@ -49,7 +49,28 @@ fn the_repository_passes_its_own_findings_lint() {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    assert!(String::from_utf8_lossy(&output.stdout).contains("no findings"));
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    assert!(stdout.contains("no findings"), "{stdout}");
+    // "N rule(s), M file(s), no findings": it must have looked at the repo.
+    let reviewed: usize = stdout
+        .split(", ")
+        .find_map(|part| part.strip_suffix(" file(s)"))
+        .and_then(|count| count.trim().parse().ok())
+        .unwrap();
+    assert!(reviewed > 200, "only {reviewed} files were reviewed");
+}
+
+// Audit of the delta: with nothing to review (no git repository to list the
+// files) the lint says so instead of reporting a clean repo
+#[test]
+fn reviewing_no_files_is_a_failure_and_not_a_clean_result() {
+    let output = Command::new(workspace().join("scripts/lint-findings"))
+        .env("GIT_DIR", "/nonexistent/lithemux-no-repository")
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("no files to check"));
 }
 
 // CLAUDE.md «Pruebas» 7: a rule flags its bad example in real code
@@ -114,4 +135,19 @@ fn a_rule_only_looks_at_the_paths_it_declares() {
     assert_eq!(lint(Some(rules.path()), &[&notes]).status.code(), Some(0));
     fs::write(rules.path().join("H-900/paths"), "\\.md$\n").unwrap();
     assert_eq!(lint(Some(rules.path()), &[&notes]).status.code(), Some(1));
+}
+
+// PLAN §2.0 point 19: a rule can name the one place where the pattern belongs.
+#[test]
+fn a_rule_leaves_alone_the_paths_it_excludes() {
+    let rules = sample_rules("dbg!(1);\n", "ok\n");
+    let allowed = source(&rules, "debug_console.rs", "fn main() {\n    dbg!(1);\n}\n");
+    let elsewhere = source(&rules, "leftover.rs", "fn main() {\n    dbg!(1);\n}\n");
+    fs::write(rules.path().join("H-900/exclude"), "debug_console\\.rs$\n").unwrap();
+
+    assert_eq!(lint(Some(rules.path()), &[&allowed]).status.code(), Some(0));
+    assert_eq!(
+        lint(Some(rules.path()), &[&elsewhere]).status.code(),
+        Some(1)
+    );
 }

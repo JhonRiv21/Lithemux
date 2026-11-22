@@ -1,0 +1,5 @@
+#!/bin/sh
+# A `claude` that is never the answer of the shell: fake-shell-trailing-output
+# prints its path after the lookup finished. No test may end up running it.
+echo "the decoy was run" >&2
+exit 97

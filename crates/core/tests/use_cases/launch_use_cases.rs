@@ -1,9 +1,10 @@
+use std::cell::Cell;
 use std::path::PathBuf;
 
 use lithemux_core::modules::category::get_category;
 use lithemux_core::modules::launch::{
-    LaunchEnvironment, LaunchError, LaunchPorts, SessionLocks, ShellMode, hooks_settings_json,
-    open_session, plan_launch,
+    LaunchEnvironment, LaunchError, LaunchPorts, SessionLocks, ShellMode, TranscriptLocator,
+    hooks_settings_json, open_session, plan_launch,
 };
 use lithemux_core::modules::session::{
     Kind, Profile, Session, SessionRef, create_session, find_session_by_id,
@@ -37,6 +38,7 @@ impl World {
             store,
             probe: FakeShellProbe::new()
                 .executable(CLAUDE)
+                .executable(HOOK_PATH)
                 .answers(ShellMode::LoginInteractive, "command -v claude", CLAUDE)
                 .version(CLAUDE, "2.1.330 (Claude Code)"),
             notices: RecordingNotices::default(),
@@ -178,6 +180,62 @@ fn a_session_that_is_already_open_cannot_be_opened_again() {
     assert!(runner.plans.borrow().is_empty());
 }
 
+/// Notes whether the session was locked when the transcript was looked up.
+struct TranscriptsSeenUnderLock<'a> {
+    locks: &'a InMemoryLocks,
+    session_id: &'a str,
+    locked_when_asked: Cell<Option<bool>>,
+}
+
+impl TranscriptLocator for TranscriptsSeenUnderLock<'_> {
+    fn exists(&self, _: &str) -> bool {
+        self.locked_when_asked
+            .set(Some(self.locks.holder(self.session_id).is_some()));
+        false
+    }
+}
+
+// PLAN §2.0 bug 5: whether to resume is decided with the lock already held,
+// so two launches cannot both conclude that the conversation is new
+#[test]
+fn the_transcript_is_looked_up_with_the_session_already_locked() {
+    let world = World::new();
+    let runner = RecordingRunner::exiting_with(0);
+    let transcripts = TranscriptsSeenUnderLock {
+        locks: &world.locks,
+        session_id: &world.executor.id,
+        locked_when_asked: Cell::new(None),
+    };
+    let ports = LaunchPorts {
+        transcripts: &transcripts,
+        ..world.ports(&runner)
+    };
+
+    open_session(&ports, &environment(), &target()).unwrap();
+
+    assert_eq!(transcripts.locked_when_asked.get(), Some(true));
+}
+
+// PLAN §2.0 bug 9: without the hook the session would run with no state and
+// no context, so it does not start at all
+#[test]
+fn open_fails_before_launching_when_the_hook_binary_is_not_executable() {
+    let mut world = World::new();
+    world.probe = FakeShellProbe::new().executable(CLAUDE).answers(
+        ShellMode::LoginInteractive,
+        "command -v claude",
+        CLAUDE,
+    );
+    let runner = RecordingRunner::exiting_with(0);
+
+    let error = open_session(&world.ports(&runner), &environment(), &target()).unwrap_err();
+
+    assert!(matches!(error, LaunchError::HookNotExecutable(_)));
+    assert!(error.to_string().contains(HOOK_PATH), "{error}");
+    assert!(runner.plans.borrow().is_empty());
+    assert_eq!(world.locks.holder(&world.executor.id), None);
+}
+
 // docs/decisiones.md: `open` stores the version claude reports
 #[test]
 fn open_records_the_claude_version() {
@@ -194,11 +252,10 @@ fn open_records_the_claude_version() {
 #[test]
 fn open_still_launches_when_the_version_is_unknown() {
     let mut world = World::new();
-    world.probe = FakeShellProbe::new().executable(CLAUDE).answers(
-        ShellMode::LoginInteractive,
-        "command -v claude",
-        CLAUDE,
-    );
+    world.probe = FakeShellProbe::new()
+        .executable(CLAUDE)
+        .executable(HOOK_PATH)
+        .answers(ShellMode::LoginInteractive, "command -v claude", CLAUDE);
     let runner = RecordingRunner::exiting_with(0);
     assert_eq!(
         open_session(&world.ports(&runner), &environment(), &target()).unwrap(),
@@ -214,11 +271,10 @@ fn open_still_launches_when_the_version_is_unknown() {
 #[test]
 fn the_fallback_warning_reaches_the_user() {
     let mut world = World::new();
-    world.probe = FakeShellProbe::new().executable(CLAUDE).answers(
-        ShellMode::Login,
-        "command -v claude",
-        CLAUDE,
-    );
+    world.probe = FakeShellProbe::new()
+        .executable(CLAUDE)
+        .executable(HOOK_PATH)
+        .answers(ShellMode::Login, "command -v claude", CLAUDE);
     let runner = RecordingRunner::exiting_with(0);
     open_session(&world.ports(&runner), &environment(), &target()).unwrap();
     assert_eq!(world.notices.warnings.borrow().len(), 1);

@@ -1,0 +1,3 @@
+    unsafe { command.pre_exec(|| Ok(())) };
+#[allow(unsafe_code)]
+unsafe fn raw() {}

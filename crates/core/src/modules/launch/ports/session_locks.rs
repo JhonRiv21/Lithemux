@@ -11,7 +11,8 @@ pub trait HeldSessionLock {
 pub trait SessionLocks {
     /// Fails with `LaunchError::AlreadyOpen` when another process holds it.
     fn acquire(&self, session_id: &str) -> Result<Box<dyn HeldSessionLock>, LaunchError>;
-    /// `Some(pid)` while a process holds the session; the pid is 0 when it
-    /// was not recorded.
+    /// `Some(pid)` while a live process holds the session: the one running
+    /// it, or the launcher until that one starts. Only a hint for people;
+    /// `acquire` is what decides.
     fn holder(&self, session_id: &str) -> Option<u32>;
 }

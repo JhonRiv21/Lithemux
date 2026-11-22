@@ -1,4 +1,4 @@
-use crate::modules::session::State;
+use crate::modules::session::{ActivityAge, State};
 
 /// One sentence per method. Every sentence states a fact: wording that reads
 /// like a system order can trip Claude's injection defenses.
@@ -16,13 +16,13 @@ pub trait Phrases {
     fn no_sisters(&self) -> &'static str;
     fn more(&self, hidden: usize) -> String;
 
-    /// `elapsed` is the number of seconds since the last activity.
+    /// `age` is `None` for a session that was never active.
     fn entry(
         &self,
         name: &str,
         role: &str,
         state: State,
-        elapsed: Option<i64>,
+        age: Option<ActivityAge>,
         shell: bool,
     ) -> String;
 

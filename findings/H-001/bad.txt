@@ -1,0 +1,3 @@
+    let output = Command::new(path).arg("stop").output();
+    let mut builder = CommandBuilder::new(&command.program);
+    let child = std::process::Command::new(shell).spawn()?;

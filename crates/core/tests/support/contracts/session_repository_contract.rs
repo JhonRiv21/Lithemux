@@ -119,6 +119,35 @@ pub fn session_repository_contract(
         .update_state("missing", State::Idle, Some(1), None)
         .unwrap();
 
+    // Activity alone leaves the state where it was.
+    sessions.touch_activity("s2", 500).unwrap();
+    let s2 = sessions.find_by_id("s2").unwrap().unwrap();
+    assert_eq!(
+        (s2.state, s2.last_activity_at),
+        (State::Hibernated, Some(500))
+    );
+    sessions.touch_activity("missing", 1).unwrap();
+
+    // A conditional move applies only from the named state.
+    sessions
+        .move_state("s2", State::Waiting, State::Working)
+        .unwrap();
+    assert_eq!(
+        sessions.find_by_id("s2").unwrap().unwrap().state,
+        State::Hibernated
+    );
+    sessions
+        .update_state("s2", State::Waiting, None, None)
+        .unwrap();
+    sessions
+        .move_state("s2", State::Waiting, State::Working)
+        .unwrap();
+    let s2 = sessions.find_by_id("s2").unwrap().unwrap();
+    assert_eq!((s2.state, s2.last_activity_at), (State::Working, Some(500)));
+    sessions
+        .move_state("missing", State::Waiting, State::Working)
+        .unwrap();
+
     // Deleting a session, then a category with its sessions.
     sessions.delete("s1").unwrap();
     assert_eq!(sessions.list_in("c1").unwrap().len(), 1);

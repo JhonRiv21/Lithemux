@@ -4,6 +4,8 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use super::foreign_domain_types::{DomainExports, domain_exports, domain_violations};
+
 const LAYERS: [&str; 5] = ["domain", "application", "ports", "infrastructure", "error"];
 const JUNK_DRAWERS: [&str; 4] = ["utils", "helpers", "common", "misc"];
 
@@ -20,17 +22,21 @@ pub fn check(root: &Path) -> Vec<Violation> {
     let mut files = Vec::new();
     collect(root, &mut files);
     files.sort();
+    let sources: Vec<(String, String)> = files
+        .iter()
+        .filter_map(|path| {
+            let relative = path
+                .strip_prefix(root)
+                .unwrap_or(path)
+                .to_string_lossy()
+                .replace('\\', "/");
+            Some((relative, fs::read_to_string(path).ok()?))
+        })
+        .collect();
+    let exports = domain_exports(sources.iter().map(|(file, text)| (&**file, &**text)));
     let mut violations = Vec::new();
-    for path in files {
-        let relative = path
-            .strip_prefix(root)
-            .unwrap_or(&path)
-            .to_string_lossy()
-            .replace('\\', "/");
-        let Ok(text) = fs::read_to_string(&path) else {
-            continue;
-        };
-        check_file(&relative, &text, &mut violations);
+    for (relative, text) in &sources {
+        check_file(relative, text, &exports, &mut violations);
     }
     violations
 }
@@ -80,7 +86,7 @@ fn classify(relative: &str) -> FileKind<'_> {
     }
 }
 
-fn check_file(relative: &str, text: &str, out: &mut Vec<Violation>) {
+fn check_file(relative: &str, text: &str, exports: &DomainExports, out: &mut Vec<Violation>) {
     let kind = classify(relative);
     let mut report = |rule: &'static str, line: usize, detail: String| {
         out.push(Violation {
@@ -106,6 +112,12 @@ fn check_file(relative: &str, text: &str, out: &mut Vec<Violation>) {
             1,
             format!("`{stem}` says nothing about what lives there"),
         );
+    }
+
+    if let (true, Some(own)) = (kind.in_domain, kind.module) {
+        for (line, why) in domain_violations(relative, text, own, exports) {
+            report("domain-purity", line, why);
+        }
     }
 
     let declares_only = is_declaration_only_file(&kind);

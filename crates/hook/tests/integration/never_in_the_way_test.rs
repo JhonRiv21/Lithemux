@@ -1,8 +1,10 @@
+use std::os::unix::net::{UnixListener, UnixStream};
 use std::time::{Duration, Instant};
 
 use lithemux_core::modules::session::State;
 
-use crate::seeded_home::{SeededHome, fixture, hook};
+use crate::sandbox::hook;
+use crate::seeded_home::{SeededHome, fixture};
 
 fn assert_silent_success(output: &std::process::Output) {
     assert_eq!(output.status.code(), Some(0));
@@ -144,4 +146,52 @@ fn nothing_makes_it_fail() {
         .output()
         .unwrap();
     assert_silent_success(&output);
+}
+
+const SOCKET_BUDGET: Duration = Duration::from_millis(500);
+
+fn stop_takes(seeded: &SeededHome) -> Duration {
+    let started = Instant::now();
+    let output = seeded
+        .hook("stop")
+        .write_stdin(fixture("stop.json"))
+        .output()
+        .unwrap();
+    assert_silent_success(&output);
+    assert_eq!(seeded.executor_now().state, State::Idle);
+    started.elapsed()
+}
+
+// PLAN §2.0 bug 10: an app that accepts and never reads costs the hook nothing
+#[test]
+fn an_app_that_accepts_but_never_reads_does_not_delay_the_hook() {
+    let seeded = SeededHome::new();
+    let listener = UnixListener::bind(seeded.home.app_socket_path()).unwrap();
+    let accepting = std::thread::spawn(move || listener.accept().map(|(stream, _)| stream));
+
+    let elapsed = stop_takes(&seeded);
+
+    assert!(elapsed < SOCKET_BUDGET, "took {elapsed:?}");
+    drop(accepting.join().unwrap());
+}
+
+// PLAN §2.0 bug 10: neither does an app too busy to accept at all
+#[test]
+fn an_app_that_never_accepts_does_not_delay_the_hook() {
+    let seeded = SeededHome::new();
+    let path = seeded.home.app_socket_path();
+    let _listener = UnixListener::bind(&path).unwrap();
+    // Fill the queue of pending connections, as a stuck app would have it.
+    let pending: Vec<UnixStream> = (0..512)
+        .map_while(|_| {
+            let stream = UnixStream::connect(&path).ok()?;
+            stream.set_nonblocking(true).ok()?;
+            Some(stream)
+        })
+        .collect();
+
+    let elapsed = stop_takes(&seeded);
+
+    assert!(elapsed < SOCKET_BUDGET, "took {elapsed:?}");
+    drop(pending);
 }

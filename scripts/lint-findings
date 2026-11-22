@@ -9,11 +9,13 @@
 # A rule is a folder findings/H-NNN/ with:
 #   pattern   one extended regular expression (grep -E)
 #   paths     optional: extended regex the file path must match (default \.rs$)
+#   exclude   optional: extended regex of file paths the rule leaves alone
 #   bad.txt   an example the pattern must flag
 #   good.txt  an example the pattern must let through
 #   README.md phase where it appeared and why
 #
-# Exit codes: 0 clean, 1 findings, 2 a rule is broken.
+# Exit codes: 0 clean, 1 findings, 2 a rule is broken or there was nothing
+# to check.
 set -u
 
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -55,7 +57,14 @@ elif [ "$#" -gt 0 ]; then
   files=$(printf '%s\n' "$@")
 else
   files=$(cd "$root" && git ls-files --cached --others --exclude-standard)
+  # Reviewing nothing is not the same as finding nothing: without a working
+  # git repository the list is empty and every rule would pass.
+  if [ -z "$files" ]; then
+    echo "lint-findings: found no files to check (is this a git repository?)" >&2
+    exit 2
+  fi
 fi
+reviewed=$(printf '%s\n' "$files" | grep -c .)
 
 # 3. Each rule against each file it applies to.
 found=0
@@ -63,7 +72,10 @@ for dir in $rules; do
   id=$(basename "$dir")
   paths='\.rs$'
   [ -f "${dir}paths" ] && paths=$(cat "${dir}paths")
-  for file in $(printf '%s\n' "$files" | grep -E "$paths"); do
+  # A regex that matches nothing, so that without `exclude` no file is left out.
+  exclude='^$'
+  [ -f "${dir}exclude" ] && exclude=$(cat "${dir}exclude")
+  for file in $(printf '%s\n' "$files" | grep -E "$paths" | grep -Ev "$exclude"); do
     case "$file" in
       findings/* | */arch-fixtures/*) continue ;;
     esac
@@ -85,4 +97,4 @@ if [ "$found" -ne 0 ]; then
   echo "lint-findings: known findings came back; each rule explains itself in findings/<id>/README.md" >&2
   exit 1
 fi
-echo "lint-findings: $count rule(s), no findings"
+echo "lint-findings: $count rule(s), $reviewed file(s), no findings"

@@ -1,5 +1,5 @@
 use crate::modules::context::domain::templates::phrases::Phrases;
-use crate::modules::session::State;
+use crate::modules::session::{ActivityAge, State};
 
 pub struct Es;
 
@@ -15,21 +15,14 @@ impl Es {
         }
     }
 
-    fn last_activity(elapsed: Option<i64>) -> String {
-        let Some(seconds) = elapsed else {
-            return "sin actividad todavía".to_string();
-        };
-        let (minutes, hours, days) = (seconds / 60, seconds / 3600, seconds / 86_400);
-        let ago = if minutes < 1 {
-            "hace un momento".to_string()
-        } else if hours < 1 {
-            format!("hace {minutes} min")
-        } else if days < 1 {
-            format!("hace {hours} h")
-        } else if days == 1 {
-            "hace 1 día".to_string()
-        } else {
-            format!("hace {days} días")
+    fn last_activity(age: Option<ActivityAge>) -> String {
+        let ago = match age {
+            None => return "sin actividad todavía".to_string(),
+            Some(ActivityAge::JustNow) => "hace un momento".to_string(),
+            Some(ActivityAge::Minutes(minutes)) => format!("hace {minutes} min"),
+            Some(ActivityAge::Hours(hours)) => format!("hace {hours} h"),
+            Some(ActivityAge::Days(1)) => "hace 1 día".to_string(),
+            Some(ActivityAge::Days(days)) => format!("hace {days} días"),
         };
         format!("última actividad {ago}")
     }
@@ -83,7 +76,7 @@ impl Phrases for Es {
         name: &str,
         role: &str,
         state: State,
-        elapsed: Option<i64>,
+        age: Option<ActivityAge>,
         shell: bool,
     ) -> String {
         let shell = if shell {
@@ -94,7 +87,7 @@ impl Phrases for Es {
         format!(
             "{name} ({shell}rol: {role}; estado: {}, {})",
             Self::state(state),
-            Self::last_activity(elapsed)
+            Self::last_activity(age)
         )
     }
 

@@ -14,6 +14,25 @@ pub fn apply_state(
     sessions.update_state(session_id, state, last_activity_at, preserve)
 }
 
+/// Counts as activity and leaves the state as it is.
+pub fn record_activity(
+    sessions: &dyn SessionRepository,
+    session_id: &str,
+    at: i64,
+) -> Result<(), SessionError> {
+    sessions.touch_activity(session_id, at)
+}
+
+/// Moves the session to `to` only while it is in `from`.
+pub fn move_state(
+    sessions: &dyn SessionRepository,
+    session_id: &str,
+    from: State,
+    to: State,
+) -> Result<(), SessionError> {
+    sessions.move_state(session_id, from, to)
+}
+
 pub fn record_claude_version(
     sessions: &dyn SessionRepository,
     session_id: &str,

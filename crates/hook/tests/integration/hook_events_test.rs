@@ -57,7 +57,7 @@ fn session_start_after_clear_follows_the_new_conversation() {
     );
 }
 
-// PLAN §0.4 table: prompt-submit, notification, stop, session-end
+// PLAN §0.4 table + §2.0 bug 4: prompt-submit, notification, post-tool-use, stop, session-end
 #[test]
 fn a_whole_turn_moves_the_state_and_prints_nothing() {
     let seeded = SeededHome::new();
@@ -68,6 +68,7 @@ fn a_whole_turn_moves_the_state_and_prints_nothing() {
             "notification_permission.json",
             State::Waiting,
         ),
+        ("post-tool-use", "post_tool_use.json", State::Working),
         ("stop", "stop.json", State::Idle),
         ("session-end", "session_end.json", State::Ended),
     ] {
@@ -81,6 +82,27 @@ fn a_whole_turn_moves_the_state_and_prints_nothing() {
         assert!(output.stderr.is_empty(), "{subcommand}");
         assert_eq!(seeded.executor_now().state, expected, "{subcommand}");
     }
+}
+
+// PLAN §2.0 bug 3: a compaction in the middle of a turn keeps the turn
+#[test]
+fn a_compaction_keeps_the_session_working_and_prints_the_context() {
+    let seeded = SeededHome::new();
+    seeded
+        .hook("prompt-submit")
+        .write_stdin(fixture("user_prompt_submit.json"))
+        .assert()
+        .success();
+
+    let output = seeded
+        .hook("session-start")
+        .write_stdin(fixture("session_start_compact.json"))
+        .output()
+        .unwrap();
+
+    assert_eq!(seeded.executor_now().state, State::Working);
+    let json: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(json["hookSpecificOutput"]["hookEventName"], "SessionStart");
 }
 
 // PLAN §0.4 table: the hook does not step on a deliberate hibernation

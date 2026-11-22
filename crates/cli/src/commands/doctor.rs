@@ -1,14 +1,10 @@
-use std::os::unix::fs::PermissionsExt;
-use std::path::Path;
-use std::process::{Command, Stdio};
-use std::time::Instant;
-
 use lithemux_core::modules::category::list_categories;
 use lithemux_core::modules::launch::{
-    HookBinary, LoginShellProbe, SessionLocks, SiblingHookBinary, inspect_claude,
+    HookDryRun, LoginShellProbe, ProcessHookProbe, SessionLocks, SiblingHookBinary, inspect_claude,
+    inspect_hook,
 };
 use lithemux_core::modules::session::list_sessions;
-use lithemux_core::platform::paths::home::{Home, SESSION_ENV};
+use lithemux_core::platform::paths::home::Home;
 use lithemux_core::platform::process::shell::user_shell;
 
 use crate::output::doctor::{Check, Level};
@@ -31,21 +27,13 @@ pub fn run() -> anyhow::Result<u8> {
 }
 
 fn data_dir(home: &Home) -> Check {
-    let probe = home.path().join(".doctor-probe");
-    let writable = std::fs::create_dir_all(home.path())
-        .and_then(|()| std::fs::write(&probe, b""))
-        .and_then(|()| std::fs::remove_file(&probe));
-    match writable {
+    match home.check_writable() {
         Ok(()) => Check::new(
             "data directory",
             Level::Ok,
             format!("{} (writable)", home.path().display()),
         ),
-        Err(error) => Check::new(
-            "data directory",
-            Level::Fail,
-            format!("{}: {error}", home.path().display()),
-        ),
+        Err(error) => Check::new("data directory", Level::Fail, error.to_string()),
     }
 }
 
@@ -82,6 +70,16 @@ fn claude(wiring: &Wiring) -> Vec<Check> {
         );
         checks.push(Check::new("claude install", Level::Ok, detail));
     }
+    if let Some(remembered) = &inspection.remembered {
+        checks.push(Check::new(
+            "claude remembered",
+            Level::Ok,
+            format!(
+                "{}  (used if the shell does not answer; `lithemux config unset last_claude_path` forgets it)",
+                remembered.display()
+            ),
+        ));
+    }
     if inspection.version_mismatch {
         checks.push(Check::new(
             "claude installs",
@@ -112,52 +110,31 @@ fn open_sessions(wiring: &Wiring) -> Check {
 }
 
 fn hook() -> Vec<Check> {
-    let path = match SiblingHookBinary.path() {
-        Ok(path) => path,
-        Err(error) => return vec![Check::new("hook binary", Level::Fail, error.to_string())],
-    };
-    let executable = std::fs::metadata(&path)
-        .is_ok_and(|meta| meta.is_file() && meta.permissions().mode() & 0o111 != 0);
-    if !executable {
-        return vec![Check::new(
-            "hook binary",
-            Level::Fail,
-            format!("{} is missing or not executable", path.display()),
-        )];
-    }
-    vec![
-        Check::new("hook binary", Level::Ok, path.display().to_string()),
-        hook_dry_run(&path),
-    ]
+    let probe = LoginShellProbe::new(user_shell());
+    let inspection = inspect_hook(&SiblingHookBinary, &probe, &ProcessHookProbe);
+    let mut checks = vec![match &inspection.path {
+        Ok(path) => Check::new("hook binary", Level::Ok, path.display().to_string()),
+        Err(error) => Check::new("hook binary", Level::Fail, error.to_string()),
+    }];
+    checks.extend(inspection.dry_run.as_ref().map(hook_dry_run));
+    checks
 }
 
 // Outside a lithemux session the hook has to be a no-op: exit 0, no output.
-fn hook_dry_run(path: &Path) -> Check {
-    let started = Instant::now();
-    let output = Command::new(path)
-        .arg("stop")
-        .env_remove(SESSION_ENV)
-        .stdin(Stdio::null())
-        .output();
-    let elapsed = started.elapsed().as_secs_f64() * 1000.0;
-    match output {
-        Ok(out) if out.status.success() && out.stdout.is_empty() && out.stderr.is_empty() => {
-            Check::new(
-                "hook dry run",
-                Level::Ok,
-                format!("exit 0, no output, {elapsed:.1} ms"),
-            )
-        }
-        Ok(out) => Check::new(
-            "hook dry run",
-            Level::Fail,
-            format!(
-                "{}, {} bytes on stdout, {} bytes on stderr",
-                out.status,
-                out.stdout.len(),
-                out.stderr.len()
-            ),
+fn hook_dry_run(run: &HookDryRun) -> Check {
+    let elapsed = run.elapsed.as_secs_f64() * 1000.0;
+    let detail = match &run.outcome {
+        Ok(_) if run.was_silent_success() => format!("exit 0, no output, {elapsed:.1} ms"),
+        Ok(output) => format!(
+            "{}, {} bytes on stdout, {} bytes on stderr",
+            output.status, output.stdout_bytes, output.stderr_bytes
         ),
-        Err(error) => Check::new("hook dry run", Level::Fail, error.to_string()),
-    }
+        Err(error) => error.clone(),
+    };
+    let level = if run.was_silent_success() {
+        Level::Ok
+    } else {
+        Level::Fail
+    };
+    Check::new("hook dry run", level, detail)
 }

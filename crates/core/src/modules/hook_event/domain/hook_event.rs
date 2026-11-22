@@ -1,4 +1,4 @@
-/// The five Claude Code events lithemux subscribes to, named by the
+/// The seven Claude Code events lithemux subscribes to, named by the
 /// subcommand the hook binary receives.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HookEvent {
@@ -7,6 +7,8 @@ pub enum HookEvent {
     Stop,
     Notification,
     SessionEnd,
+    PostToolUse,
+    PostToolUseFailure,
 }
 
 impl HookEvent {
@@ -17,6 +19,8 @@ impl HookEvent {
             "stop" => Some(HookEvent::Stop),
             "notification" => Some(HookEvent::Notification),
             "session-end" => Some(HookEvent::SessionEnd),
+            "post-tool-use" => Some(HookEvent::PostToolUse),
+            "post-tool-use-failure" => Some(HookEvent::PostToolUseFailure),
             _ => None,
         }
     }
@@ -28,6 +32,8 @@ impl HookEvent {
             HookEvent::Stop => "stop",
             HookEvent::Notification => "notification",
             HookEvent::SessionEnd => "session-end",
+            HookEvent::PostToolUse => "post-tool-use",
+            HookEvent::PostToolUseFailure => "post-tool-use-failure",
         }
     }
 }

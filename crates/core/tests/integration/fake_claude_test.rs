@@ -1,4 +1,5 @@
 use std::fs;
+use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 
 use lithemux_core::modules::category::{FsBoardStore, SqliteCategoryRepository};
@@ -11,7 +12,7 @@ use lithemux_core::modules::session::{
 };
 use lithemux_core::modules::settings::{SqliteSettingsRepository, set_config};
 
-use crate::support::in_memory_launch_ports::{FixedHookBinary, HOOK_PATH};
+use crate::support::in_memory_launch_ports::HookBinaryAt;
 use crate::support::recording_ports::RecordingNotices;
 use crate::support::sample_data::{add_category, add_session};
 use crate::temp_home::TempHome;
@@ -43,6 +44,11 @@ fn open_runs_the_fixed_claude_with_the_planned_arguments_and_environment() {
     set_config(&settings, "claude_path", &fake_claude()).unwrap();
     fs::write(temp.home.path().join("fake-claude.exit"), "7").unwrap();
 
+    // Any executable file will do: this test never fires a hook.
+    let hook = temp.dir.path().join("lithemux-hook");
+    fs::write(&hook, "#!/usr/bin/true\n").unwrap();
+    fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).unwrap();
+
     let notices = RecordingNotices::default();
     let ports = LaunchPorts {
         categories: &categories,
@@ -50,7 +56,7 @@ fn open_runs_the_fixed_claude_with_the_planned_arguments_and_environment() {
         settings: &settings,
         shell: &LoginShellProbe::new(fake_shell()),
         notices: &notices,
-        hook_binary: &FixedHookBinary,
+        hook_binary: &HookBinaryAt(hook.clone()),
         transcripts: &ClaudeProjectsTranscriptLocator::in_config_dir(temp.dir.path().join("cfg")),
         locks: &FlockSessionLocks::new(&temp.home),
         runner: &TerminalSessionRunner,
@@ -78,7 +84,7 @@ fn open_runs_the_fixed_claude_with_the_planned_arguments_and_environment() {
         "arg=-n".to_string(),
         "arg=demo-ejecutora".to_string(),
         "arg=--settings".to_string(),
-        format!("arg={}", hooks_settings_json(HOOK_PATH.as_ref())),
+        format!("arg={}", hooks_settings_json(&hook)),
     ];
     assert_eq!(log.lines().collect::<Vec<_>>(), expected);
     assert!(notices.warnings.borrow().is_empty());
