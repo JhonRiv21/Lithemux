@@ -64,6 +64,11 @@ impl Home {
         self.0.join("logs").join("hook.log")
     }
 
+    /// Held by the one running app.
+    pub fn app_lock_path(&self) -> PathBuf {
+        self.0.join("app.lock")
+    }
+
     pub fn app_socket_path(&self) -> PathBuf {
         self.0.join("app.sock")
     }

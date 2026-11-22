@@ -59,7 +59,6 @@ fn open_runs_the_fixed_claude_with_the_planned_arguments_and_environment() {
         hook_binary: &HookBinaryAt(hook.clone()),
         transcripts: &ClaudeProjectsTranscriptLocator::in_config_dir(temp.dir.path().join("cfg")),
         locks: &FlockSessionLocks::new(&temp.home),
-        runner: &TerminalSessionRunner,
     };
     let environment = LaunchEnvironment {
         shell: PathBuf::from(fake_shell()),
@@ -68,6 +67,7 @@ fn open_runs_the_fixed_claude_with_the_planned_arguments_and_environment() {
 
     let code = open_session(
         &ports,
+        &TerminalSessionRunner,
         &environment,
         &SessionRef::parse("demo/ejecutora").unwrap(),
     );

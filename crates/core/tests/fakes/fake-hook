@@ -1,0 +1,4 @@
+#!/bin/sh
+# Test double for `lithemux-hook`, for tests that only need a hook that
+# exists: it does nothing. The real one is tested in crates/hook.
+exit 0

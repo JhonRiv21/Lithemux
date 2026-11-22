@@ -14,10 +14,12 @@ const REAL_SHELLS: [&str; 3] = ["/bin/sh", "/bin/zsh", "/bin/bash"];
 const SHELL_NAMES: [&str; 4] = ["zsh", "bash", "sh", "fish"];
 
 /// A test file that mentions any of these can start a process.
-const PROCESS_MARKERS: [&str; 8] = [
+const PROCESS_MARKERS: [&str; 10] = [
     "Command",
     "ShellCommand",
     "TerminalSession",
+    "SessionHost",
+    "HostConfig",
     "cargo_bin",
     "LoginShellProbe",
     "TerminalSessionRunner",
@@ -39,6 +41,9 @@ const CLEAN_ENVIRONMENT: &str = "env_clear";
 const HARMLESS_PREFIXES: [&str; 2] = ["LITHEMUX_", "CARGO_"];
 /// `std::env::current_exe`: the way to a binary sitting next to the test's.
 const OWN_BINARY: &str = "current_exe";
+/// `HostConfig::from_environment`: the app's host over the real home, the
+/// real shell and, through it, the real `claude`.
+const REAL_MACHINE_CONFIG: &str = "from_environment";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Violation {
@@ -218,6 +223,7 @@ fn reads_the_machine(tokens: &[Token], index: usize) -> bool {
                 .is_some_and(|token| token.kind == Kind::Close(Delimiter::Parenthesis))
     };
     match tokens[index].ident() {
+        Some(REAL_MACHINE_CONFIG) => true,
         Some("vars" | "vars_os") => {
             opens_call(1)
                 && after(2).is_some_and(|token| token.kind == Kind::Close(Delimiter::Parenthesis))

@@ -3,6 +3,7 @@
 
 use std::env;
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use gpui::{
@@ -26,7 +27,9 @@ impl SpikeWindow {
     fn new(sessions: Vec<StartedSession>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let panes = sessions
             .into_iter()
-            .map(|(session, wakes)| cx.new(|cx| TerminalView::new(session, wakes, window, cx)))
+            .map(|(session, wakes)| {
+                cx.new(|cx| TerminalView::new(Rc::new(session), wakes, window, cx))
+            })
             .collect();
         Self { panes }
     }

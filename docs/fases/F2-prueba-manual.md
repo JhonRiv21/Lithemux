@@ -71,3 +71,45 @@ El registro **no guarda lo que tecleas**: solo qué evento llegó, si había una
 5. Cuando termine el turno, `idle`.
 
 - [ ] PASA  - [ ] FALLA
+
+## Bloque 2.1 · SessionHost
+
+La ventana de este bloque es **temporal**: `lithemux-app --open <categoría>/<sesión>` abre esas sesiones. Las dos primeras se ven lado a lado; las demás corren sin panel y aparecen en la línea de abajo. Cada panel dice `sesión · estado · running`; mientras se prepara dice `opening…`.
+
+Necesitas una categoría con al menos dos sesiones de Claude. Si no la tienes:
+
+```sh
+cd ~/Personal/lithemux
+./target/release/lithemux cat add prueba --name Prueba --root ~/Personal/lithemux
+./target/release/lithemux new prueba/uno --role "prueba uno"
+./target/release/lithemux new prueba/dos --role "prueba dos"
+```
+
+### D. Las sesiones viven en la app y la CLI las ve
+
+1. `./target/release/lithemux-app --open prueba/uno --open prueba/dos`
+   - La ventana aparece al instante y los paneles dicen `opening…` un momento.
+2. En cada panel arranca tu `claude` de verdad, con el nombre `prueba-uno` y `prueba-dos`.
+3. En otra terminal: `./target/release/lithemux status prueba`. Las dos deben decir `open (pid …)`.
+4. En esa misma terminal: `./target/release/lithemux open prueba/uno`. Debe negarse con `the session is already open (pid …)`.
+5. Escríbele algo a `prueba/uno`. La etiqueta del panel debe pasar a `working` y, al terminar, a `idle`. `lithemux status prueba` debe decir lo mismo.
+
+- [ ] PASA  - [ ] FALLA
+
+### E. Una sola instancia y «abierta en otra terminal»
+
+1. Con la app abierta, en otra terminal: `./target/release/lithemux-app --open prueba/dos`. Debe salir con `lithemux is already running (pid …)`.
+2. Cierra la app con `cmd+q`. En una terminal: `./target/release/lithemux open prueba/uno` y déjalo abierto.
+3. En otra: `./target/release/lithemux-app --open prueba/uno --open prueba/dos`. El panel de `prueba/uno` no debe arrancar `claude`: debe decir `open in another terminal (pid …)`. El de `prueba/dos` arranca normal.
+
+- [ ] PASA  - [ ] FALLA
+
+### F. Cerrar no deja huérfanos y reabrir reanuda
+
+1. Con dos sesiones abiertas en la app, anota algo que le hayas dicho a `prueba/uno`.
+2. `cmd+q`. Después: `pgrep -fl claude`. (Repítelo otra vez cerrando la terminal desde la que lanzaste la app, en vez de `cmd+q`.) No debe quedar ningún `claude` de esas sesiones (los de tus otras terminales sí estarán).
+3. `./target/release/lithemux status prueba`: las dos `closed`.
+4. Vuelve a abrir: `./target/release/lithemux-app --open prueba/uno`. Debe **reanudar la misma conversación**, con lo que le dijiste antes.
+
+- [ ] PASA  - [ ] FALLA
+

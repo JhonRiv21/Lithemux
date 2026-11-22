@@ -9,6 +9,7 @@ mod hook_event_use_cases;
 mod in_memory_contracts;
 mod inspect_hook_use_cases;
 mod launch_use_cases;
+mod prepare_launch_use_cases;
 mod remembered_claude_use_cases;
 mod resolve_claude_use_cases;
 mod session_use_cases;

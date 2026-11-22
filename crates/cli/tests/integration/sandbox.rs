@@ -2,9 +2,12 @@ use std::fs;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use assert_cmd::Command;
+use lithemux_app::session_host::{HostConfig, SessionHost};
+use lithemux_core::platform::paths::home::Home;
 use portable_pty::{Child, CommandBuilder, MasterPty, PtySize, native_pty_system};
 use tempfile::TempDir;
 
@@ -76,12 +79,18 @@ impl Sandbox {
         let child = pair.slave.spawn_command(command).unwrap();
         drop(pair.slave);
         let mut reader = pair.master.try_clone_reader().unwrap();
-        let printed = std::thread::spawn(move || {
-            let mut text = String::new();
-            let _ = reader.read_to_string(&mut text);
-            text
+        let screen = Arc::new(Mutex::new(Vec::new()));
+        let printed = std::thread::spawn({
+            let screen = Arc::clone(&screen);
+            move || {
+                let mut chunk = [0_u8; 1024];
+                while let Ok(read @ 1..) = reader.read(&mut chunk) {
+                    screen.lock().unwrap().extend_from_slice(&chunk[..read]);
+                }
+            }
         });
         OnATerminal {
+            screen,
             keyboard: pair.master.take_writer().unwrap(),
             _terminal: pair.master,
             child,
@@ -168,6 +177,28 @@ impl Sandbox {
         self.run(&["config", "set", "claude_path", &fake_claude()]);
     }
 
+    /// A file the fake claude reads to know how to behave.
+    pub fn steer_fake_claude(&self, file: &str, contents: &str) {
+        fs::write(self.home().join(file), contents).unwrap();
+    }
+
+    /// The app's session host on this same machine: same home, same fakes.
+    pub fn app_host(&self) -> SessionHost {
+        let config = HostConfig {
+            home: Home::new(self.home()),
+            lithemux_home: Some(self.home()),
+            hook_binary: PathBuf::from(fake("fake-hook")),
+            shell: PathBuf::from(&self.fake_shell),
+            claude_config_dir: Some(self.claude_config()),
+            environment: self
+                .environment()
+                .into_iter()
+                .map(|(name, value)| (name.into(), value.into()))
+                .collect(),
+        };
+        SessionHost::start(config).unwrap().0
+    }
+
     /// A number the fake claude left in one of its files, such as its pid.
     pub fn fake_claude_number(&self, file: &str) -> i32 {
         fs::read_to_string(self.home().join(file))
@@ -204,7 +235,8 @@ pub struct OnATerminal {
     keyboard: Box<dyn Write + Send>,
     _terminal: Box<dyn MasterPty + Send>,
     child: Box<dyn Child + Send + Sync>,
-    printed: std::thread::JoinHandle<String>,
+    screen: Arc<Mutex<Vec<u8>>>,
+    printed: std::thread::JoinHandle<()>,
 }
 
 impl OnATerminal {
@@ -214,12 +246,32 @@ impl OnATerminal {
         self.keyboard.flush().unwrap();
     }
 
+    fn printed_so_far(&self) -> String {
+        String::from_utf8_lossy(&self.screen.lock().unwrap()).to_string()
+    }
+
+    /// Waits until the terminal has shown `text`.
+    pub fn wait_for_output(&self, text: &str) {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while !self.printed_so_far().contains(text) {
+            assert!(
+                Instant::now() < deadline,
+                "never saw {text:?}; the terminal shows: {}",
+                self.printed_so_far()
+            );
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    }
+
     /// The exit code and everything that was printed on the terminal.
     pub fn finish(mut self) -> (u32, String) {
         let code = self.child.wait().unwrap().exit_code();
         drop(self.keyboard);
         drop(self._terminal);
-        (code, self.printed.join().unwrap())
+        let screen = Arc::clone(&self.screen);
+        self.printed.join().unwrap();
+        let printed = String::from_utf8_lossy(&screen.lock().unwrap()).to_string();
+        (code, printed)
     }
 }
 

@@ -38,6 +38,17 @@ case "$1" in
       sleep 0.05
     done
     ;;
+  stubborn-child)
+    # Dies on the hangup like any program, but leaves a child that ignores it.
+    (trap '' HUP; sleep 60) &
+    printf 'pid:%s:\n' "$!"
+    exec cat
+    ;;
+  leaves-a-stubborn-child)
+    # Exits by itself and leaves behind a child that ignores the hangup.
+    (trap '' HUP; sleep 60) &
+    printf 'pid:%s:\n' "$!"
+    ;;
   raw-input)
     # Shows exactly what the program receives, control characters as text.
     stty -echo

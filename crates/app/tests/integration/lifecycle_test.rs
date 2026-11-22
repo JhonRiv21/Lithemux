@@ -45,6 +45,55 @@ fn a_program_that_ignores_hangup_dies_with_its_session() {
     });
 }
 
+// Audit of the §2.1 (I2): the program dies on the hangup, but what it
+// started ignores it. Nothing of a closed session is left running
+#[test]
+fn what_a_program_started_dies_with_the_session_even_if_it_ignores_hangup() {
+    let session = start("stubborn-child");
+    let child = pid_on_screen(&wait_for(&session, "pid:"));
+    assert!(test_kill_process(child).is_ok(), "the child is running");
+
+    session.terminate();
+
+    wait_until("the stubborn child to die", || {
+        test_kill_process(child).is_err()
+    });
+    wait_until("the session to say its programs are gone", || {
+        session.process_is_gone()
+    });
+}
+
+// Audit of the §2.1 (I2): a program that ends by itself does not get to
+// leave a child of its group behind either
+#[test]
+fn what_a_program_left_behind_dies_when_the_program_ends_by_itself() {
+    let session = start("leaves-a-stubborn-child");
+    let child = pid_on_screen(&wait_for(&session, "pid:"));
+
+    wait_until("the child that was left behind to die", || {
+        test_kill_process(child).is_err()
+    });
+    assert!(session.has_exited());
+}
+
+// Audit of the §2.1 (I2): the session is not "gone" while one of its
+// programs is still there
+#[test]
+fn a_session_is_not_gone_while_something_of_its_group_is_alive() {
+    let session = start("stubborn-child");
+    let child = pid_on_screen(&wait_for(&session, "pid:"));
+
+    session.terminate();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let mut seen_gone_with_the_child_alive = false;
+    while test_kill_process(child).is_ok() {
+        seen_gone_with_the_child_alive |= session.process_is_gone();
+        assert!(Instant::now() < deadline, "the child never died");
+    }
+
+    assert!(!seen_gone_with_the_child_alive);
+}
+
 // Audit F1: nothing repaints while nothing happens.
 #[test]
 fn an_idle_terminal_asks_for_no_repaints() {

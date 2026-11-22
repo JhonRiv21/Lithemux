@@ -71,7 +71,8 @@ fn ctrl_c_on_the_terminal_reaches_claude_and_open_reports_it() {
     sandbox.use_fake_claude();
     std::fs::write(sandbox.home().join("fake-claude.sleep"), "10").unwrap();
     let mut open = sandbox.start_on_a_terminal(&["open", "demo/ejecutora"]);
-    sandbox.wait_for_fake_claude();
+    // Only then is claude past its startup and waiting on the terminal.
+    open.wait_for_output("fake claude ready");
     let claude = sandbox.fake_claude_number("fake-claude.pid");
     let started = Instant::now();
 

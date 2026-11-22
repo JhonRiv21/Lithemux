@@ -48,7 +48,7 @@ impl World {
         }
     }
 
-    fn ports<'a>(&'a self, runner: &'a RecordingRunner<'a>) -> LaunchPorts<'a> {
+    fn ports(&self) -> LaunchPorts<'_> {
         LaunchPorts {
             categories: &self.store,
             sessions: &self.store,
@@ -58,7 +58,6 @@ impl World {
             hook_binary: &FixedHookBinary,
             transcripts: &self.transcripts,
             locks: &self.locks,
-            runner,
         }
     }
 }
@@ -78,17 +77,10 @@ fn target() -> SessionRef {
 #[test]
 fn the_first_launch_creates_the_conversation_and_later_ones_resume_it() {
     let world = World::new();
-    let runner = RecordingRunner::exiting_with(0);
     let category = get_category(&world.store, "demo").unwrap();
     let claude_id = world.executor.claude_session_id.clone().unwrap();
 
-    let first = plan_launch(
-        &world.ports(&runner),
-        &environment(),
-        &category,
-        &world.executor,
-    )
-    .unwrap();
+    let first = plan_launch(&world.ports(), &environment(), &category, &world.executor).unwrap();
     assert_eq!(
         first.args[..2],
         ["--session-id".to_string(), claude_id.clone()]
@@ -99,30 +91,16 @@ fn the_first_launch_creates_the_conversation_and_later_ones_resume_it() {
         .existing
         .borrow_mut()
         .push(claude_id.clone());
-    let second = plan_launch(
-        &world.ports(&runner),
-        &environment(),
-        &category,
-        &world.executor,
-    )
-    .unwrap();
+    let second = plan_launch(&world.ports(), &environment(), &category, &world.executor).unwrap();
     assert_eq!(second.args[..2], ["--resume".to_string(), claude_id]);
-    assert!(runner.plans.borrow().is_empty(), "planning starts nothing");
 }
 
 // PLAN §0.3: the resolved claude, the name and the hooks
 #[test]
 fn the_plan_runs_the_resolved_claude_with_name_and_hooks() {
     let world = World::new();
-    let runner = RecordingRunner::exiting_with(0);
     let category = get_category(&world.store, "demo").unwrap();
-    let plan = plan_launch(
-        &world.ports(&runner),
-        &environment(),
-        &category,
-        &world.executor,
-    )
-    .unwrap();
+    let plan = plan_launch(&world.ports(), &environment(), &category, &world.executor).unwrap();
     assert_eq!(plan.program, PathBuf::from(CLAUDE));
     assert_eq!(
         plan.args[2..4],
@@ -139,7 +117,7 @@ fn open_returns_the_exit_code_of_the_session() {
     let world = World::new();
     let runner = RecordingRunner::exiting_with(7);
     assert_eq!(
-        open_session(&world.ports(&runner), &environment(), &target()).unwrap(),
+        open_session(&world.ports(), &runner, &environment(), &target()).unwrap(),
         7
     );
     assert_eq!(runner.plans.borrow().len(), 1);
@@ -154,7 +132,7 @@ fn the_session_is_locked_while_it_runs_and_free_afterwards() {
     let mut runner = RecordingRunner::exiting_with(0);
     runner.while_running = Some(&check);
 
-    open_session(&world.ports(&runner), &environment(), &target()).unwrap();
+    open_session(&world.ports(), &runner, &environment(), &target()).unwrap();
 
     assert_eq!(world.locks.holder(&id), None);
 }
@@ -167,7 +145,7 @@ fn a_session_that_is_already_open_cannot_be_opened_again() {
     let mut held = world.locks.acquire(&world.executor.id).unwrap();
     held.record_pid(999);
 
-    let second = open_session(&world.ports(&runner), &environment(), &target());
+    let second = open_session(&world.ports(), &runner, &environment(), &target());
 
     assert!(matches!(
         second,
@@ -208,10 +186,10 @@ fn the_transcript_is_looked_up_with_the_session_already_locked() {
     };
     let ports = LaunchPorts {
         transcripts: &transcripts,
-        ..world.ports(&runner)
+        ..world.ports()
     };
 
-    open_session(&ports, &environment(), &target()).unwrap();
+    open_session(&ports, &runner, &environment(), &target()).unwrap();
 
     assert_eq!(transcripts.locked_when_asked.get(), Some(true));
 }
@@ -228,7 +206,7 @@ fn open_fails_before_launching_when_the_hook_binary_is_not_executable() {
     );
     let runner = RecordingRunner::exiting_with(0);
 
-    let error = open_session(&world.ports(&runner), &environment(), &target()).unwrap_err();
+    let error = open_session(&world.ports(), &runner, &environment(), &target()).unwrap_err();
 
     assert!(matches!(error, LaunchError::HookNotExecutable(_)));
     assert!(error.to_string().contains(HOOK_PATH), "{error}");
@@ -241,7 +219,7 @@ fn open_fails_before_launching_when_the_hook_binary_is_not_executable() {
 fn open_records_the_claude_version() {
     let world = World::new();
     let runner = RecordingRunner::exiting_with(0);
-    open_session(&world.ports(&runner), &environment(), &target()).unwrap();
+    open_session(&world.ports(), &runner, &environment(), &target()).unwrap();
     let (_, session) = find_session_by_id(&world.store, &world.store, &world.executor.id)
         .unwrap()
         .unwrap();
@@ -258,7 +236,7 @@ fn open_still_launches_when_the_version_is_unknown() {
         .answers(ShellMode::LoginInteractive, "command -v claude", CLAUDE);
     let runner = RecordingRunner::exiting_with(0);
     assert_eq!(
-        open_session(&world.ports(&runner), &environment(), &target()).unwrap(),
+        open_session(&world.ports(), &runner, &environment(), &target()).unwrap(),
         0
     );
     let (_, session) = find_session_by_id(&world.store, &world.store, &world.executor.id)
@@ -276,7 +254,7 @@ fn the_fallback_warning_reaches_the_user() {
         .executable(HOOK_PATH)
         .answers(ShellMode::Login, "command -v claude", CLAUDE);
     let runner = RecordingRunner::exiting_with(0);
-    open_session(&world.ports(&runner), &environment(), &target()).unwrap();
+    open_session(&world.ports(), &runner, &environment(), &target()).unwrap();
     assert_eq!(world.notices.warnings.borrow().len(), 1);
 }
 
@@ -291,7 +269,8 @@ fn a_shell_session_runs_the_login_shell_without_claude() {
     let runner = RecordingRunner::exiting_with(0);
 
     let code = open_session(
-        &world.ports(&runner),
+        &world.ports(),
+        &runner,
         &environment(),
         &SessionRef::parse("demo/term").unwrap(),
     )
@@ -312,7 +291,7 @@ fn opening_a_session_that_does_not_exist_fails() {
     let runner = RecordingRunner::exiting_with(0);
     let missing = SessionRef::parse("demo/nadie").unwrap();
     assert!(matches!(
-        open_session(&world.ports(&runner), &environment(), &missing),
+        open_session(&world.ports(), &runner, &environment(), &missing),
         Err(LaunchError::Session(_))
     ));
 }

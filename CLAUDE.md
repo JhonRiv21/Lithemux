@@ -5,6 +5,7 @@ Gestor ligero de sesiones de terminal y Claude Code, sin telemetría, con catego
 ## Reglas
 
 - **Nunca `git commit` ni `git push`.** Deja los cambios en stage; Jhon los ejecuta.
+- **Nunca comandos de git que reescriban el árbol o el stage:** `stash`, `reset`, `checkout -- .`, `restore` masivo ni `clean`. Si necesitas comparar con la versión anterior, usa `git show`/`git diff` o una copia aparte (`git checkout-index --prefix`).
 - **Una fase a la vez.** Al cerrar cada una: checklist de cierre de `docs/PLAN.md`, reporte y espera.
 - Código, identificadores, comentarios, mensajes de la interfaz en `locales/en.toml` y README: **en inglés**. Los documentos de `docs/`, en español.
 - **Comentarios mínimos:** solo donde el código no se explica solo.

@@ -1,5 +1,7 @@
 //! The gpui entity: owns a session, routes input to it and paints it.
 
+use std::rc::Rc;
+
 use gpui::{
     App, Bounds, ClipboardItem, Context, ElementInputHandler, FocusHandle, Focusable, IntoElement,
     KeyDownEvent, MouseButton, Pixels, Render, Size, Subscription, Task, Window, canvas, div,
@@ -23,7 +25,7 @@ pub(super) struct Placement {
 }
 
 pub struct TerminalView {
-    pub(super) session: TerminalSession,
+    pub(super) session: Rc<TerminalSession>,
     pub(super) focus_handle: FocusHandle,
     pub(super) composition: Composition,
     pub(super) placement: Option<Placement>,
@@ -35,8 +37,10 @@ pub struct TerminalView {
 
 impl TerminalView {
     /// `wakes` is the receiver `TerminalSession::spawn` returned with `session`.
+    /// The view shows the session and types into it; whoever else holds it
+    /// keeps it alive when the view goes away.
     pub fn new(
-        session: TerminalSession,
+        session: Rc<TerminalSession>,
         wakes: async_channel::Receiver<()>,
         window: &mut Window,
         cx: &mut Context<Self>,

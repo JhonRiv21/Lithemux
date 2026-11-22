@@ -11,6 +11,8 @@ pub use application::inspect_hook::inspect_hook;
 pub use application::launch_ports::LaunchPorts;
 pub use application::open_session::open_session;
 pub use application::plan_launch::plan_launch;
+pub use application::prepare_launch::prepare_launch;
+pub use application::prepared_launch::PreparedLaunch;
 pub use application::resolve_claude::resolve_claude;
 pub use application::resolved_claude::ResolvedClaude;
 pub use domain::claude_candidates::{TEMPORARY_ROOTS, candidate_paths, is_injected_wrapper};

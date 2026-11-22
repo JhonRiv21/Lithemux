@@ -5,7 +5,7 @@
 | Bloque | Estado |
 |---|---|
 | §2.0 Correcciones | **Hecho, en stage, sin commit.** Pendiente de auditoría y de tres comprobaciones de Jhon |
-| §2.1 SessionHost y socket | Sin empezar |
+| §2.1 SessionHost y socket | **Hecho, en stage, sin commit.** Pendiente de auditoría y de las pruebas D, E y F de Jhon |
 | §2.2 + §2.3 Barra lateral y área de trabajo | Sin empezar |
 | §2.4 a §2.6 Ciclo de vida, restauración y ajustes | Sin empezar |
 
@@ -244,3 +244,124 @@ Ejecutado después del último cambio:
 ### Lo que necesita a Jhon
 
 Cuatro comprobaciones en `docs/fases/F2-prueba-manual.md`: `doctor` desde una terminal real (0), que `claude` guarde el transcript (A), el registro de la tecla muerta (B) y `waiting` → `working` (C).
+
+## 2.1 · SessionHost
+
+**Fecha:** 2026-11-21.
+
+### Qué se hizo
+
+- **`core`:** el lanzamiento quedó en piezas que comparten la CLI y la app (D-30): `prepare_launch` (candado y después plan) y `PreparedLaunch` (que conserva el candado). `open_session` es eso más el supervisor de la CLI.
+- **`crates/app/src/session_host/`:** el `SessionHost`, sin gpui (D-31). Abre sesiones en PTY, conserva el candado mientras vive el hijo, mata a los hijos al cerrar, escucha `app.sock` y se limita a una instancia (D-32).
+- **`TerminalSession`** se puede compartir entre el host y una vista, avisa cuando su programa termina y se puede terminar a propósito.
+- **Ventana temporal:** `lithemux-app --open <cat>/<sesión> …` (`hosted_window.rs`). La ventana del spike sin argumentos sigue igual.
+- Scrollback en 5.000, sin cambios.
+
+### Criterios de cierre del bloque
+
+| Criterio | Resultado | Cómo |
+|---|---|---|
+| Lo que abre la app no se abre con `lithemux open` | **PASA** | Test con el binario real de la CLI: `already open (pid N)`, con el pid del hijo |
+| Y viceversa | **PASA** | Test: `lithemux open` en segundo plano y el host responde `OpenElsewhere` con su pid, sin lanzar nada; al soltarlo la CLI, la app ya puede |
+| `lithemux status` ve el estado en vivo | **PASA** | Test: `open (pid N)` mientras corre, y `ended` y `closed` cuando el hijo termina. A mano: el hook real pasó una sesión a `working` y lo dijeron la etiqueta de la ventana y `status` |
+| Cerrar mata a los `claude`, sin huérfanos | **PASA con fakes** | Tests: hijos que **ignoran SIGHUP** mueren al destruir el host y cuando la app real recibe SIGTERM, SIGINT o SIGHUP. A mano, con ventana: SIGHUP y la petición de salida del sistema. **La tecla `cmd+q` no la pulsé**: no puedo simular el teclado |
+| Reabrir reanuda la misma conversación | **PASA con fakes** | Test: tras escribir el transcript, la segunda apertura usa `--resume`. Con el `claude` real queda para la planificadora y para Jhon |
+| Evento del hook a memoria en menos de 100 ms | **PASA: 2,4 a 5,2 ms** | Test que lo exige; 10 corridas. Mide desde que se escribe el estado hasta que el host lo tiene. No incluye arrancar el binario del hook, que son unos 8 ms más |
+| 6 sesiones vivas, 2 visibles: CPU en reposo < 1 % | **PASA: 0,0 %** | 30 s sin un centisegundo de CPU (0:00.25 antes y después) |
+| Footprint registrado | **76 MB** (pico 115 MB al arrancar; RSS 57 MB) | 5 sesiones con el `claude` falso y 1 zsh real |
+| SessionHost probado con fakes en PTY real | **PASA** | 16 tests del host y 3 de interoperabilidad. Ninguno ejecuta el `claude` real; la guarda D-13 pasa |
+
+**Lo que estas mediciones no dicen.** Los hijos eran el `claude` falso, que no hace nada, y un zsh quieto. Seis `claude` reales pintando cuestan más CPU en la app; eso se mide en el uso real.
+
+### Lo que vi por primera vez
+
+Con el permiso de grabación de pantalla pude capturar la ventana (solo la de lithemux, por su identificador). Se ve bien: el texto se pinta, cada panel lleva su etiqueta, el panel con foco tiene borde azul y las sesiones sin panel aparecen abajo. Tras disparar el hook real, la etiqueta pasó de `new` a `working`.
+
+### Tests
+
+| Dónde | Cuántos | Qué cubren |
+|---|---|---|
+| `core` · `prepare_launch_use_cases.rs` | 4 | candado tomado y soltado, `--resume` con el candado puesto, sesión abierta en otro lado, shell sin candado |
+| `app` · `session_host_test.rs` y `session_host_lifecycle_test.rs` | 16 | lanzamiento en PTY, sesión oculta que sigue leyendo, candado, abierta en otra terminal, abrir dos veces, evento del hook, estado desde la base de datos, basura en el socket, fin del hijo y reanudación, cierre sin huérfanos, cerrar una sola, una instancia, permisos y socket viejo, sesión shell, seis a la vez |
+| `app` · `event_socket_test.rs` | 2 | qué es un mensaje bien formado |
+| `cli` · `app_interop_test.rs` | 3 | la CLI real contra el host |
+
+**Cuáles vi fallar.** Casi todo es construcción nueva, escrita junto con sus tests, así que no hubo rojo previo. Las excepciones:
+
+- **Un bug real que encontraron los tests:** los eventos del hook se perdían cuando el hook colgaba antes de que la app aceptara la conexión (D-32). Dos tests fallaban: el de los 100 ms daba 142 ms y el de la basura en el socket agotaba su plazo. Tras el arreglo pasan en milisegundos.
+- Un test mío mal escrito (esperaba un texto que también salía en el eco del comando).
+
+**Un tropiezo.** Al partir un archivo de tests que pasaba de 300 líneas borré tres tests de `prepare_launch` sin guardarlos. Los reescribí en su archivo y son cuatro.
+
+### Auditoría de la 2.1
+
+La auditoría encontró que el cierre no cumplía «sin huérfanos» y un hueco en la guarda D-13. Todo corregido, con dos notas al final.
+
+«Visto fallar» dice si vi el test en rojo antes del arreglo. «Mutación» dice si rompí el código a propósito y el test lo notó.
+
+| # | Hallazgo | Arreglo | Test | Visto fallar |
+|---|---|---|---|---|
+| I1 | Las señales saltaban el cierre | SIGTERM, SIGINT y SIGHUP cierran las sesiones y después salen; cmd+q y la petición de salida van por `on_app_quit` (D-34) | `app_exit_test.rs`: el binario real, sin ventana, con un `claude` falso que ignora SIGHUP, ante las tres señales: hijo muerto, socket borrado, candado libre y se puede arrancar otra app | **Sí**: «claude outlived the app» y, tras el primer arreglo, «the socket was left behind» |
+| I2 | Descendientes que ignoran SIGHUP | El hilo que espera al programa acaba también con lo que quede en su grupo; «ida» significa grupo vacío (D-34) | 3 tests en `lifecycle_test.rs`: hijo terco de un programa que muere por el HUP, hijo terco de uno que sale solo, y que la sesión no se dé por ida con el hijo vivo | **Sí** los tres (el hijo seguía vivo 60 s) |
+| I3 | La guarda D-13 no veía el host | `SessionHost` y `HostConfig` marcan un archivo como capaz de lanzar procesos; `from_environment` es `machine-env`. El entorno de las sesiones sale de la configuración, y los tests pasan uno mínimo | 2 fixtures `bad` y 1 `good` | **Sí**, por construcción |
+| I4 | El host bloqueaba la interfaz | Preparar en un hilo con fase `Opening`; cerrar sin esperar; solo `shut_down` espera (D-33) | Los 22 tests del host pasan por la API nueva; hay uno de que el candado se suelta sin que nadie atienda al host y otro de que sigue tomado mientras el programa terco vive | Los dos del candado, escritos con el cambio |
+| 5 | Socket: clientes callados o lentos | Un hilo corto por conexión con 200 ms en total; pausa de 50 ms si `accept` falla (D-32) | `silent_and_slow_clients_do_not_delay_an_event` | **Sí**: 3,26 s. Ahora menos de 150 ms |
+| 6 | Candado | Lo suelta el hilo que espera al hijo, solo con el grupo vacío; `PreparedLaunch` de solo lectura | Los dos de arriba | — |
+| 7 | `--open` | Se valida: `--open` sin valor, un argumento suelto o una sesión repetida son errores, con código 2. Anotado para la §2.3 que dos vistas sobre un terminal no están soportadas | 6 unitarios y uno con el binario | Escritos con el cambio |
+| 8 | Errores tragados | A stderr, con la sesión y el motivo, hasta el log de la §3.6 | Sin test | — |
+| 9 | `recv_blocking()` sin plazo | Espera con plazo de 5 s | El mismo test | — |
+| 9 | M2, M9, M14, M16 | Un test para cada una | 3 de integración y 1 unitario dentro del módulo | **Mutación sí** las cuatro. M14 no se puede provocar desde fuera (el candado ordena los avisos), así que su test entrega el aviso viejo a mano |
+| 9 | El host no importa gpui | Test en `arch_boundaries` que lee los tokens de `app/src/session_host` | 2 tests | Pasa |
+| 9 | Ctrl-C intermitente | Era del `claude` falso: si la señal llegaba mientras leía un archivo de configuración, seguía y salía con 0. Ahora lee todo antes de saludar, y el test espera al saludo | El mismo test | **Sí**: 8 de 40 antes; 0 de 60 después |
+| 10 | Tamaños | `host.rs` 272 líneas (más `opening.rs` y `closing.rs`); tests del host en tres archivos de menos de 200; `render` y `run` partidos | — | — |
+| 11 | PATH mínimo del Dock | Comprobado con `env -i`: no hace falta compensar (D-30) | A mano | — |
+
+**Verificado con ventana** (dos hijos que ignoran SIGHUP): con SIGHUP y con la petición de salida del sistema, la app se cierra, los hijos mueren, el socket se borra y `status` dice `closed`.
+
+**Nota 1 · `osascript … to quit`.** A mí tampoco me cerró la app, y no es un fallo del cierre: el binario no es un bundle y AppleScript no lo encuentra por nombre. La misma petición por id de proceso, que es lo que manda el Dock, la cierra en orden. Detalle en D-34.
+
+**Nota 2 · tests del binario.** Corren la app con `--no-window`, un modo solo para eso: no abro ventanas durante `cargo test`. gpui sin ventana no instala el delegado de la aplicación, así que esos tests cubren la ruta de las señales y no la de cmd+q; esa la comprobé a mano.
+
+**Mediciones repetidas con el diseño nuevo** (6 sesiones, 2 visibles): 0 s de CPU en 30 s (0:00.28 antes y después), footprint de 62 MB con pico de 101 MB, 30 hilos. Evento del hook a memoria: 0,96 ms.
+
+**Un comportamiento nuevo que la §2.2 tendrá que tratar:** si se reabre una sesión justo después de cerrarla, mientras su programa todavía se está yendo, la fase es «abierta en otra terminal» con el pid del propio hijo.
+
+**Tropiezos míos en esta ronda.** Usé un `git stash` por impulso para poder compilar y lo deshice enseguida, sin pérdida. Al reescribir el `claude` falso borré la parte que deja un proceso atrás y lo delató un test de la CLI; restaurada.
+
+### Checklist de cierre
+
+| Paso | Resultado |
+|---|---|
+| `cargo fmt --all --check` | sin diferencias |
+| `cargo clippy --workspace --all-targets -- -D warnings` | sin avisos |
+| `cargo test --workspace` | **386 pruebas, 0 fallas** (340 al cerrar la §2.0 + 46) |
+| `cargo build --release` | ok |
+| `cargo deny check` | ok |
+| `scripts/lint-findings` | 2 reglas, sin hallazgos |
+| Fronteras, guarda de procesos, guarda D-13 | pasan. `session_host` no construye ningún proceso: usa `TerminalSession` |
+| Pre-commit | exit 0 |
+
+### Desviaciones del plan
+
+1. **«El comando limpio (`CleanCommand`)» para la app.** La app no usa el tipo `CleanCommand`, que envuelve un `std::process::Command`: un PTY necesita el `CommandBuilder` de `portable-pty`. Usa la misma limpieza de entorno, que es lo que importa (D-30).
+2. **El host no actualiza el estado desde un hilo de fondo.** El plan dice «un hilo de fondo acepta conexiones… la app vuelve a leer la sesión». El hilo acepta y avisa; quien relee es el host, en el hilo de la interfaz, cuando esta atiende el aviso (D-31). El criterio de los 100 ms se cumple con mucho margen.
+3. **Dependencia nueva de desarrollo:** los tests de la CLI dependen de `lithemux-app` para tener el host real enfrente. Compilar los tests de la CLI arrastra ahora gpui.
+
+### Qué quedó fuera
+
+- Reconciliar los estados al arrancar tras una caída (§2.5).
+- Enfocar la primera instancia desde la segunda (Fase 3, como dice el plan).
+- Mostrar el estado de una sesión shell abierta en la app desde la CLI.
+
+### Riesgos detectados
+
+1. **Un hijo que ignore SIGHUP sobrevive si a la app la matan con SIGKILL** o se cae. Con las demás señales ya no.
+2. **Estados viejos tras una caída:** la base de datos puede decir `working` de una sesión cerrada.
+3. **Ruta del socket limitada a unos 104 bytes.** Me pasó con mi carpeta temporal; con el home por defecto no ocurre.
+4. **La tecla `cmd+q` sin pulsar por mí.** La petición de salida del sistema, que acaba en el mismo sitio, sí la probé.
+5. Reabrir una sesión justo tras cerrarla la muestra un instante como «abierta en otra terminal».
+
+### Lo que necesita a Jhon
+
+Las pruebas D, E y F de `docs/fases/F2-prueba-manual.md`, con el `claude` real.
+

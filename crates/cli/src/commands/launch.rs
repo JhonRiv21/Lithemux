@@ -27,8 +27,12 @@ pub fn open(target: &str) -> anyhow::Result<u8> {
         hook_binary: &SiblingHookBinary,
         transcripts: &ClaudeProjectsTranscriptLocator::from_env(),
         locks: &wiring.locks(),
-        runner: &TerminalSessionRunner,
     };
-    let code = open_session(&ports, &environment, &SessionRef::parse(target)?)?;
+    let code = open_session(
+        &ports,
+        &TerminalSessionRunner,
+        &environment,
+        &SessionRef::parse(target)?,
+    )?;
     Ok(u8::try_from(code).unwrap_or(1))
 }

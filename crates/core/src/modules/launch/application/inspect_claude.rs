@@ -53,6 +53,20 @@ pub fn inspect_claude(
             path,
         })
         .collect();
+    ClaudeInspection {
+        remembered: read_setting(settings, SettingKey::LastClaudePath)
+            .ok()
+            .flatten()
+            .map(PathBuf::from),
+        version_mismatch: usable_versions(&installations) > 1,
+        chosen,
+        warning,
+        installations,
+    }
+}
+
+/// How many different versions the usable installs are on.
+fn usable_versions(installations: &[ClaudeInstallation]) -> usize {
     let mut versions: Vec<&str> = installations
         .iter()
         .filter(|install| install.usable)
@@ -60,14 +74,5 @@ pub fn inspect_claude(
         .collect();
     versions.sort_unstable();
     versions.dedup();
-    ClaudeInspection {
-        remembered: read_setting(settings, SettingKey::LastClaudePath)
-            .ok()
-            .flatten()
-            .map(PathBuf::from),
-        version_mismatch: versions.len() > 1,
-        chosen,
-        warning,
-        installations,
-    }
+    versions.len()
 }

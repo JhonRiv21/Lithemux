@@ -1,5 +1,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+mod app_interop_test;
 mod categories_and_sessions_test;
 mod concurrent_start_test;
 mod config_test;

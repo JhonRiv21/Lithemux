@@ -28,7 +28,7 @@ fn the_program_sees_a_color_terminal() {
 // PLAN §1.2 test 5: the program learns the new size (SIGWINCH and the PTY size).
 #[test]
 fn a_resize_reaches_the_program() {
-    let mut session = start("report-size");
+    let session = start("report-size");
     wait_for(&session, "ready");
     session.resize(GridSize {
         columns: 100,
@@ -137,7 +137,7 @@ fn a_color_query_returns_the_color_the_program_set() {
 // never goes below two.
 #[test]
 fn a_session_is_never_narrower_than_two_columns() {
-    let mut session = start("greet");
+    let session = start("greet");
     wait_for(&session, "ready");
     session.resize(GridSize {
         columns: 1,

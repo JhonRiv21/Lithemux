@@ -5,6 +5,8 @@ pub mod inspect_hook;
 pub mod launch_ports;
 pub mod open_session;
 pub mod plan_launch;
+pub mod prepare_launch;
+pub mod prepared_launch;
 pub mod resolve_claude;
 pub mod resolved_claude;
 pub mod shell_budget;

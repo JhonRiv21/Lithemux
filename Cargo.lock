@@ -2681,6 +2681,8 @@ dependencies = [
  "lithemux-core",
  "portable-pty",
  "rustix",
+ "serde_json",
+ "signal-hook 0.3.18",
  "tempfile",
  "thiserror 2.0.21",
 ]
@@ -2692,6 +2694,7 @@ dependencies = [
  "anyhow",
  "assert_cmd",
  "clap",
+ "lithemux-app",
  "lithemux-core",
  "portable-pty",
  "rustix",

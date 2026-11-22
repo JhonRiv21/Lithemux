@@ -200,3 +200,35 @@ fn a_domain_cannot_import_every_module_at_once() {
         describe(&violations)
     );
 }
+
+// PLAN §2.1: the session host has no dependency on gpui, so it can be
+// tested without a window and driven by any interface
+#[test]
+fn the_session_host_does_not_know_gpui() {
+    let host = Path::new(env!("CARGO_MANIFEST_DIR")).join("../app/src/session_host");
+    let mut files = Vec::new();
+    rules::collect(&host, &mut files);
+    assert!(files.len() >= 8, "found {} files of the host", files.len());
+    for path in files {
+        let source = std::fs::read_to_string(&path).unwrap();
+        let mentions: Vec<usize> = tokens::tokens_of(&source)
+            .unwrap()
+            .iter()
+            .filter(|token| matches!(token.ident(), Some("gpui" | "gpui_platform")))
+            .map(|token| token.line)
+            .collect();
+        assert!(mentions.is_empty(), "{}:{mentions:?}", path.display());
+    }
+}
+
+// The rule above reads tokens, so a mention in a comment is not a use
+#[test]
+fn a_use_of_gpui_is_told_from_a_mention_in_a_comment() {
+    let uses = tokens::tokens_of("// no gpui here\nuse gpui::App;\n").unwrap();
+    let lines: Vec<usize> = uses
+        .iter()
+        .filter(|token| token.ident() == Some("gpui"))
+        .map(|token| token.line)
+        .collect();
+    assert_eq!(lines, [2]);
+}

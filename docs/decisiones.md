@@ -33,6 +33,11 @@ Decisiones tomadas durante la ejecución, con fecha y porqué. Las aprueba la se
 | D-27 | 2026-11-21 | 2.0 | La sonda del shell corre sin terminal: el único `unsafe` del workspace |
 | D-28 | 2026-11-21 | 2.0 | El último `claude` bueno se recuerda y va antes que el shell no interactivo |
 | D-29 | 2026-11-21 | 2.0 | Un presupuesto de espera compartido para las consultas al shell |
+| D-30 | 2026-11-21 | 2.1 | Las piezas del lanzamiento que comparten la CLI y la app |
+| D-31 | 2026-11-21 | 2.1 | Forma del `SessionHost` |
+| D-32 | 2026-11-21 | 2.1 | Una sola instancia y el socket de eventos |
+| D-33 | 2026-11-21 | 2.1 | El host no espera: abrir y cerrar en segundo plano |
+| D-34 | 2026-11-21 | 2.1 | Las salidas de la app y el fin del grupo de procesos |
 
 ---
 
@@ -455,3 +460,112 @@ Los fixtures `bad` nuevos son los casos de la auditoría, uno por archivo. La re
 - El reloj es del puerto (`ShellProbe::now`): el adaptador real usa el del sistema y el de los tests lo inventa, así que los casos de uso siguen sin depender del tiempo real.
 - Con un perfil colgado: la consulta interactiva gasta 3 s y el respaldo recibe 1 s. `open` y `doctor` tardan 4 s.
 - No cubre `claude --version`, que no pasa por el perfil del usuario y conserva sus plazos.
+
+## D-30 · Las piezas del lanzamiento que comparten la CLI y la app
+
+**Fecha:** 2026-11-21 (§2.1).
+
+**Decisión.** `core::launch` expone el lanzamiento en piezas, y las dos lo usan igual:
+
+- **`prepare_launch`** hace todo menos arrancar el proceso: busca la sesión, **toma el candado** y después decide el comando (`--resume` o `--session-id`, mirando el transcript ya con el candado puesto). Devuelve un `PreparedLaunch` con el plan y el candado dentro.
+- **`PreparedLaunch`** suelta el candado cuando se destruye. Quien arranca el proceso lo conserva mientras el proceso viva, y le anota el pid con `started(pid)`.
+- **El comando limpio.** La CLI usa `CleanCommand`; la app, que necesita un PTY, usa `child_env`, que limpia el entorno con la misma función (`without_session_markers`). Es una sola lista (D-22).
+- **`open_session`** queda como lo que es: `prepare_launch` más el supervisor de la CLI (spawn y espera). El `runner` salió de `LaunchPorts` y es un parámetro suyo, porque la app no tiene ninguno.
+
+La sesión shell se prepara sin candado, como antes.
+
+**Comprobado.** Los tests de `open` no cambiaron de resultado: los de PTY, los de señales y los de D-03 siguen en verde.
+
+**Lanzada desde el Dock** (lo normal desde la §2.2), la app recibe un entorno mínimo: `PATH=/usr/bin:/bin:/usr/sbin:/sbin`. Comprobado con `env -i` y ese entorno: la resolución de `claude` no depende de él, porque pregunta al shell de login interactivo, y encontró `~/.local/bin/claude` 2.1.330; un `zsh -lic` desde ahí reconstruye el `PATH` completo del usuario, así que las sesiones shell (`$SHELL -l` en un PTY) también. Sin `SHELL` en el entorno se usa `/bin/zsh`. No hace falta compensar nada.
+
+## D-31 · Forma del `SessionHost`
+
+**Fecha:** 2026-11-21 (§2.1).
+
+**Decisión.** `crates/app/src/session_host/` no depende de gpui y se prueba sin ventana.
+
+| Archivo | Qué contiene |
+|---|---|
+| `host.rs` | `SessionHost`: abre, cierra, sabe el estado y lee su buzón |
+| `hosted.rs` | una sesión abierta aquí: su terminal y su `PreparedLaunch` |
+| `mailbox.rs` | lo que los hilos de fondo le dejan dicho al host |
+| `event_socket.rs` | `app.sock` |
+| `instance_lock.rs` | `app.lock` |
+| `config.rs`, `error.rs` | de dónde saca su entorno; sus errores |
+
+- **Un solo hilo con buzón.** El host vive en el hilo de la interfaz. Los hilos de fondo (el del socket y el que espera a cada hijo) no tocan nada suyo: dejan un mensaje en un canal y avisan por otro. La interfaz espera ese aviso y llama a `process_pending()`. Así no hay estado compartido ni candados propios, y la base de datos se usa desde una sola conexión.
+- **El terminal es compartido, no cedido.** El host guarda cada `TerminalSession` en un `Rc`; la vista recibe otro. Una sesión sin vista sigue viva y su emulador sigue leyendo; nadie consume sus avisos de repintado, así que no cuesta pintarla. `resize` pasó a tomar `&self`.
+- **El estado no viaja.** Un mensaje del socket solo nombra la sesión. El host relee esa fila de la base de datos.
+- **Fin del hijo.** El hilo que espera al hijo avisa. El host suelta el candado y, si es una sesión de Claude, escribe `ended` (respetando `hibernated`): normalmente ya lo hizo el hook `SessionEnd`, y esto cubre a un `claude` que murió sin avisar. El terminal se conserva. Volver a abrir pasa otra vez por `prepare_launch`.
+- **Cierre.** `shut_down()`, que también corre al destruir el host, cuelga a todos los grupos, espera hasta 1,5 s a que desaparezcan (SIGHUP, 200 ms de gracia y SIGKILL, como en la Fase 1) y solo entonces suelta los candados.
+- **«Abierta en otra terminal».** `open` devuelve `OpenElsewhere { pid }` y no lanza nada.
+
+**Cambios tras la auditoría de la §2.1.** El host ya no espera nada salvo al salir (D-33), el candado lo suelta el hilo que espera al hijo, y las señales cierran en orden (D-34). Lo que sigue describe el estado final.
+
+**Límites conocidos.**
+
+- **`SIGKILL` a la app.** No se puede atrapar. El kernel cuelga a los hijos al cerrarse sus PTY y los candados se sueltan solos, pero un hijo que **ignore** SIGHUP sobrevive, y los estados de la base de datos quedan como estaban. Reconciliar al arrancar es de la §2.5.
+- **Procesos que se van a su propia sesión** (`setsid`): salen del grupo y quedan fuera de alcance.
+- **Reabrir justo después de cerrar.** La sesión sigue con candado hasta que su programa desaparece (hasta 200 ms, más si hay que matarlo). Si se pide abrirla en ese rato, la fase es «abierta en otra terminal», con el pid del propio hijo que se está yendo. La barra lateral de la §2.2 tendrá que tratarlo.
+- **`status` de una sesión shell:** no tiene hooks ni candado, así que la CLI no puede saber que la app la tiene abierta.
+- **Estado guardado viejo en la etiqueta.** Una sesión que se relanza muestra su último estado guardado (`ended`, por ejemplo) hasta que el hook `SessionStart` lo cambia. Con el `claude` falso, que no dispara hooks, se queda así.
+- El `Rc` ata el host al hilo de la interfaz. Es deliberado.
+
+## D-32 · Una sola instancia y el socket de eventos
+
+**Fecha:** 2026-11-21 (§2.1).
+
+- **`<home>/app.lock`** con `flock`, tomado antes de tocar el socket. Una segunda instancia termina con «lithemux is already running (pid N)» y código 1. El kernel lo suelta si la app muere.
+- **`<home>/app.sock`**:
+  - Si el archivo existe y alguien responde, la app no arranca (con el candado ya tomado solo puede ser otro programa). Si nadie responde, es resto de una caída y se borra.
+  - Permisos 0600, puestos justo después de crearlo. Queda una ventana mínima entre el `bind` y el `chmod`; el home del usuario ya es privado.
+  - Un hilo acepta conexiones y da a cada una un hilo corto, con **200 ms en total** para mandar su línea (hasta 1 KB), la reparta como la reparta. Así un cliente callado o lento no frena a los demás: con cinco callados y uno que goteaba un byte cada 150 ms, un evento tardaba 3,3 s; ahora menos de 150 ms. Lo malformado y lo que nombra una sesión desconocida se ignora.
+  - Si `accept` falla (sin descriptores, por ejemplo) espera 50 ms antes de reintentar, en vez de girar en vacío.
+  - Al cerrar, el archivo se borra.
+- **Bug encontrado por los tests.** El hook escribe y cuelga al instante, a menudo antes de que la app acepte la conexión. En macOS no se puede poner un tiempo de espera de lectura en una conexión así, y la primera versión abandonaba el mensaje al fallar eso. Se perdían eventos. Ahora el fallo se ignora: lo enviado ya está esperando.
+- **Límite del sistema.** La ruta de un socket Unix no puede pasar de unos 104 bytes. Con el home por defecto (`~/Library/Application Support/lithemux`) sobra; con un `LITHEMUX_HOME` muy largo la app no arranca y lo dice («path must be shorter than SUN_LEN»). El hook, en ese caso, simplemente no avisa.
+
+## D-33 · El host no espera: abrir y cerrar en segundo plano
+
+**Fecha:** 2026-11-21 (auditoría de la §2.1, I4 y punto 6).
+
+**Contexto.** En la primera versión, `open` preparaba el lanzamiento en el hilo de la interfaz (hasta 3 s de sonda del shell y 2 s de `--version`), y `close` esperaba hasta 1,5 s. Con la barra lateral eso congelaría la ventana.
+
+**Decisión.**
+
+- **Abrir.** `open` solo busca la sesión en la base de datos y devuelve al instante. La sesión queda en fase `Opening` mientras un hilo, con su propia conexión, toma el candado y decide el comando. El resultado llega por el buzón; el host arranca entonces el PTY, que es rápido. Las fases son `Opening`, `Running`, `Ended`, `OpenElsewhere { pid }` y `Failed(motivo)`.
+- **Cerrar.** `close` deja de mostrar la sesión, cuelga a su programa y vuelve. No espera.
+- **El candado lo suelta el hilo que espera al hijo,** no el host: en cuanto no queda nada del grupo del programa. Antes se soltaba cuando la interfaz procesaba el aviso, o a los 1,5 s aunque el programa siguiera vivo.
+- **Cada arranque tiene un número.** El aviso «terminó» lo lleva, y el host ignora el de un arranque anterior de la misma sesión.
+- **`shut_down()` es lo único que espera,** hasta 3 s, y solo al salir de la app. También cierra el socket y borra su archivo, porque la app puede salir sin llegar a destruir el host.
+- **El entorno de las sesiones sale de la configuración** (`HostConfig.environment`), no de `std::env` directamente. La app pasa el suyo; los tests, uno mínimo.
+
+`PreparedLaunch` es de solo lectura (su plan no se puede cambiar una vez decidido con el candado) y `HeldSessionLock` es `Send`, para poder dárselo a ese hilo.
+
+## D-34 · Las salidas de la app y el fin del grupo de procesos
+
+**Fecha:** 2026-11-21 (auditoría de la §2.1, I1 e I2).
+
+**Qué pasaba.** SIGTERM, SIGINT y SIGHUP mataban a la app sin cerrar nada. Un hijo que ignorase SIGHUP seguía vivo con el candado libre, y un `lithemux open` lanzaba un segundo `claude` sobre la misma conversación. SIGHUP es el caso cotidiano: cerrar la terminal desde la que se lanzó la app.
+
+**Salidas de la app.**
+
+| Cómo sale | Qué cierra las sesiones |
+|---|---|
+| SIGTERM, SIGINT, SIGHUP | `signal_hook` avisa al hilo de la interfaz, que llama a `shut_down()` y después a `quit` |
+| cmd+q, cerrar la ventana, la petición de salida de macOS (la del Dock) | `on_app_quit` de gpui, que llama a `shut_down()` |
+| SIGKILL, una caída | Nada. Es el límite de D-31 |
+
+Las señales cierran por su cuenta y no a través de `on_app_quit` porque **gpui sin ventana no instala el delegado de la aplicación** y esos avisos no corren. Los tests del binario usan ese modo (`--no-window`), así que la ruta de las señales tenía que valer sin ventana.
+
+**Fin del grupo de procesos** (en el PTY, vale para todo terminal):
+
+- Al colgar: SIGHUP al grupo y, si el programa no ha muerto tras 200 ms, SIGKILL al grupo.
+- **Cuando el programa termina, por lo que sea,** el hilo que lo esperaba mira si queda alguien en su grupo. Si queda: SIGHUP, 200 ms y SIGKILL, y espera hasta 1 s a que el grupo quede vacío. Antes, un hijo terco de un `claude` que moría (o que salía solo) se quedaba vivo.
+- Una sesión está «ida» solo cuando su grupo está vacío, y es entonces cuando se suelta el candado.
+
+**Costo aceptado.** Lo que un programa deje en su grupo muere con él. Un shell interactivo pone sus trabajos en segundo plano en grupos propios, así que esos no se tocan.
+
+**Comprobado a mano con ventana y dos hijos que ignoran SIGHUP:** con SIGHUP a la app y con la petición de salida del sistema, la app se va, los hijos mueren, el socket se borra y `status` dice `closed`.
+
+**Sobre `osascript … "lithemux-app" to quit`.** No cierra la app, y no es un fallo suyo: el binario no es un bundle y AppleScript no lo encuentra por ese nombre (no da error, simplemente no llega). La misma petición enviada por id de proceso (`NSRunningApplication.terminate()`, que es lo que hace el Dock) sí la cierra en orden. Cuando la app sea un `.app` (Fase 3), `osascript` funcionará por nombre.

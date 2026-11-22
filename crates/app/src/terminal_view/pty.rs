@@ -9,7 +9,8 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use portable_pty::{Child, CommandBuilder, MasterPty, PtySize, native_pty_system};
-use rustix::process::{Pid, Signal, kill_process_group};
+use rustix::io::Errno;
+use rustix::process::{Pid, Signal, kill_process_group, test_kill_process_group};
 
 use super::child_env::child_env;
 use super::error::TerminalError;
@@ -66,14 +67,19 @@ impl GridSize {
 /// How long a program gets to leave after the hangup before it is killed.
 const HANGUP_GRACE: Duration = Duration::from_millis(200);
 const REAP_POLL: Duration = Duration::from_millis(10);
+/// How long a kill may take to empty the group before giving up on it.
+const KILL_PATIENCE: Duration = Duration::from_secs(1);
 const ROOT: &str = "/";
 
 pub struct PtyProcess {
     master: Box<dyn MasterPty + Send>,
     /// The child leads its own session, so its pid names its process group.
     group: Option<Pid>,
-    /// Set once the child was waited for: its pid may belong to someone else.
+    /// Set once the child was waited for.
     reaped: Arc<AtomicBool>,
+    /// Set once nothing of the child's process group is left.
+    gone: Arc<AtomicBool>,
+    hung_up: AtomicBool,
 }
 
 pub struct PtyStreams {
@@ -85,8 +91,9 @@ impl PtyProcess {
     pub fn spawn(
         command: &ShellCommand,
         size: GridSize,
+        on_exit: Box<dyn FnOnce() + Send>,
     ) -> Result<(Self, PtyStreams), TerminalError> {
-        Self::spawn_in(command, size, std::env::vars_os())
+        Self::spawn_in(command, size, std::env::vars_os(), on_exit)
     }
 
     /// `inherited` is the environment of the process that starts the
@@ -95,6 +102,7 @@ impl PtyProcess {
         command: &ShellCommand,
         size: GridSize,
         inherited: impl Iterator<Item = (OsString, OsString)>,
+        on_exit: Box<dyn FnOnce() + Send>,
     ) -> Result<(Self, PtyStreams), TerminalError> {
         let pair = native_pty_system()
             .openpty(size.pty_size())
@@ -115,11 +123,14 @@ impl PtyProcess {
             .process_id()
             .and_then(|pid| i32::try_from(pid).ok())
             .and_then(Pid::from_raw);
+        let ending = end_in_background(child, group, on_exit);
         Ok((
             Self {
                 master: pair.master,
                 group,
-                reaped: reap_in_background(child),
+                reaped: Arc::clone(&ending.reaped),
+                gone: Arc::clone(&ending.gone),
+                hung_up: AtomicBool::new(false),
             },
             streams,
         ))
@@ -162,30 +173,93 @@ fn working_directory(command: &ShellCommand, env: &[(OsString, OsString)]) -> Pa
         .unwrap_or_else(|| PathBuf::from(ROOT))
 }
 
-/// Waits for the child so it does not stay around as a zombie; the flag is
-/// set once its pid is free to be someone else's.
-fn reap_in_background(mut child: Box<dyn Child + Send + Sync>) -> Arc<AtomicBool> {
-    let reaped = Arc::new(AtomicBool::new(false));
+struct Ending {
+    reaped: Arc<AtomicBool>,
+    gone: Arc<AtomicBool>,
+}
+
+/// Waits for the child, so it does not stay around as a zombie, and then
+/// for everything else in its process group: what the child left behind is
+/// hung up on and, if it ignores that, killed. `on_exit` runs when nothing
+/// is left.
+fn end_in_background(
+    mut child: Box<dyn Child + Send + Sync>,
+    group: Option<Pid>,
+    on_exit: Box<dyn FnOnce() + Send>,
+) -> Ending {
+    let ending = Ending {
+        reaped: Arc::new(AtomicBool::new(false)),
+        gone: Arc::new(AtomicBool::new(false)),
+    };
     thread::spawn({
-        let reaped = Arc::clone(&reaped);
+        let (reaped, gone) = (Arc::clone(&ending.reaped), Arc::clone(&ending.gone));
         move || {
             let _ = child.wait();
             reaped.store(true, Ordering::Release);
+            if let Some(group) = group {
+                end_group(group);
+            }
+            // In this order: once it says "gone", `on_exit` has already run.
+            on_exit();
+            gone.store(true, Ordering::Release);
         }
     });
-    reaped
+    ending
 }
 
-impl Drop for PtyProcess {
-    // Hangup for the whole group, then a kill for whatever ignored it.
-    fn drop(&mut self) {
+/// A group has members for as long as signalling it finds someone.
+fn group_is_empty(group: Pid) -> bool {
+    test_kill_process_group(group).is_err_and(|error| error == Errno::SRCH)
+}
+
+fn wait_for_empty_group(group: Pid, patience: Duration) -> bool {
+    let deadline = Instant::now() + patience;
+    while !group_is_empty(group) {
+        if Instant::now() >= deadline {
+            return false;
+        }
+        thread::sleep(REAP_POLL);
+    }
+    true
+}
+
+/// Hangup, a grace period, then a kill, for whatever is left in the group.
+/// Processes that moved to a session of their own are out of reach.
+fn end_group(group: Pid) {
+    if group_is_empty(group) {
+        return;
+    }
+    let _ = kill_process_group(group, Signal::HUP);
+    if !wait_for_empty_group(group, HANGUP_GRACE) {
+        let _ = kill_process_group(group, Signal::KILL);
+        wait_for_empty_group(group, KILL_PATIENCE);
+    }
+}
+
+impl PtyProcess {
+    pub fn process_id(&self) -> Option<u32> {
+        self.group
+            .map(|group| group.as_raw_nonzero().get().unsigned_abs())
+    }
+
+    /// Whether the program and everything else in its group have ended.
+    pub fn is_gone(&self) -> bool {
+        self.gone.load(Ordering::Acquire)
+    }
+
+    /// Hangup for the whole group, then a kill if the program itself ignores
+    /// it. What the program leaves behind is dealt with when it ends. Asking
+    /// twice, or once all is gone, does nothing.
+    pub fn hang_up(&self) {
         let Some(group) = self.group else {
             return;
         };
-        if self.reaped.load(Ordering::Acquire) {
+        if self.is_gone() || self.hung_up.swap(true, Ordering::AcqRel) {
             return;
         }
-        let _ = kill_process_group(group, Signal::HUP);
+        if !self.reaped.load(Ordering::Acquire) {
+            let _ = kill_process_group(group, Signal::HUP);
+        }
         let reaped = Arc::clone(&self.reaped);
         thread::spawn(move || {
             let deadline = Instant::now() + HANGUP_GRACE;
@@ -197,5 +271,11 @@ impl Drop for PtyProcess {
                 thread::sleep(REAP_POLL);
             }
         });
+    }
+}
+
+impl Drop for PtyProcess {
+    fn drop(&mut self) {
+        self.hang_up();
     }
 }

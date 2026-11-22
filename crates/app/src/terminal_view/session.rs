@@ -1,5 +1,6 @@
 //! A running terminal: the emulator grid plus the process that feeds it.
 
+use std::cell::Cell;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
@@ -61,7 +62,7 @@ pub struct TerminalSession {
     input: mpsc::Sender<Vec<u8>>,
     pty: PtyProcess,
     exited: Arc<AtomicBool>,
-    size: GridSize,
+    size: Cell<GridSize>,
 }
 
 impl TerminalSession {
@@ -70,8 +71,18 @@ impl TerminalSession {
         command: &ShellCommand,
         size: GridSize,
     ) -> Result<(Self, async_channel::Receiver<()>), TerminalError> {
+        Self::spawn_observed(command, size, Box::new(|| {}))
+    }
+
+    /// Like `spawn`; `on_exit` runs, on another thread, once the program and
+    /// whatever it left in its process group are gone.
+    pub fn spawn_observed(
+        command: &ShellCommand,
+        size: GridSize,
+        on_exit: Box<dyn FnOnce() + Send>,
+    ) -> Result<(Self, async_channel::Receiver<()>), TerminalError> {
         let size = normalized(size);
-        let (pty, streams) = PtyProcess::spawn(command, size)?;
+        let (pty, streams) = PtyProcess::spawn(command, size, on_exit)?;
         let PtyStreams { reader, writer } = streams;
         let (input, pending_input) = mpsc::channel();
         let (wake, wakes) = async_channel::bounded(1);
@@ -101,7 +112,7 @@ impl TerminalSession {
                 input,
                 pty,
                 exited,
-                size,
+                size: Cell::new(size),
             },
             wakes,
         ))
@@ -114,7 +125,23 @@ impl TerminalSession {
     }
 
     pub fn size(&self) -> GridSize {
-        self.size
+        self.size.get()
+    }
+
+    /// The pid of the program, while it is known.
+    pub fn process_id(&self) -> Option<u32> {
+        self.pty.process_id()
+    }
+
+    /// Whether the program and everything it left in its group have ended.
+    pub fn process_is_gone(&self) -> bool {
+        self.pty.is_gone()
+    }
+
+    /// Ends the program: a hangup for its whole group, then a kill for
+    /// whatever ignored it. The screen stays readable.
+    pub fn terminate(&self) {
+        self.pty.hang_up();
     }
 
     /// Typed text or a paste, as the program asked to receive pastes.
@@ -142,12 +169,12 @@ impl TerminalSession {
         }
     }
 
-    pub fn resize(&mut self, size: GridSize) {
+    pub fn resize(&self, size: GridSize) {
         let size = normalized(size);
-        if size == self.size {
+        if size == self.size.get() {
             return;
         }
-        self.size = size;
+        self.size.set(size);
         self.emulator.lock().term.resize(TermDimensions::from(size));
         self.pty.resize(size);
     }

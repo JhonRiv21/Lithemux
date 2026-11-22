@@ -1,7 +1,8 @@
 use crate::modules::launch::error::LaunchError;
 
-/// Held for as long as the session runs; released when dropped.
-pub trait HeldSessionLock {
+/// Held for as long as the session runs; released when dropped. It can be
+/// handed to the thread that waits for the session's program.
+pub trait HeldSessionLock: Send {
     /// Records the pid of the process running the session, for diagnostics.
     fn record_pid(&mut self, pid: u32);
 }

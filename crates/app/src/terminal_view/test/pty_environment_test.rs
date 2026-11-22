@@ -21,8 +21,13 @@ fn printed_by_command(command: &ShellCommand, inherited: &[(&str, &str)]) -> Str
         .map(|(name, value)| (OsString::from(name), OsString::from(value)))
         .collect::<Vec<_>>();
 
-    let (_process, mut streams) =
-        PtyProcess::spawn_in(command, GridSize::INITIAL, inherited.into_iter()).unwrap();
+    let (_process, mut streams) = PtyProcess::spawn_in(
+        command,
+        GridSize::INITIAL,
+        inherited.into_iter(),
+        Box::new(|| {}),
+    )
+    .unwrap();
 
     let mut printed = Vec::new();
     let mut chunk = [0_u8; 1024];

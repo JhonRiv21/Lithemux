@@ -29,10 +29,13 @@ gpui.workspace = true
 gpui_platform.workspace = true
 portable-pty.workspace = true
 rustix.workspace = true
+serde_json.workspace = true
+signal-hook.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
 async-channel.workspace = true
+lithemux-core.workspace = true
 rustix.workspace = true
 tempfile.workspace = true
 

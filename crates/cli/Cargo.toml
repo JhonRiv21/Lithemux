@@ -20,6 +20,7 @@ serde_json.workspace = true
 
 [dev-dependencies]
 assert_cmd.workspace = true
+lithemux-app = { path = "../app" }
 portable-pty.workspace = true
 rustix.workspace = true
 tempfile.workspace = true

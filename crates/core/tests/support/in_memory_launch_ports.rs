@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 use lithemux_core::modules::launch::{
     HeldSessionLock, HookBinary, LaunchError, LaunchPlan, SessionLocks, SessionRunner,
@@ -45,23 +45,26 @@ impl TranscriptLocator for InMemoryTranscripts {
 // Same contract as FlockSessionLocks: exclusive per session, released on drop.
 #[derive(Default)]
 pub struct InMemoryLocks {
-    held: Rc<RefCell<HashMap<String, u32>>>,
+    held: Arc<Mutex<HashMap<String, u32>>>,
 }
 
 struct HeldInMemory {
     session_id: String,
-    held: Rc<RefCell<HashMap<String, u32>>>,
+    held: Arc<Mutex<HashMap<String, u32>>>,
 }
 
 impl HeldSessionLock for HeldInMemory {
     fn record_pid(&mut self, pid: u32) {
-        self.held.borrow_mut().insert(self.session_id.clone(), pid);
+        self.held
+            .lock()
+            .unwrap()
+            .insert(self.session_id.clone(), pid);
     }
 }
 
 impl Drop for HeldInMemory {
     fn drop(&mut self) {
-        self.held.borrow_mut().remove(&self.session_id);
+        self.held.lock().unwrap().remove(&self.session_id);
     }
 }
 
@@ -72,15 +75,15 @@ impl SessionLocks for InMemoryLocks {
                 pid: (pid != 0).then_some(pid),
             });
         }
-        self.held.borrow_mut().insert(session_id.to_string(), 0);
+        self.held.lock().unwrap().insert(session_id.to_string(), 0);
         Ok(Box::new(HeldInMemory {
             session_id: session_id.to_string(),
-            held: Rc::clone(&self.held),
+            held: Arc::clone(&self.held),
         }))
     }
 
     fn holder(&self, session_id: &str) -> Option<u32> {
-        self.held.borrow().get(session_id).copied()
+        self.held.lock().unwrap().get(session_id).copied()
     }
 }
 

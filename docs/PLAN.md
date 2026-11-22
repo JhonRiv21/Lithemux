@@ -391,15 +391,48 @@ La auditoría independiente del commit `ac69f71` encontró estos fallos.
 
 ### 2.1 Gestor de sesiones (sin interfaz)
 
-- Un `SessionHost` en la app es dueño de los PTYs. Cada sesión viva tiene su `Term` de alacritty, que **sigue parseando la salida aunque no se vea**.
-- Scrollback por defecto: 10.000 líneas, configurable.
-- Solo los paneles visibles se pintan. Las terminales ocultas no consumen GPU.
-- El lanzamiento usa `core::launch`, con candado incluido.
-- **Entorno heredado de cmux:** adelantado a la §2.0 con la auditoría de ese bloque (D-22). Ya no es trabajo de esta subfase.
-- El SessionHost es el dueño del PTY y **mata al hijo al cerrar** la sesión o la app. Así se cierra el riesgo de doble reanudación que queda en la CLI cuando el padre muere por `SIGKILL` (D-03, §2.0 punto 14).
-- Servidor de socket en `<home>/app.sock`: recibe los eventos del hook y actualiza el estado en vivo. La fuente de verdad sigue siendo la BD.
+- **`SessionHost`** (`crates/app/src/session_host/`) es dueño de los PTYs.
+  - Es un struct de Rust **sin dependencias de gpui**: la vista lo observa por un canal o un callback de «cambió». Así se prueba con fakes en una PTY real, sin ventana.
+  - Cada sesión viva tiene su `TerminalSession` (el de la Fase 1), que **sigue parseando la salida aunque no se vea**. Solo se despierta la vista si la sesión está visible.
+- **Scrollback:** 5.000 líneas por defecto (medido en la Fase 1), configurable en la §2.6.
+- **Solo los paneles visibles se pintan.** Las terminales ocultas no consumen GPU.
+- **Lanzamiento desde la app.** Mismas reglas que `core::launch`, pero sin el supervisor de la CLI:
+  - `core` expone por separado:
+    - tomar el candado;
+    - planificar, eligiendo `--resume` o `--session-id` **con el candado ya tomado**;
+    - el comando limpio (`CleanCommand`, sin marcadores).
+  - La CLI (`open`) y la app usan esas mismas piezas. La CLI las envuelve en su supervisor con spawn+wait; la app, en un PTY.
+  - **El candado lo tiene la app mientras viva el hijo,** con el descriptor `CLOEXEC`, y se suelta cuando el hijo sale.
+  - Si una sesión ya está abierta en otra terminal (`lithemux open` desde cmux), la app no la lanza: la muestra como «abierta en otra terminal», con el pid del dueño.
+- **El SessionHost mata al hijo** al cerrar la sesión o la app: SIGHUP al grupo, una gracia y SIGKILL, como en la Fase 1. Así se cierra el riesgo de doble reanudación que queda en la CLI cuando el padre muere por `SIGKILL` (D-03, §2.0 punto 14).
+- **Una sola instancia de la app:** `<home>/app.lock` con flock. Una segunda instancia sale con un mensaje claro; enfocar la primera queda para la Fase 3.
+- **Socket `<home>/app.sock`:**
+  - Permisos 0600.
+  - Al arrancar, si existe y nadie responde, se borra.
+  - Un hilo de fondo acepta conexiones y lee mensajes cortos, uno por línea: `{"session_id": …, "event": …}`. El estado **no** viaja en el mensaje: la app vuelve a leer la sesión de la BD, que es la fuente de verdad, y avisa a la vista.
+  - Mensajes malformados o de sesiones desconocidas: se ignoran sin caerse.
+  - El hook ya se conecta sin bloquear (§2.0 punto 10).
+- **Fin del hijo.** Si `claude` sale solo, la sesión queda en `ended`, con su pantalla visible y la opción de reanudar. Reanudar vuelve a pasar por el candado y elige `--resume`.
+- **Perfil shell:** misma ruta, sin hooks ni `--resume`; se lanza en el `cwd` de la sesión.
+- **Verificación sin interfaz final:** la ventana del spike gana un argumento **temporal**, `lithemux-app --open <cat>/<sesión> [--open <cat>/<sesión>]`, que abre esas sesiones con el SessionHost en los paneles. Sirve para verificar este bloque con capturas, y lo reemplaza la barra lateral en el bloque siguiente.
+- **Criterios de cierre del bloque:**
+  - **Interoperabilidad con la CLI:**
+    - una sesión abierta por la app no se puede abrir con `lithemux open` (`already open`), y viceversa;
+    - `lithemux status` ve el estado en vivo de las sesiones de la app.
+  - **Ciclo de vida:**
+    - cerrar la app mata a sus `claude`, sin huérfanos (`pgrep`);
+    - reabrir con `--open` reanuda la misma conversación.
+  - **Eventos y estado:**
+    - un evento del hook llega a la app y cambia el estado en memoria en menos de 100 ms;
+    - con 6 sesiones vivas, 2 visibles: CPU en reposo por debajo de 1 % y footprint registrado.
+  - **Tests:** el SessionHost se prueba con fake-claude y fake-shell en PTY real. Ningún test ejecuta el `claude` real (guarda D-13).
 
 ### 2.2 Barra lateral
+
+**Arrastrado del bloque 2.1:**
+- **La app siempre arranca con el SessionHost.** El modo spike de dos shells sin host desaparece, porque hoy permite varias instancias y se salta `app.lock`. `--open` se retira cuando la barra lateral lo reemplace.
+- **Reabrir una sesión justo después de cerrarla,** mientras su programa todavía se está yendo, hoy da `OpenElsewhere` con el pid del propio hijo. Debe mostrarse como «cerrando» y reabrirse sola cuando el candado quede libre.
+- **Al relanzar una sesión,** la etiqueta muestra su último estado guardado (por ejemplo `ended`) hasta que llega SessionStart. Mientras está en fase `Opening`, la etiqueta dice «abriendo», no el estado viejo.
 
 La referencia es la barra de cmux, que Jhon usa a diario. La implementación es propia.
 

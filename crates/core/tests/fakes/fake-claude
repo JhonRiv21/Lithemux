@@ -7,7 +7,10 @@
 # process it starts outlives it; its pid goes to fake-claude.left-behind.pid).
 # Its own pid goes to fake-claude.pid and the names of its environment
 # variables to fake-claude.env (with their values, to fake-claude.environment).
-# How it stands with its terminal goes to fake-claude.terminal.
+# How it stands with its terminal goes to fake-claude.terminal. Every run
+# adds `<session id> <pid> <first argument>` to fake-claude.runs. On a
+# terminal it greets, and with fake-claude.late-line it prints once more a
+# moment later. With fake-claude.ignore-hup it ignores the hangup.
 if [ "$1" = "--version" ]; then
   echo "9.9.9 (Claude Code)"
   exit 0
@@ -30,15 +33,27 @@ if [ -n "$LITHEMUX_HOME" ]; then
   stty sane < /dev/tty 2> /dev/null && terminal="${terminal}foreground=yes\n"
   printf "$terminal" > "$LITHEMUX_HOME/fake-claude.terminal"
   echo $$ > "$LITHEMUX_HOME/fake-claude.pid"
+  # One line per run, for the tests that have several sessions at once.
+  echo "$LITHEMUX_SESSION_ID $$ $1" >> "$LITHEMUX_HOME/fake-claude.runs"
+  [ -f "$LITHEMUX_HOME/fake-claude.ignore-hup" ] && trap '' HUP
+  # Everything is read before the greeting: once it has greeted, all that is
+  # left is to sleep, so a signal sent after the greeting finds it there.
+  nap=""
+  code=0
+  [ -f "$LITHEMUX_HOME/fake-claude.sleep" ] && nap=$(cat "$LITHEMUX_HOME/fake-claude.sleep")
+  [ -f "$LITHEMUX_HOME/fake-claude.exit" ] && code=$(cat "$LITHEMUX_HOME/fake-claude.exit")
+  late=no
+  [ -f "$LITHEMUX_HOME/fake-claude.late-line" ] && late=yes
   if [ -f "$LITHEMUX_HOME/fake-claude.leave-behind" ]; then
     sleep "$(cat "$LITHEMUX_HOME/fake-claude.leave-behind")" > /dev/null 2>&1 &
     echo $! > "$LITHEMUX_HOME/fake-claude.left-behind.pid"
   fi
-  if [ -f "$LITHEMUX_HOME/fake-claude.sleep" ]; then
-    sleep "$(cat "$LITHEMUX_HOME/fake-claude.sleep")"
+  [ -t 1 ] && echo "fake claude ready"
+  if [ "$late" = yes ]; then
+    sleep 0.3
+    echo "a line printed later"
   fi
-  if [ -f "$LITHEMUX_HOME/fake-claude.exit" ]; then
-    exit "$(cat "$LITHEMUX_HOME/fake-claude.exit")"
-  fi
+  [ -n "$nap" ] && sleep "$nap"
+  exit "$code"
 fi
 exit 0
