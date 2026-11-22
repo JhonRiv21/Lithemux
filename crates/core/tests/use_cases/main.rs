@@ -3,6 +3,7 @@
 #[path = "../support/mod.rs"]
 mod support;
 
+mod arrange_use_cases;
 mod category_use_cases;
 mod context_use_cases;
 mod hook_event_use_cases;

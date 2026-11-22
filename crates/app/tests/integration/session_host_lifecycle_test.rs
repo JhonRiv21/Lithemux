@@ -180,3 +180,37 @@ fn kill(pid: i32) {
     use rustix::process::{Pid, Signal, kill_process};
     kill_process(Pid::from_raw(pid).unwrap(), Signal::KILL).unwrap();
 }
+
+// Audit of block 3 (3): a session removed from the database while the app
+// runs it (`lithemux rm`, or its category) does not go on out of sight.
+#[test]
+fn a_session_removed_from_the_database_is_closed_here() {
+    let world = HostedWorld::new();
+    world.add_session("claude", Profile::Claude);
+    world.add_session("shell", Profile::Shell);
+    world.add_session("queda", Profile::Claude);
+    world.steer_fake_claude("fake-claude.sleep", "30");
+    let (mut host, _changes) = world.start();
+    let removed = [
+        run(&mut host, &world, "claude"),
+        run(&mut host, &world, "shell"),
+    ];
+    let kept = run(&mut host, &world, "queda");
+    let (pid, _) = world.wait_for_run(&removed[0], 1);
+    assert!(!host.close_removed());
+
+    for id in &removed {
+        world.remove(id);
+    }
+    assert!(host.close_removed());
+
+    attend_until(&mut host, "the removed sessions to be closed", |host| {
+        removed.iter().all(|id| host.phase(id).is_none())
+    });
+    wait_until_gone(pid);
+    assert!(host.is_running(&kept));
+    assert_eq!(
+        FlockSessionLocks::new(&world.home).holder(&removed[0]),
+        None
+    );
+}

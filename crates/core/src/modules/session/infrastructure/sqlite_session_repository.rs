@@ -11,7 +11,8 @@ use crate::platform::store::connection::Db;
 use crate::platform::store::error::StoreError;
 
 const COLUMNS: &str = "id, category_id, slug, role, kind, profile, cwd, claude_session_id, \
-     model, keep_alive, state, claude_version, last_activity_at, created_at, sort";
+     model, keep_alive, state, claude_version, last_activity_at, created_at, sort, \
+     title, pin_sort, preview, unread";
 
 pub struct SqliteSessionRepository<'a> {
     db: &'a Db,
@@ -44,13 +45,28 @@ impl<'a> SqliteSessionRepository<'a> {
     }
 }
 
+impl SqliteSessionRepository<'_> {
+    /// `rest` is what follows `FROM sessions`: the filter and the order.
+    fn list(&self, rest: &str, params: impl Params) -> Result<Vec<Session>, SessionError> {
+        let conn = self.db.conn();
+        let mut stmt = conn
+            .prepare(&format!("SELECT {COLUMNS} FROM sessions {rest}"))
+            .map_err(StoreError::from)?;
+        let rows = stmt.query_map(params, from_row).map_err(StoreError::from)?;
+        Ok(rows
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(StoreError::from)?)
+    }
+}
+
 impl SessionRepository for SqliteSessionRepository<'_> {
     fn insert(&self, session: &Session) -> Result<(), SessionError> {
         self.execute(
             "INSERT INTO sessions(id, category_id, slug, role, kind, profile, cwd, \
              claude_session_id, model, keep_alive, state, claude_version, last_activity_at, \
-             created_at, sort) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+             created_at, sort, title, pin_sort, preview, unread) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, \
+             ?16, ?17, ?18, ?19)",
             params![
                 session.id,
                 session.category_id,
@@ -66,7 +82,11 @@ impl SessionRepository for SqliteSessionRepository<'_> {
                 session.claude_version,
                 session.last_activity_at,
                 session.created_at,
-                session.sort
+                session.sort,
+                session.title,
+                session.pin_sort,
+                session.preview,
+                session.unread
             ],
         )
     }
@@ -84,19 +104,14 @@ impl SessionRepository for SqliteSessionRepository<'_> {
     }
 
     fn list_in(&self, category_id: &str) -> Result<Vec<Session>, SessionError> {
-        let conn = self.db.conn();
-        let mut stmt = conn
-            .prepare(&format!(
-                "SELECT {COLUMNS} FROM sessions WHERE category_id = ?1 \
-                 ORDER BY sort, created_at, slug"
-            ))
-            .map_err(StoreError::from)?;
-        let rows = stmt
-            .query_map([category_id], from_row)
-            .map_err(StoreError::from)?;
-        Ok(rows
-            .collect::<rusqlite::Result<Vec<_>>>()
-            .map_err(StoreError::from)?)
+        self.list(
+            "WHERE category_id = ?1 ORDER BY sort, created_at, slug",
+            [category_id],
+        )
+    }
+
+    fn list_all(&self) -> Result<Vec<Session>, SessionError> {
+        self.list("ORDER BY category_id, sort, created_at, slug", [])
     }
 
     fn find(&self, category_id: &str, slug: &str) -> Result<Option<Session>, SessionError> {
@@ -186,6 +201,51 @@ impl SessionRepository for SqliteSessionRepository<'_> {
         )
     }
 
+    fn update_title(&self, id: &str, title: Option<&str>) -> Result<(), SessionError> {
+        self.execute(
+            "UPDATE sessions SET title = ?2 WHERE id = ?1",
+            params![id, title],
+        )
+    }
+
+    fn update_sort(&self, id: &str, sort: i64) -> Result<(), SessionError> {
+        self.execute(
+            "UPDATE sessions SET sort = ?2 WHERE id = ?1",
+            params![id, sort],
+        )
+    }
+
+    fn update_pin_sort(&self, id: &str, pin_sort: Option<i64>) -> Result<(), SessionError> {
+        self.execute(
+            "UPDATE sessions SET pin_sort = ?2 WHERE id = ?1",
+            params![id, pin_sort],
+        )
+    }
+
+    fn list_pinned(&self) -> Result<Vec<Session>, SessionError> {
+        self.list(
+            "WHERE pin_sort IS NOT NULL ORDER BY pin_sort, created_at, slug",
+            [],
+        )
+    }
+
+    fn note_message(
+        &self,
+        id: &str,
+        preview: Option<&str>,
+        asks_for_attention: bool,
+    ) -> Result<(), SessionError> {
+        self.execute(
+            "UPDATE sessions SET preview = COALESCE(?2, preview), unread = unread + ?3 \
+             WHERE id = ?1",
+            params![id, preview, i64::from(asks_for_attention)],
+        )
+    }
+
+    fn clear_unread(&self, id: &str) -> Result<(), SessionError> {
+        self.execute("UPDATE sessions SET unread = 0 WHERE id = ?1", [id])
+    }
+
     fn delete(&self, id: &str) -> Result<(), SessionError> {
         self.execute("DELETE FROM sessions WHERE id = ?1", [id])
     }
@@ -208,6 +268,10 @@ fn from_row(row: &Row<'_>) -> rusqlite::Result<Session> {
         last_activity_at: row.get(12)?,
         created_at: row.get::<_, Option<i64>>(13)?.unwrap_or(0),
         sort: row.get::<_, Option<i64>>(14)?.unwrap_or(0),
+        title: row.get(15)?,
+        pin_sort: row.get(16)?,
+        preview: row.get(17)?,
+        unread: row.get(18)?,
     })
 }
 

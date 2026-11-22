@@ -11,6 +11,8 @@ pub struct Category {
     pub color: Option<String>,
     pub sort: i64,
     pub created_at: i64,
+    /// Whether the sidebar shows it folded.
+    pub collapsed: bool,
 }
 
 #[derive(Debug, Clone)]

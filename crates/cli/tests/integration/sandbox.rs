@@ -107,16 +107,26 @@ impl Sandbox {
     /// launched. The launcher never runs a `claude` that sits in a temporary
     /// folder (docs/decisiones.md D-05), and the fakes do when the repository
     /// itself was checked out in one.
+    ///
+    /// When they cannot, it says so: a test that skips part of what it
+    /// checks must not pass in silence.
     pub fn fakes_on_the_path_are_launchable() -> bool {
         let fakes = fake("on-path");
-        ![
+        let in_a_temporary_folder = [
             "/tmp/",
             "/private/tmp/",
             "/var/folders/",
             "/private/var/folders/",
         ]
         .iter()
-        .any(|temporary| fakes.starts_with(temporary))
+        .any(|temporary| fakes.starts_with(temporary));
+        if in_a_temporary_folder {
+            eprintln!(
+                "SKIPPED part of this test: the repository is in a temporary folder \
+                 ({fakes}), where lithemux never launches a `claude` (D-05)"
+            );
+        }
+        !in_a_temporary_folder
     }
 
     /// Waits until the fake claude wrote the file that says it is running.

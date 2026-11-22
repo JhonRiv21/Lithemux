@@ -365,3 +365,158 @@ La auditoría encontró que el cierre no cumplía «sin huérfanos» y un hueco 
 
 Las pruebas D, E y F de `docs/fases/F2-prueba-manual.md`, con el `claude` real.
 
+
+## Bloque 3 · Barra lateral (§2.2) y área de trabajo (§2.3)
+
+**Fecha:** 2026-11-22.
+
+### Qué se hizo
+
+**Arrastrado del bloque 2.1**
+
+- **La app siempre arranca con el `SessionHost`.** `lithemux-app` sin argumentos abre la ventana nueva; el spike desapareció. `--open` ya no vale con ventana (D-35). Regla `H-003`.
+- **Reabrir mientras se cierra.** Fase nueva `Closing` en el host: la sesión se muestra «closing»/«cerrando» y se reabre sola cuando el candado queda libre. Cubre también el cierre mientras el lanzamiento se preparaba (D-43).
+- **«opening»/«abriendo»** mientras se abre, y también con el programa ya en marcha hasta que Claude avisa (D-43).
+
+**Barra lateral (`crates/app/src/sidebar/`)**
+
+- Tarjetas con título, vista previa, estado en texto, contador de no leídos, cwd abreviado y puertos en escucha (clic: abre `http://localhost:<puerto>`).
+- Fijadas arriba, fuera de su categoría. Categorías colapsables con la madre de cabecera y las hijas colgando. Tarjeta también para las sesiones de shell.
+- Menú de clic derecho y formularios: crear, renombrar, subir/bajar y borrar categorías y sesiones; fijar; marcar como madre (una por categoría, lo niega `core`); `keep_alive`. Reordenar también arrastrando.
+- Vista previa y no leídos desde los hooks, solo con campos documentados (D-37). Puertos con `listeners` + `sysinfo` (D-36).
+
+**Área de trabajo (`crates/app/src/workspace/`)**
+
+- Un panel por defecto; árbol de splits de hasta 4 con divisores arrastrables; pestañas por panel; barra con nueva terminal, dividir a la derecha, dividir hacia abajo y el hueco apagado del navegador.
+- Abrir desde la barra lateral va al panel con foco. Las pestañas se arrastran entre paneles y de lugar. Atajos en D-38.
+- Layout y contenido en la BD con la migración 2 (D-42). Al reiniciar se restaura y **ningún `claude` arranca solo** (D-41).
+
+**`core`**
+
+- Módulo nuevo `modules/workspace` (árbol de paneles puro, guardado y restauración).
+- `session`: título, fijar, orden, vista previa, no leídos. `category`: renombrar, orden, colapsar, slug desde un nombre.
+- `hook_event`: `card_note` (qué deja cada evento en la tarjeta).
+- `platform/process`: `listening_ports` y `local_page`.
+
+**Organización de la app**
+
+| Carpeta | Estado (sin gpui) | Acciones | Vista |
+|---|---|---|---|
+| `sidebar/` | `tree`, `status`, `cwd_label`, `order`, `menu` | `actions` (casos de uso de `core`) | `view`, `form_flow`, `deletion`, `group_view`, `card_view`, `overlay_view` |
+| `workspace/` | el `Layout` de `core` | `changes`, `shortcuts` | `view`, `split_view`, `pane_view`, `tab_drag` |
+
+Además: `app_shell/` (arranque, ventana, lo que comparten las dos vistas, modo sin ventana), `i18n/`, `text_field/` (gpui no trae campo de texto) y `theme/`. Todos los textos están en `locales/en.toml` y `locales/es.toml`; un test falla si a un texto le falta la traducción.
+
+### Honestidad sobre los tests
+
+- **Vi fallar antes del arreglo:** reabrir mientras se cierra. Escribí el test contra el código del bloque 2.1 y falló con el bug exacto: `[Opening, OpenElsewhere { pid: Some(95594) }]`, el pid del propio hijo.
+- **Escritos antes que la implementación, pero pasaron a la primera** (no los vi fallar): el árbol de paneles y su guardado (28 tests), escritos desde los puntos de la §2.3.
+- **Escritos junto con la implementación, con ella en contexto:** los de `core` de sesión y categoría, `card_note`, puertos, árbol de la barra lateral, estados, menús, orden, acciones y campo de texto. Parten de los puntos del plan, pero no puedo afirmar que sean independientes del código.
+- **Un test mío tenía una carrera** (leía el registro del `claude` falso antes de que se escribiera) y falló una vez; lo corregí.
+- **Sin test automático: el cableado de gpui** (clics, arrastres, foco, menú flotante, escribir en un campo). Ver D-44 y «Lo que no pude verificar».
+
+### Lo que verifiqué con la app real
+
+- Capturas de la ventana: vacía, y restaurada con tres paneles, pestañas, fijadas, madre de cabecera, no leídos, resaltado de «Requiere atención» y textos en español.
+- **Encontré y corregí dos fallos con esas capturas:** un panel restaurado cuyo estado guardado era `waiting` quedaba sin botón «Abrir»; y lo que estaba a la vista al arrancar no se marcaba como leído.
+- Los no leídos se ponen en cero con la app abierta: lancé el hook real 200 veces contra una sesión visible y el contador quedó en 0.
+
+### Lo que no pude verificar
+
+**No puedo hacer clic ni teclear en la ventana** (mi proceso no tiene permiso de Accesibilidad; los eventos sintéticos no llegan). Por eso no ejercité yo mismo: menús, formularios, arrastres, atajos ni terminales vivas dentro de los paneles.
+
+Un dato a favor, que no es mío: mientras una de mis ventanas de prueba estuvo abierta, **alguien la usó**. En la base de datos quedaron tres sesiones lanzadas desde ella (tres corridas del `claude` falso), un divisor movido (de 600 a 571) y el foco en otro panel. Eso dice que el clic en «Abrir», el arrastre del divisor y el foco funcionan, pero no lo vi.
+
+### Mediciones
+
+| Qué | Resultado |
+|---|---|
+| CPU en reposo (ventana con 3 paneles, 30 s) | 0,01 s de CPU (0,03 %) |
+| Footprint | 62 MB (pico 102 MB) |
+| Hook `stop` con vista previa, 300 corridas con `hyperfine` | media 16,2 ms (un evento desconocido, que no escribe: 13,4 ms) |
+| Escaneo de puertos (6 tests con procesos reales) | 0,03 s en total |
+
+### Checklist de cierre
+
+| Paso | Resultado |
+|---|---|
+| `cargo fmt --all --check` | sin diferencias |
+| `cargo clippy --workspace --all-targets -- -D warnings` | sin avisos |
+| `cargo test --workspace` | **512 pruebas, 0 fallas** (386 al cerrar el bloque 2.1 + 126) |
+| `cargo build --release` | ok |
+| `cargo deny check` | ok |
+| `scripts/lint-findings` | 3 reglas, sin hallazgos |
+| Fronteras, guarda de procesos, guarda D-13 | pasan |
+| Pre-commit | exit 0 |
+
+### Desviaciones del plan
+
+1. **`--open` se conserva con `--no-window`** para los tests de la salida del binario (D-35).
+2. **Puertos sin el crate `libproc`** (D-36): exigía un `unsafe` nuevo y una licencia que `cargo deny` rechaza. Se usa la misma API del sistema a través de `listeners` y `sysinfo`. **Decisión que le toca a la planificadora.**
+3. **Renombrar no cambia el slug** (D-39).
+4. **«Nueva terminal» necesita una categoría** (D-40).
+5. **Cerrar una pestaña termina el programa** (D-41).
+6. **El idioma de la interfaz se lee del ajuste `language`**, pero todavía no hay dónde cambiarlo: `lithemux config` no lo acepta (un test del plan §0.6 lo excluye a propósito) y la ventana de Ajustes es de la §2.6.
+7. **Dependencias nuevas:** `listeners`, `sysinfo` (núcleo) y `toml` (app, ya estaba en el `Cargo.lock` por gpui).
+
+### Qué quedó fuera
+
+- Reanudar solas las sesiones visibles al arrancar y relanzar las de shell (§2.5).
+- Ocultar una sesión sin terminarla, hibernar, despertar (§2.4).
+- Menú nativo, Ajustes, cambio de idioma y temas (§2.6). Hay un solo tema oscuro.
+- Reordenar pestañas con atajo y `cmd+1…9`.
+
+### Riesgos detectados
+
+1. **El cableado de la interfaz no tiene test automático** (D-44). Es el riesgo principal del bloque.
+2. **Estados viejos en la tarjeta de una sesión que la app no tiene** (tras una caída): muestra lo que diga la BD. Es de la §2.5.
+3. **Un proceso que se desliga del árbol** (doble `fork`) no muestra su puerto (D-36).
+4. **Los glifos de los botones** (`◫`, `⊟`, `◎`) salen de la fuente de reserva del sistema; en mis capturas se ven bien.
+5. **Tocar el stage:** al borrar dos archivos usé `git rm --cached`, que modifica el stage. No está en la lista prohibida de `CLAUDE.md`, pero es del mismo tipo y no hacía falta; el resultado es el mismo que deja `git add -A`. No lo repetiré.
+
+### Lo que necesita a Jhon
+
+Las pruebas G a K de `docs/fases/F2-prueba-manual.md`, que son la única comprobación del cableado de la interfaz.
+
+### Ronda de correcciones del bloque 3 (auditoría y pruebas de la planificadora)
+
+**Fecha:** 2026-11-22.
+
+| # | Hallazgo | Arreglo | ¿Vi fallar el test antes? |
+|---|---|---|---|
+| 1 | La interfaz no pedía reabrir una sesión que se estaba cerrando | La decisión es una función pura, `workspace/start_policy.rs`; en `Closing` ahora se pide (`live.open` → `WhenClosed`) | **Sí.** Extraje la función con el comportamiento de antes y el caso `Closing` falló; los otros cuatro pasaron |
+| 2 | La app no arrancaba con un home largo (`SUN_LEN`) | `platform::paths::app_socket`, único sitio para la app y el hook; directorio privado en `/tmp` cuando no cabe (D-45, regla `H-004`) | No. Lo escribí con el arreglo. El fallo lo reprodujo la planificadora y a mí me pasó en el bloque 2.1 |
+| 3 | `lithemux rm` dejaba vivo e invisible al `claude` de una sesión abierta en la app | La CLI se niega si la sesión está abierta **y** la app cierra lo que ya no existe en la BD (D-46) | No, los escribí con el arreglo |
+| 4 | El layout guardado aceptaba dos entradas del mismo panel | Los paneles guardados deben ser exactamente los del árbol, una vez cada uno | **Sí** (`Some(Layout{…})` en vez de `None`) |
+| 5 | `keep_sessions` dejaba paneles vacíos en un split | El panel que pierde así su última pestaña se quita; el que el usuario dejó vacío se queda | **Sí** (`[1, 3, 5]` en vez de `[1, 5]`) |
+| 6 | Subir/bajar contaba hermanas no visibles | El orden se calcula sobre las tarjetas que se ven y las ocultas (madre, fijadas) conservan su lugar | **Sí** (`["b","d"]` sin cambiar) |
+| 7 | Mensajes de error escritos en el código | `i18n/problems.rs` convierte cada error en una clave de `locales`; `Phase::Failed` lleva un motivo y no un texto; `status.waiting_detail` se usa en la tarjeta (regla `H-005`) | No aplica como bug de lógica; los tests nuevos comprueban los dos idiomas |
+| 8a | Se marcaba leído con la ventana en segundo plano | `workspace/read_policy.rs` y aviso al activarse la ventana | **Sí** (misma técnica que en el 1) |
+| 8b | Contaban como no leídas notificaciones que solo informan | Solo `permission_prompt`, `elicitation_dialog` y `elicitation_url_dialog`, más `Stop` (D-37) | **Sí** (`auth_success` daba una nota) |
+| 9 | El escaneo de puertos recorría toda la máquina | Se sube desde quien escucha, sin refrescar todos los procesos. **8,2 ms → 3,7 ms** de mediana (release, ~680 procesos, 60 corridas). El tablero se lee con 2 consultas, no N+1 | — |
+
+**Lo que no pude cumplir del 9, tal como se pidió.** «Consultar solo los pids de la sesión» no es posible con `listeners`: ninguna versión lo ofrece de verdad (D-36). Los 3,7 ms que quedan son su recorrido de la máquina. Bajarlos exige el crate `libproc`, con el `unsafe` y la licencia que se descartaron. No lo improvisé: es decisión de la planificadora.
+
+**Detalles**
+
+- Funciones de más de 50 líneas partidas; `pane_view.rs` dividido (`tab_view.rs`). No queda ninguna función sobre 50 ni archivo de producción sobre 300.
+- `ctrl+tab` y `ctrl+shift+tab` retirados (D-38).
+- El guardado del divisor es un antirrebote de verdad: cada movimiento descarta el guardado pendiente (D-42).
+- `a_session_closed_and_reopened_while_it_was_opening_opens_once` espera 600 ms tras el primer arranque antes de contar las corridas.
+- `the_remembered_claude_can_be_read_and_cleared_but_not_set` tiene la misma guarda que sus vecinos para un repo en carpeta temporal, y esa guarda ahora **imprime que se saltó** parte del test.
+- `menu_test` reescrito desde las frases de la §2.2.
+- Reglas nuevas: `H-004` (ruta del socket) y `H-005` (error mostrado con `to_string()`). El hallazgo 1 no tiene un patrón razonable: lo cubren la función pura y su test.
+
+**Sigue sin test automático** el cableado de gpui (D-44). Los hallazgos 1 y 8a vivían ahí; por eso su decisión salió a funciones puras, pero que la vista las llame bien solo se comprueba a mano (pasos J, H y L de la prueba manual).
+
+**Verificación con la app real:** tras los cambios la ventana restaurada pinta igual (captura) y en reposo gastó 0,00 s de CPU en 30 s.
+
+| Paso | Resultado |
+|---|---|
+| `cargo fmt --all --check` | sin diferencias |
+| `cargo clippy --workspace --all-targets -- -D warnings` | sin avisos |
+| `cargo test --workspace` | **546 pruebas, 0 fallas** (512 + 34) |
+| `cargo build --release` | ok |
+| `cargo deny check` | ok |
+| `scripts/lint-findings` | 5 reglas, sin hallazgos |
+| Pre-commit | exit 0 |

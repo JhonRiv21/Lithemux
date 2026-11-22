@@ -23,8 +23,17 @@ pub struct SeededHome {
 
 impl SeededHome {
     pub fn new() -> Self {
+        Self::in_subfolder("")
+    }
+
+    /// A home whose path is too long for the address of a Unix socket.
+    pub fn with_a_long_home() -> Self {
+        Self::in_subfolder(&"a-long-folder-name/".repeat(6))
+    }
+
+    fn in_subfolder(name: &str) -> Self {
         let dir = tempfile::tempdir().unwrap();
-        let home = Home::new(dir.path());
+        let home = Home::new(dir.path().join(name));
         let db = Db::open(&home).unwrap();
         let (categories, sessions) = (
             SqliteCategoryRepository::new(&db),
@@ -86,7 +95,7 @@ impl SeededHome {
         let mut command = hook();
         command
             .arg(subcommand)
-            .env("LITHEMUX_HOME", self.dir.path())
+            .env("LITHEMUX_HOME", self.home.path())
             .env("LITHEMUX_SESSION_ID", &self.executor.id);
         command
     }

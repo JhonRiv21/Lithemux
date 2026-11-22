@@ -1,8 +1,10 @@
-use anyhow::bail;
+use anyhow::{Context, bail};
 use lithemux_core::modules::category::{
     BoardStore, FsDirectories, NewCategory, Slug, create_category, get_category, list_categories,
     locate_directory, remove_category,
 };
+use lithemux_core::modules::launch::ensure_closed;
+use lithemux_core::modules::session::list_sessions;
 use lithemux_core::platform::clock::system_clock::now_unix;
 
 use crate::args::CatAddArgs;
@@ -42,6 +44,10 @@ pub fn list(json: bool) -> anyhow::Result<()> {
 pub fn remove(slug: &str, yes: bool) -> anyhow::Result<()> {
     let wiring = Wiring::open()?;
     let category = get_category(&wiring.categories(), slug)?;
+    for session in list_sessions(&wiring.sessions(), &category)? {
+        ensure_closed(&wiring.locks(), &session.id)
+            .with_context(|| format!("{}/{}", category.slug, session.slug))?;
+    }
     let question = format!(
         "Remove category \"{}\" and all its sessions?",
         category.slug

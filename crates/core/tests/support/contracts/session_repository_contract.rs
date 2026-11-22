@@ -10,6 +10,7 @@ fn category(id: &str, slug: &str) -> Category {
         color: None,
         sort: 1,
         created_at: 10,
+        collapsed: false,
     }
 }
 
@@ -30,6 +31,10 @@ fn session(id: &str, category_id: &str, slug: &str, kind: Kind, sort: i64) -> Se
         last_activity_at: None,
         created_at: 20,
         sort,
+        title: None,
+        pin_sort: None,
+        preview: None,
+        unread: 0,
     }
 }
 
@@ -55,6 +60,11 @@ pub fn session_repository_contract(
         vec![mother.clone(), child.clone()]
     );
     assert_eq!(sessions.next_sort("c1").unwrap(), 3);
+    // All of them at once: each category's together, in its own order.
+    assert_eq!(
+        sessions.list_all().unwrap(),
+        vec![mother.clone(), child.clone(), other.clone()]
+    );
     assert_eq!(
         sessions.find("c1", "ejecutora").unwrap(),
         Some(child.clone())
@@ -147,6 +157,40 @@ pub fn session_repository_contract(
     sessions
         .move_state("missing", State::Waiting, State::Working)
         .unwrap();
+
+    // The card: title, place, pins, preview and unread count (PLAN §2.2).
+    sessions.update_title("s2", Some("the api")).unwrap();
+    assert_eq!(
+        sessions.find_by_id("s2").unwrap().unwrap().title.as_deref(),
+        Some("the api")
+    );
+    sessions.update_title("s2", None).unwrap();
+    assert_eq!(sessions.find_by_id("s2").unwrap().unwrap().title, None);
+
+    sessions.update_sort("s2", 1).unwrap();
+    sessions.update_sort("s1", 2).unwrap();
+    let ids = |list: Vec<Session>| list.into_iter().map(|s| s.id).collect::<Vec<_>>();
+    assert_eq!(ids(sessions.list_in("c1").unwrap()), ["s2", "s1"]);
+
+    assert!(sessions.list_pinned().unwrap().is_empty());
+    sessions.update_pin_sort("s3", Some(2)).unwrap();
+    sessions.update_pin_sort("s1", Some(1)).unwrap();
+    assert_eq!(ids(sessions.list_pinned().unwrap()), ["s1", "s3"]);
+    sessions.update_pin_sort("s1", None).unwrap();
+    assert_eq!(ids(sessions.list_pinned().unwrap()), ["s3"]);
+
+    sessions.note_message("s2", Some("first"), true).unwrap();
+    sessions.note_message("s2", None, true).unwrap();
+    sessions.note_message("s2", Some("second"), false).unwrap();
+    sessions.note_message("missing", Some("x"), true).unwrap();
+    let noted = sessions.find_by_id("s2").unwrap().unwrap();
+    assert_eq!(
+        (noted.preview.as_deref(), noted.unread),
+        (Some("second"), 2)
+    );
+    sessions.clear_unread("s2").unwrap();
+    let read = sessions.find_by_id("s2").unwrap().unwrap();
+    assert_eq!((read.preview.as_deref(), read.unread), (Some("second"), 0));
 
     // Deleting a session, then a category with its sessions.
     sessions.delete("s1").unwrap();

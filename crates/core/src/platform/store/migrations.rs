@@ -2,7 +2,7 @@ use rusqlite::{Connection, TransactionBehavior};
 
 use crate::platform::store::error::StoreError;
 
-pub const SCHEMA_VERSION: i64 = 1;
+pub const SCHEMA_VERSION: i64 = 2;
 
 const MIGRATION_1: &str = "
 CREATE TABLE categories(
@@ -37,6 +37,19 @@ CREATE UNIQUE INDEX one_mother_per_category ON sessions(category_id) WHERE kind=
 CREATE TABLE settings(key TEXT PRIMARY KEY, value TEXT);
 ";
 
+// What the sidebar and the workspace keep (PLAN §2.2, §2.3).
+const MIGRATION_2: &str = "
+ALTER TABLE sessions ADD COLUMN title TEXT;
+ALTER TABLE sessions ADD COLUMN pin_sort INTEGER;
+ALTER TABLE sessions ADD COLUMN preview TEXT;
+ALTER TABLE sessions ADD COLUMN unread INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE categories ADD COLUMN collapsed INTEGER NOT NULL DEFAULT 0;
+
+CREATE TABLE workspace_layout(
+  id INTEGER PRIMARY KEY CHECK(id = 1),
+  layout TEXT NOT NULL);
+";
+
 pub fn user_version(conn: &Connection) -> Result<i64, StoreError> {
     Ok(conn.pragma_query_value(None, "user_version", |row| row.get(0))?)
 }
@@ -51,6 +64,10 @@ pub fn migrate(conn: &mut Connection) -> Result<(), StoreError> {
     if checked_version(&tx)? < 1 {
         tx.execute_batch(MIGRATION_1)?;
         tx.pragma_update(None, "user_version", 1)?;
+    }
+    if checked_version(&tx)? < 2 {
+        tx.execute_batch(MIGRATION_2)?;
+        tx.pragma_update(None, "user_version", 2)?;
     }
     tx.commit()?;
     Ok(())

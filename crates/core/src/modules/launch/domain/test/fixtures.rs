@@ -13,6 +13,7 @@ pub fn category() -> Category {
         color: None,
         sort: 1,
         created_at: 0,
+        collapsed: false,
     }
 }
 
@@ -33,5 +34,9 @@ pub fn claude_session() -> Session {
         last_activity_at: None,
         created_at: 0,
         sort: 1,
+        title: None,
+        pin_sort: None,
+        preview: None,
+        unread: 0,
     }
 }

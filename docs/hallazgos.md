@@ -35,5 +35,8 @@ Antes de revisar el repo, cada regla se prueba contra sus dos ejemplos. Si no ma
 |---|---|---|
 | `H-001` | F1 (prueba manual), corregido en §2.0 | Lanzar un proceso sin quitarle los marcadores de sesión de Claude Code y de cmux |
 | `H-002` | §2.0 | `unsafe` fuera de `platform/process/detached.rs`, su única excepción |
+| `H-003` | §2.1 (verificación de la planificadora), corregido en §2.2 | Arrancar gpui fuera de `app_shell/run.rs`, es decir, una ventana sin el gestor de sesiones ni el candado de instancia única |
+| `H-004` | auditoría del bloque 3 | Armar la ruta de `app.sock` fuera de `platform/paths/app_socket.rs` (un home largo dejaba a la app sin arrancar) |
+| `H-005` | auditoría del bloque 3 | Mostrar al usuario el `to_string()` de un error en vez de un texto de `locales` |
 
 El funcionamiento del mecanismo se prueba en `crates/core/tests/findings_lint.rs` con una regla de muestra en un directorio temporal.

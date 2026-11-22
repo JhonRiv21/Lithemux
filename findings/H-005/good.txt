@@ -1,0 +1,3 @@
+        self.notice = opened.err().map(|error| self.texts.say(&(&error).into()));
+                self.notice = Some(self.texts.say(&(&error).into()));
+            title: session.display_title().to_string(),

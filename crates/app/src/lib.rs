@@ -1,3 +1,9 @@
+pub mod app_shell;
+pub mod i18n;
 pub mod launch_arguments;
 pub mod session_host;
+pub mod sidebar;
 pub mod terminal_view;
+pub mod text_field;
+pub mod theme;
+pub mod workspace;

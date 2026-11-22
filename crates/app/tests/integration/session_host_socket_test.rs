@@ -191,3 +191,26 @@ fn a_socket_somebody_answers_on_is_left_alone() {
     assert!(UnixStream::connect(world.home.app_socket_path()).is_ok());
     drop(other_program);
 }
+
+// Audit of block 3 (2): with a home whose path does not fit in a socket
+// address the host still starts, and the hook still reaches it.
+#[test]
+fn a_home_too_long_for_a_socket_still_hears_the_hooks() {
+    let world = HostedWorld::with_a_long_home();
+    assert!(world.home.path().join("app.sock").as_os_str().len() > 104);
+    world.add_session("ejecutora", Profile::Claude);
+    world.steer_fake_claude("fake-claude.sleep", "30");
+    let (mut host, _changes) = world.start();
+    let id = run(&mut host, &world, "ejecutora");
+
+    let socket = world.home.app_socket_path();
+    assert!(!socket.starts_with(world.home.path()));
+    assert!(socket.exists());
+    fire_hook(&world, &id, "prompt-submit", "{}");
+    attend_until(&mut host, "the hook to be heard", |host| {
+        host.state(&id) == Some(State::Working)
+    });
+
+    drop(host);
+    assert!(!socket.exists());
+}

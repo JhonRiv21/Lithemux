@@ -1,0 +1,3 @@
+        let address = config.home.app_socket();
+        let Some(mut stream) = connect_without_waiting(socket.path()) else {
+        self.app_socket().path().to_path_buf()

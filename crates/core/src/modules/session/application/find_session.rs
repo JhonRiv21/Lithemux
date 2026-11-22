@@ -11,6 +11,11 @@ pub fn list_sessions(
     sessions.list_in(&category.id)
 }
 
+/// Every session, those of one category together and in its order.
+pub fn list_all_sessions(sessions: &dyn SessionRepository) -> Result<Vec<Session>, SessionError> {
+    sessions.list_all()
+}
+
 pub fn get_session(
     categories: &dyn CategoryRepository,
     sessions: &dyn SessionRepository,

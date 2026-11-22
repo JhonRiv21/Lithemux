@@ -1,0 +1,3 @@
+                self.notice = Some(error.to_string());
+        self.notice = opened.err().map(|error| error.to_string());
+            Err(error) => notice = Some(error.to_string()),

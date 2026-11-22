@@ -73,7 +73,7 @@ fn doctor_reports_the_claude_it_would_use() {
     assert!(report.contains(&fake_claude()), "{report}");
     assert!(report.contains("9.9.9"), "{report}");
     assert!(report.contains("used by lithemux"), "{report}");
-    assert!(report.contains("schema v1"), "{report}");
+    assert!(report.contains("schema v2"), "{report}");
     assert!(report.contains("data directory"), "{report}");
 }
 
@@ -81,6 +81,10 @@ fn doctor_reports_the_claude_it_would_use() {
 // and forgotten, but only lithemux writes it
 #[test]
 fn the_remembered_claude_can_be_read_and_cleared_but_not_set() {
+    // A `claude` in a temporary folder is never used, so never remembered.
+    if !Sandbox::fakes_on_the_path_are_launchable() {
+        return;
+    }
     let sandbox = Sandbox::new().with_fake_shell("fake-shell-lingering");
     sandbox.lithemux(&["doctor"]).output().unwrap();
 

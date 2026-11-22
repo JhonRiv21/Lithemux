@@ -1,4 +1,4 @@
-use rusqlite::{OptionalExtension, Row, params};
+use rusqlite::{OptionalExtension, Row, ToSql, params};
 
 use crate::modules::category::domain::category::Category;
 use crate::modules::category::error::CategoryError;
@@ -6,7 +6,7 @@ use crate::modules::category::ports::category_repository::CategoryRepository;
 use crate::platform::store::connection::Db;
 use crate::platform::store::error::StoreError;
 
-const COLUMNS: &str = "id, slug, name, root_dir, color, sort, created_at";
+const COLUMNS: &str = "id, slug, name, root_dir, color, sort, created_at, collapsed";
 
 pub struct SqliteCategoryRepository<'a> {
     db: &'a Db,
@@ -28,6 +28,19 @@ impl<'a> SqliteCategoryRepository<'a> {
             )
             .optional()
             .map_err(StoreError::from)?)
+    }
+}
+
+impl SqliteCategoryRepository<'_> {
+    fn update(&self, column: &str, id: &str, value: &dyn ToSql) -> Result<(), CategoryError> {
+        self.db
+            .conn()
+            .execute(
+                &format!("UPDATE categories SET {column} = ?2 WHERE id = ?1"),
+                params![id, value],
+            )
+            .map_err(StoreError::from)?;
+        Ok(())
     }
 }
 
@@ -85,6 +98,18 @@ impl CategoryRepository for SqliteCategoryRepository<'_> {
         self.find_where("id", id)
     }
 
+    fn update_name(&self, id: &str, name: &str) -> Result<(), CategoryError> {
+        self.update("name", id, &name)
+    }
+
+    fn update_sort(&self, id: &str, sort: i64) -> Result<(), CategoryError> {
+        self.update("sort", id, &sort)
+    }
+
+    fn update_collapsed(&self, id: &str, collapsed: bool) -> Result<(), CategoryError> {
+        self.update("collapsed", id, &collapsed)
+    }
+
     // Sessions go with it through ON DELETE CASCADE.
     fn delete(&self, id: &str) -> Result<(), CategoryError> {
         self.db
@@ -104,5 +129,6 @@ fn from_row(row: &Row<'_>) -> rusqlite::Result<Category> {
         color: row.get(4)?,
         sort: row.get::<_, Option<i64>>(5)?.unwrap_or(0),
         created_at: row.get::<_, Option<i64>>(6)?.unwrap_or(0),
+        collapsed: row.get(7)?,
     })
 }

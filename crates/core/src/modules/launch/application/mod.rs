@@ -1,4 +1,5 @@
 pub mod claude_inspection;
+pub mod ensure_closed;
 pub mod hook_inspection;
 pub mod inspect_claude;
 pub mod inspect_hook;

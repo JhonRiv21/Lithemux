@@ -7,7 +7,6 @@
 //! on the way out of the app, stays until the programs are gone.
 
 use std::collections::HashMap;
-use std::rc::Rc;
 use std::sync::mpsc;
 
 use lithemux_core::modules::category::SqliteCategoryRepository;
@@ -16,42 +15,39 @@ use lithemux_core::modules::session::{
     Profile, SessionRef, SqliteSessionRepository, State, apply_state, find_session_by_id,
     get_session,
 };
+use lithemux_core::platform::paths::home::current_user;
 use lithemux_core::platform::store::connection::Db;
 
 use super::config::HostConfig;
 use super::error::HostError;
 use super::event_socket::EventSocket;
+use super::failure::Failure;
 use super::hosted::Hosted;
 use super::instance_lock::InstanceLock;
+use super::leaving::Leaving;
 use super::mailbox::{Mailbox, Signal};
+use super::opened::Opened;
 use super::opening::{prepare_in_background, start_terminal};
 use super::phase::Phase;
-use crate::terminal_view::{GridSize, TerminalSession};
-
-/// What became of a request to open a session.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Opened {
-    /// It is being prepared; `phase` will say how it went.
-    Opening { session_id: String },
-    /// It was already running, or being opened, here.
-    AlreadyHere { session_id: String },
-}
+use crate::terminal_view::GridSize;
 
 /// A session waiting for its launch to be prepared.
 pub(super) struct Pending {
-    run: u64,
+    pub(super) run: u64,
     size: GridSize,
 }
 
 pub struct SessionHost {
     config: HostConfig,
-    db: Db,
+    pub(super) db: Db,
     pub(super) hosted: Vec<Hosted>,
     pub(super) pending: HashMap<String, Pending>,
+    /// What still holds the lock of sessions that were closed.
+    pub(super) leaving: Leaving,
     pub(super) phases: HashMap<String, Phase>,
     /// The last state read from the database for every session heard of.
-    states: HashMap<String, State>,
-    warnings: Vec<String>,
+    pub(super) states: HashMap<String, State>,
+    pub(super) warnings: Vec<String>,
     next_run: u64,
     inbox: mpsc::Receiver<Signal>,
     mailbox: Mailbox,
@@ -74,12 +70,17 @@ impl SessionHost {
         let db = Db::open(&config.home)?;
         let instance = InstanceLock::acquire(&config.home.app_lock_path())?;
         let (mailbox, inbox, changes) = Mailbox::new();
-        let socket = EventSocket::bind(&config.home.app_socket_path(), mailbox.clone())?;
+        let address = config.home.app_socket();
+        address
+            .prepare(current_user())
+            .map_err(HostError::io("preparing the directory of", address.path()))?;
+        let socket = EventSocket::bind(address.path(), mailbox.clone())?;
         let host = SessionHost {
             config,
             db,
             hosted: Vec::new(),
             pending: HashMap::new(),
+            leaving: Leaving::default(),
             phases: HashMap::new(),
             states: HashMap::new(),
             warnings: Vec::new(),
@@ -106,6 +107,19 @@ impl SessionHost {
         ) {
             return Ok(Opened::AlreadyHere { session_id });
         }
+        // Our own last run still holds the session's lock: asking for it
+        // now would find it taken, by us.
+        if self.leaving.holds(&session_id) {
+            self.leaving.reopen(&session_id, target.clone(), size);
+            self.phases.insert(session_id.clone(), Phase::Closing);
+            return Ok(Opened::WhenClosed { session_id });
+        }
+        self.start_opening(target, &session_id, size);
+        Ok(Opened::Opening { session_id })
+    }
+
+    fn start_opening(&mut self, target: &SessionRef, session_id: &str, size: GridSize) {
+        let session_id = session_id.to_string();
         self.next_run += 1;
         let run = self.next_run;
         self.pending
@@ -119,7 +133,22 @@ impl SessionHost {
             run,
             self.mailbox.clone(),
         );
-        Ok(Opened::Opening { session_id })
+    }
+
+    /// Something of a closed session finished leaving. Once nothing of it
+    /// is left, the session opens again if it was asked for, or is simply
+    /// closed.
+    pub(super) fn settle(&mut self, session_id: &str) {
+        if self.leaving.holds(session_id) {
+            return;
+        }
+        match self.leaving.take_reopen(session_id) {
+            Some((target, size)) => self.start_opening(&target, session_id, size),
+            None if self.phases.get(session_id) == Some(&Phase::Closing) => {
+                self.phases.remove(session_id);
+            }
+            None => {}
+        }
     }
 
     /// Reads the mail of the background threads: launches that are ready,
@@ -154,7 +183,14 @@ impl SessionHost {
     ) {
         // Closed, or asked for again, while it was being prepared: the
         // launch is dropped here, and its lock with it.
-        let Some(pending) = self.pending.remove(session_id).filter(|p| p.run == run) else {
+        if self.pending.get(session_id).is_none_or(|p| p.run != run) {
+            // The launch, and its lock, end here.
+            drop(outcome);
+            self.leaving.launch_dropped(session_id);
+            self.settle(session_id);
+            return;
+        }
+        let Some(pending) = self.pending.remove(session_id) else {
             return;
         };
         let started = outcome.map_err(HostError::from).and_then(|launch| {
@@ -178,7 +214,7 @@ impl SessionHost {
             }
             Err(error) => {
                 report("could not start", session_id, &error);
-                Phase::Failed(error.to_string())
+                Phase::Failed(Failure::from(&error))
             }
         };
         self.phases.insert(session_id.to_string(), phase);
@@ -188,6 +224,10 @@ impl SessionHost {
     /// The program is gone and the session is already free for anyone to
     /// open again. Its screen stays.
     pub(super) fn program_ended(&mut self, session_id: &str, run: u64) {
+        if self.leaving.program_left(session_id, run) {
+            self.settle(session_id);
+            return;
+        }
         // An earlier run of a session that was opened again is old news.
         let Some(profile) = self
             .hosted
@@ -235,38 +275,5 @@ impl SessionHost {
             }
             Err(error) => report("could not read the state of", session_id, &error),
         }
-    }
-
-    /// The state the database had for the session the last time the host
-    /// heard about it.
-    pub fn state(&self, session_id: &str) -> Option<State> {
-        self.states.get(session_id).copied()
-    }
-
-    /// Where a session the host was asked to open stands; `None` for one it
-    /// was never asked for, or that was closed.
-    pub fn phase(&self, session_id: &str) -> Option<&Phase> {
-        self.phases.get(session_id)
-    }
-
-    pub fn is_running(&self, session_id: &str) -> bool {
-        self.phase(session_id) == Some(&Phase::Running)
-    }
-
-    /// The terminal of a session opened here, running or ended, and the
-    /// channel that says when it has something new to paint.
-    pub fn terminal(
-        &self,
-        session_id: &str,
-    ) -> Option<(Rc<TerminalSession>, async_channel::Receiver<()>)> {
-        self.hosted
-            .iter()
-            .find(|hosted| hosted.session_id == session_id)
-            .map(|hosted| (Rc::clone(&hosted.terminal), hosted.wakes.clone()))
-    }
-
-    /// What the launcher had to say while opening sessions.
-    pub fn take_warnings(&mut self) -> Vec<String> {
-        std::mem::take(&mut self.warnings)
     }
 }

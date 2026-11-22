@@ -1,6 +1,7 @@
 use anyhow::bail;
 use lithemux_core::modules::category::{FsDirectories, locate_directory};
 use lithemux_core::modules::context::{ContextPorts, build_session_context};
+use lithemux_core::modules::launch::ensure_closed;
 use lithemux_core::modules::session::{
     Kind, NewSession, Profile, SessionRef, create_session, get_session, remove_session,
     set_keep_alive, set_kind, set_model, set_role,
@@ -78,6 +79,8 @@ pub fn remove(target: &str, yes: bool) -> anyhow::Result<()> {
     let wiring = Wiring::open()?;
     let target = SessionRef::parse(target)?;
     let (_, session) = get_session(&wiring.categories(), &wiring.sessions(), &target)?;
+    // Removed under a running `claude`, it would go on, out of sight.
+    ensure_closed(&wiring.locks(), &session.id)?;
     if !yes && !prompt::confirm(&format!("Remove session \"{target}\"?"))? {
         bail!("not removed (pass --yes to confirm)");
     }

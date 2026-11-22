@@ -1,4 +1,4 @@
-//! `<home>/app.sock`: where the hook says that a session changed. A message
+//! The app's socket (`Home::app_socket`): where the hook says that a session changed. A message
 //! carries no state: it names the session, and the host reads the database.
 
 use std::fs;

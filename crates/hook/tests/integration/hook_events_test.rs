@@ -2,6 +2,7 @@ use std::io::{BufRead, BufReader};
 use std::os::unix::net::UnixListener;
 
 use lithemux_core::modules::session::State;
+use lithemux_core::platform::paths::home::current_user;
 use serde_json::Value;
 
 use crate::seeded_home::{SeededHome, fixture};
@@ -140,4 +141,68 @@ fn the_app_socket_receives_the_session_and_the_event() {
     let message: Value = serde_json::from_str(&line).unwrap();
     assert_eq!(message["session_id"], seeded.executor.id.as_str());
     assert_eq!(message["event"], "stop");
+}
+
+// PLAN §2.2: the card's preview and its unread count come from documented
+// fields of the hooks' stdin, written by the real hook binary.
+#[test]
+fn the_hooks_leave_the_preview_and_the_unread_count_on_the_card() {
+    let seeded = SeededHome::new();
+    let fire = |event: &str, stdin: &str| {
+        seeded
+            .hook(event)
+            .write_stdin(fixture(stdin))
+            .assert()
+            .success();
+        seeded.executor_now()
+    };
+
+    let asked = fire("prompt-submit", "user_prompt_submit.json");
+    assert_eq!(
+        asked.preview.as_deref(),
+        Some("Write a function to calculate the factorial of a number")
+    );
+    assert_eq!(asked.unread, 0);
+
+    let blocked = fire("notification", "notification_permission.json");
+    assert_eq!(
+        blocked.preview.as_deref(),
+        Some("Claude needs your permission")
+    );
+    assert_eq!(blocked.unread, 1);
+
+    let answered = fire("stop", "stop_with_last_message.json");
+    assert_eq!(
+        answered.preview.as_deref(),
+        Some("I've completed the refactoring. Here's a summary of what changed.")
+    );
+    assert_eq!(answered.unread, 2);
+
+    // A Stop without the last message keeps the preview and still counts.
+    let again = fire("stop", "stop.json");
+    assert_eq!(again.preview, answered.preview);
+    assert_eq!(again.unread, 3);
+}
+
+// Audit of block 3 (2): the hook binary finds the app's socket by itself
+// when the home's path is too long to hold it.
+#[test]
+fn the_hook_reaches_an_app_whose_home_is_too_long_for_a_socket() {
+    let seeded = SeededHome::with_a_long_home();
+    let socket = seeded.home.app_socket();
+    assert!(socket.is_outside_the_home());
+    socket.prepare(current_user()).unwrap();
+    let listener = UnixListener::bind(socket.path()).unwrap();
+
+    seeded
+        .hook("stop")
+        .write_stdin(fixture("stop.json"))
+        .assert()
+        .success();
+
+    let (stream, _) = listener.accept().unwrap();
+    let mut line = String::new();
+    BufReader::new(stream).read_line(&mut line).unwrap();
+    assert!(line.contains(&seeded.executor.id), "{line}");
+    std::fs::remove_file(socket.path()).unwrap();
 }

@@ -2,13 +2,13 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use lithemux_app::session_host::{HostConfig, Opened, Phase, SessionHost};
+use lithemux_app::session_host::{HostConfig, Phase, SessionHost};
 use lithemux_core::modules::category::{
     FsBoardStore, NewCategory, Slug, SqliteCategoryRepository, create_category,
 };
 use lithemux_core::modules::session::{
     Kind, NewSession, Profile, Session, SessionRef, SqliteSessionRepository, State, apply_state,
-    create_session, find_session_by_id, get_session,
+    create_session, find_session_by_id, get_session, remove_session,
 };
 use lithemux_core::modules::settings::{SettingKey, SqliteSettingsRepository, write_setting};
 use lithemux_core::platform::paths::home::Home;
@@ -38,8 +38,17 @@ pub struct HostedWorld {
 
 impl HostedWorld {
     pub fn new() -> Self {
+        Self::with_home_named("home")
+    }
+
+    /// A home whose path is too long for the address of a Unix socket.
+    pub fn with_a_long_home() -> Self {
+        Self::with_home_named(&"a-long-folder-name/".repeat(6))
+    }
+
+    fn with_home_named(name: &str) -> Self {
         let dir = tempfile::tempdir().unwrap();
-        let home = Home::new(dir.path().canonicalize().unwrap().join("home"));
+        let home = Home::new(dir.path().canonicalize().unwrap().join(name));
         let world = HostedWorld { dir, home };
         fs::create_dir_all(world.work()).unwrap();
         let db = world.db();
@@ -139,6 +148,13 @@ impl HostedWorld {
         .1
     }
 
+    /// What `lithemux rm` does to the database.
+    pub fn remove(&self, session_id: &str) {
+        let db = self.db();
+        let sessions = SqliteSessionRepository::new(&db);
+        remove_session(&sessions, &self.stored(session_id)).unwrap();
+    }
+
     pub fn set_state(&self, session_id: &str, state: State) {
         let db = self.db();
         apply_state(
@@ -196,7 +212,7 @@ pub fn target(slug: &str) -> SessionRef {
 /// Asks for the session and waits until the host knows how it went.
 pub fn open(host: &mut SessionHost, slug: &str) -> Phase {
     let asked = host.open(&target(slug), SIZE).unwrap();
-    let (Opened::Opening { session_id } | Opened::AlreadyHere { session_id }) = asked;
+    let session_id = asked.session_id().to_string();
     attend_until(host, "the session to stop opening", |host| {
         host.phase(&session_id) != Some(&Phase::Opening)
     });

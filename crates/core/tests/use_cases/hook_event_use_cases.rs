@@ -299,3 +299,47 @@ fn a_failed_tool_takes_a_waiting_session_back_to_working_too() {
     assert_eq!(world.executor_now().state, State::Working);
     assert!(world.log.lines.borrow().is_empty());
 }
+
+// PLAN §2.2: the card's preview and unread count come from the hooks.
+#[test]
+fn a_turn_leaves_its_last_message_on_the_card_and_counts_as_unread() {
+    let world = World::new();
+    world.fire("prompt-submit", r#"{"prompt":"fix the\nlogin"}"#, NOW);
+    let asked = world.executor_now();
+    assert_eq!(
+        (asked.preview.as_deref(), asked.unread),
+        (Some("fix the login"), 0)
+    );
+    world.fire(
+        "stop",
+        r#"{"last_assistant_message":"Fixed. The token was read too late."}"#,
+        NOW + 5,
+    );
+    let answered = world.executor_now();
+    assert_eq!(
+        (answered.preview.as_deref(), answered.unread),
+        (Some("Fixed. The token was read too late."), 1)
+    );
+}
+
+// PLAN §2.2
+#[test]
+fn a_permission_request_shows_on_the_card_and_the_idle_reminder_does_not() {
+    let world = World::new();
+    world.fire(
+        "notification",
+        r#"{"message":"Claude needs your permission to use Bash","notification_type":"permission_prompt"}"#,
+        NOW,
+    );
+    world.fire(
+        "notification",
+        r#"{"message":"Claude is waiting for your input","notification_type":"idle_prompt"}"#,
+        NOW + 60,
+    );
+    let session = world.executor_now();
+    assert_eq!(
+        session.preview.as_deref(),
+        Some("Claude needs your permission to use Bash")
+    );
+    assert_eq!(session.unread, 1);
+}

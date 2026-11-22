@@ -4,9 +4,15 @@ mod error;
 mod infrastructure;
 mod ports;
 
+pub use application::arrange_sessions::{
+    pin_session, reorder_pins, reorder_sessions, set_title, unpin_session,
+};
 pub use application::create_session::create_session;
-pub use application::find_session::{find_session_by_id, get_session, list_sessions};
+pub use application::find_session::{
+    find_session_by_id, get_session, list_all_sessions, list_sessions,
+};
 pub use application::follow_claude_session::follow_claude_session;
+pub use application::note_message::{mark_read, note_message};
 pub use application::record_activity::{
     apply_state, move_state, record_activity, record_claude_version,
 };

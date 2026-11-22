@@ -7,9 +7,9 @@ use rustix::net::{AddressFamily, SocketAddrUnix, SocketType, connect, socket};
 
 use crate::modules::hook_event::domain::hook_event::HookEvent;
 use crate::modules::hook_event::ports::app_notifier::AppNotifier;
-use crate::platform::paths::home::Home;
+use crate::platform::paths::home::{Home, current_user};
 
-/// One JSON line to `<home>/app.sock`. With no app listening, connecting
+/// One JSON line to the app's socket (`Home::app_socket`). With no app listening, connecting
 /// fails at once and nothing happens.
 pub struct SocketAppNotifier<'a> {
     home: &'a Home,
@@ -23,7 +23,13 @@ impl<'a> SocketAppNotifier<'a> {
 
 impl AppNotifier for SocketAppNotifier<'_> {
     fn notify(&self, session_id: &str, event: HookEvent) {
-        let Some(mut stream) = connect_without_waiting(&self.home.app_socket_path()) else {
+        let socket = self.home.app_socket();
+        // A socket outside the home is only the app's in a directory that
+        // is ours alone.
+        if !socket.is_private_to(current_user()) {
+            return;
+        }
+        let Some(mut stream) = connect_without_waiting(socket.path()) else {
             return;
         };
         let line = serde_json::json!({ "session_id": session_id, "event": event.as_str() });

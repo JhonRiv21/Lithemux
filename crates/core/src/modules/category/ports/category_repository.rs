@@ -8,6 +8,9 @@ pub trait CategoryRepository {
     fn list(&self) -> Result<Vec<Category>, CategoryError>;
     fn find_by_slug(&self, slug: &str) -> Result<Option<Category>, CategoryError>;
     fn find_by_id(&self, id: &str) -> Result<Option<Category>, CategoryError>;
+    fn update_name(&self, id: &str, name: &str) -> Result<(), CategoryError>;
+    fn update_sort(&self, id: &str, sort: i64) -> Result<(), CategoryError>;
+    fn update_collapsed(&self, id: &str, collapsed: bool) -> Result<(), CategoryError>;
     /// Also removes the sessions that belong to the category.
     fn delete(&self, id: &str) -> Result<(), CategoryError>;
 }

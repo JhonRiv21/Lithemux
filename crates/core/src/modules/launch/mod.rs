@@ -5,6 +5,7 @@ mod infrastructure;
 mod ports;
 
 pub use application::claude_inspection::{ClaudeInspection, ClaudeInstallation};
+pub use application::ensure_closed::ensure_closed;
 pub use application::hook_inspection::HookInspection;
 pub use application::inspect_claude::inspect_claude;
 pub use application::inspect_hook::inspect_hook;

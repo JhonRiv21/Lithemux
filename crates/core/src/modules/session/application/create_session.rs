@@ -49,6 +49,10 @@ pub fn create_session(
         last_activity_at: None,
         created_at: now,
         sort: sessions.next_sort(&category.id)?,
+        title: None,
+        pin_sort: None,
+        preview: None,
+        unread: 0,
     };
     sessions.insert(&session)?;
     Ok((category, session))

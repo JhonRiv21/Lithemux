@@ -569,3 +569,155 @@ Las señales cierran por su cuenta y no a través de `on_app_quit` porque **gpui
 **Comprobado a mano con ventana y dos hijos que ignoran SIGHUP:** con SIGHUP a la app y con la petición de salida del sistema, la app se va, los hijos mueren, el socket se borra y `status` dice `closed`.
 
 **Sobre `osascript … "lithemux-app" to quit`.** No cierra la app, y no es un fallo suyo: el binario no es un bundle y AppleScript no lo encuentra por ese nombre (no da error, simplemente no llega). La misma petición enviada por id de proceso (`NSRunningApplication.terminate()`, que es lo que hace el Dock) sí la cierra en orden. Cuando la app sea un `.app` (Fase 3), `osascript` funcionará por nombre.
+
+## D-35 · La app siempre arranca con el gestor de sesiones; `--open` solo queda sin ventana
+
+*2026-11-22, bloque §2.2–§2.3.*
+
+`lithemux-app` sin argumentos abre la ventana con la barra lateral y el área de trabajo, y **antes de mostrar nada** arranca el `SessionHost` (candado de instancia única y socket de eventos). El modo spike desapareció: `lithemux-app <programa>` ya no se entiende y sale con código 2.
+
+`--open <cat>/<sesión>` **se retiró de la ventana**: con ventana, las sesiones se abren desde la barra lateral, y pasarlo sale con código 2 y un mensaje que lo dice. **Se conserva solo junto a `--no-window`**, el modo sin interfaz que usan los tests de la salida de la app (señales, segunda instancia), porque un test no puede hacer clic en una barra lateral. Es una desviación menor de «`--open` se retira»: la alternativa era dejar sin pruebas la salida del binario real.
+
+Regla `H-003`: solo `app_shell/run.rs` pone en marcha gpui.
+
+## D-36 · Puertos en escucha: `listeners` y `sysinfo` en vez del crate `libproc`
+
+*2026-11-22.*
+
+El plan pide detectar los puertos «con `libproc`, sin red». Probé primero el crate `libproc` y lo descarté por dos razones:
+
+- Para leer el puerto hay que leer una `union` (`soi_proto.pri_tcp`), que en Rust es `unsafe`. Sería una segunda excepción a `H-002`, y esa regla dice que cualquier otra se decide antes con la planificadora.
+- Trae `bindgen` como dependencia de compilación (necesita `libclang` para compilar) y, por esa cadena, `libloading`, de licencia ISC, que `cargo deny` rechaza.
+
+Lo que quedó, en `core::platform::process::listening_ports`:
+
+- **`listeners` 0.6 (MIT, sin dependencias en macOS):** recorre los descriptores de cada proceso con la API de `libproc` del sistema (`proc_pidinfo`, `proc_pidfdinfo`) y devuelve los sockets TCP en `LISTEN` con su pid.
+- **`sysinfo` 0.40 (MIT), solo con la característica `system`:** da el padre de cada proceso, para armar el árbol de la sesión.
+
+Ninguno abre sockets ni hace red: leen las tablas de procesos del kernel. Nuestro código no tiene `unsafe` nuevo. El escaneo se hace cada 3 s en un hilo de fondo, **solo si hay sesiones en marcha**.
+
+**Costo, tras la auditoría del bloque 3.** La primera versión refrescaba todos los procesos de la máquina con `sysinfo` para armar el árbol. Ahora se parte de quién escucha (pocos procesos) y se sube por sus padres, uno a uno y con memoria, hasta dar con la raíz de una sesión: `sysinfo` solo mira esos pids. Medido en release con ~680 procesos, 60 corridas: **de 8,2 ms a 3,7 ms de mediana** (p95 de 9,9 a 4,7 ms). Cada 3 s eso es un 0,12 % de CPU.
+
+**Lo que no se pudo: consultar solo los pids de la sesión.** Ninguna versión de `listeners` lo permite (la 0.3 tenía `get_ports_by_pid`, que por dentro recorre toda la máquina y filtra). Los 3,7 ms que quedan son ese recorrido. Bajarlo de ahí exige `proc_pidfdinfo` por pid, es decir, el crate `libproc` con su lectura de `union` (`unsafe`) y su licencia ISC: lo mismo que se descartó arriba. Queda a decisión de la planificadora.
+
+Abrir `http://localhost:<puerto>` lo hace `/usr/bin/open` a través de `command_without_session_markers` (`platform::process::local_page`), así que `H-001` sigue cumpliéndose y la app no abre ninguna conexión.
+
+**Si la planificadora prefiere el crate `libproc`:** hace falta aceptar la lectura de la `union` como segunda excepción de `unsafe` y la licencia ISC en `deny.toml`.
+
+**Límite conocido.** El árbol se arma por padre. Un proceso que se desliga del todo (doble `fork`, queda colgando de `launchd`) ya no es descendiente y su puerto no aparece.
+
+## D-37 · Vista previa y no leídos: solo campos documentados de los hooks
+
+*2026-11-22. Fuente: <https://code.claude.com/docs/en/hooks>, consultada ese día (Claude Code instalado: 2.1.330).*
+
+| Evento | Campo documentado | Qué hace en la tarjeta |
+|---|---|---|
+| `UserPromptSubmit` | `prompt` | Vista previa. No cuenta como no leído |
+| `Notification` que pide algo al usuario (`permission_prompt`, `elicitation_dialog`, `elicitation_url_dialog`) | `message` | Vista previa y +1 no leído |
+| Cualquier otra `Notification` | — | Nada |
+| `Stop` | `last_assistant_message` | Vista previa (si viene) y +1 no leído |
+
+- **`Stop` sí trae el último mensaje.** La referencia documenta `last_assistant_message` («the text content of Claude's final response») y recomienda usarlo «instead of reading the transcript». La página no dice desde qué versión existe, así que el campo se trata como opcional: si no viene, la vista previa anterior se queda y el turno cuenta igual.
+- **Solo cuentan las notificaciones que bloquean a Claude esperando al usuario** (corrección de la auditoría del bloque 3). Son las mismas tres que ponen la sesión en `waiting`. Las demás informan (`auth_success`, `quota_*`, `agent_completed`, `plugin_notification`…) o repiten un turno ya contado (`idle_prompt`, a los 60 s de reposo): no suman ni tapan lo último que dijo Claude. Un tipo que la app no conozca tampoco cuenta.
+- La vista previa se guarda en una sola línea y con tope de 200 caracteres. **Nunca se lee el transcript.**
+- **El hook escribe y la app marca como leído.** El hook suma no leídos aunque la app esté cerrada; la app los pone en cero cuando el usuario la está mirando: la pestaña mostrada de un panel **y la ventana activa**. Con la ventana en segundo plano no se marca nada; al volver a ella, sí. La decisión es una función pura (`workspace/read_policy.rs`).
+
+Costo en el hook: una escritura más, unos 3 ms (media de 16 ms con `hyperfine`, 300 corridas).
+
+## D-38 · Atajos de teclado del área de trabajo
+
+*2026-11-22.* Son los de iTerm y cmux, que Jhon ya usa:
+
+| Atajo | Qué hace |
+|---|---|
+| `cmd+t` | Nueva terminal en el panel con foco |
+| `cmd+d` | Dividir a la derecha |
+| `cmd+shift+d` | Dividir hacia abajo |
+| `cmd+w` | Cerrar la pestaña (termina el programa de la sesión) |
+| `cmd+shift+w` | Cerrar el panel con todas sus pestañas |
+| `cmd+]` / `cmd+[` | Foco al panel siguiente / anterior |
+| `cmd+alt+→` / `cmd+alt+←` | Lo mismo (los de la Fase 1) |
+| `cmd+shift+]` / `cmd+shift+[` | Pestaña siguiente / anterior |
+| `cmd+q` | Salir |
+
+Solo valen con el foco en el área de trabajo, para que no interfieran con un formulario de la barra lateral.
+
+**Sin `ctrl+tab`** (corrección de la auditoría del bloque 3): gpui resuelve los atajos antes de que la tecla llegue al terminal, así que se los quitaba al shell y a los programas de dentro. Todos los atajos llevan `cmd`, que un terminal no usa.
+
+## D-39 · Renombrar cambia el título, nunca el slug
+
+*2026-11-22.* El slug de una sesión es su nombre para Claude (`-n`, `--resume <nombre>`, la dirección de `SendMessage`) y el de la categoría forma parte de esa dirección. Cambiarlos rompería la mensajería entre sesiones. Por eso:
+
+- Renombrar una sesión guarda un **título** (`sessions.title`); vacío vuelve al slug.
+- Renombrar una categoría cambia su `name`; el slug queda.
+- Al crear desde la barra lateral se escribe un nombre libre y el slug se deriva (`slug_from_name`: «API de pagos» → `api-de-pagos`). Si el nombre no era ya un slug, queda como título. Una categoría con slug repetido recibe `-2`, `-3`…
+
+## D-40 · «Nueva terminal» crea una sesión de shell en una categoría
+
+*2026-11-22.* El plan dice que las sesiones de shell tienen tarjeta y que el contenido de los paneles se guarda, y el modelo exige que toda sesión pertenezca a una categoría. Así que el botón (y `cmd+t`) crea una sesión de perfil `shell` llamada `terminal`, `terminal-2`…:
+
+- en la categoría de la sesión que muestra ese panel;
+- si el panel está vacío, en la primera categoría;
+- **si no hay ninguna categoría, no crea nada** y dice que primero hay que crear una.
+
+## D-41 · Qué arranca y qué termina un programa
+
+*2026-11-22.*
+
+- **Al restaurar** el layout, ninguna pestaña arranca su programa (lo pide el encargo; la reanudación automática de lo visible es de la §2.5). Cada pestaña sin programa muestra su estado y un botón «Abrir».
+- **Clic en una tarjeta:** muestra la sesión en el panel con foco (o va a la pestaña que ya tiene) y arranca su programa si la app no lo tiene. Si terminó aquí, se ve su última pantalla con el botón «Reabrir».
+- **Cerrar una pestaña** (o el panel) termina el programa de la sesión. Ocultar sin terminar llegará con la hibernación (§2.4).
+- **Una sesión, una pestaña:** un terminal tiene un solo canal de repintado, así que no puede verse en dos sitios.
+- **Cerrar el último panel** no existe: el único panel se vacía. Un panel de un split que se queda sin pestañas desaparece y su vecino ocupa el sitio.
+
+## D-42 · El layout se guarda como JSON en una tabla de una fila
+
+*2026-11-22.* Migración 2 (`user_version = 2`):
+
+- `sessions`: `title`, `pin_sort` (NULL = no fijada), `preview`, `unread`.
+- `categories`: `collapsed`.
+- `workspace_layout(id = 1, layout TEXT)`: el árbol de splits, los paneles con sus pestañas y el foco, en JSON.
+
+El árbol es un dominio nuevo de `core` (`modules/workspace`), puro y con sus tests. Lo que vuelve de la BD **se valida** (hasta 4 paneles, ids únicos, una sesión en una sola pestaña, foco existente); si no cuadra o no es JSON, la app arranca con un panel vacío en vez de fallar. Las pestañas de sesiones borradas se quitan al restaurar. Cada cambio se guarda al momento; el arrastre de un divisor, 400 ms después de que se detiene (un antirrebote: cada movimiento descarta el guardado pendiente del anterior) y al salir.
+
+Una base de la versión 1 se migra conservando sus datos (test con el esquema del commit de la Fase 0).
+
+## D-43 · Estado de la tarjeta y fase «cerrando»
+
+*2026-11-22.*
+
+- **La interfaz pide la reapertura** (corrección de la auditoría del bloque 3). El host sabía reabrir, pero la ventana no se lo pedía: trataba «cerrando» como «ya la tengo» y había que hacer clic dos veces. La decisión de pedir o no es ahora una función pura con su test (`workspace/start_policy.rs`): se pide siempre, salvo que la sesión esté abriéndose, en marcha o terminada con su pantalla a la vista.
+- **`Phase::Closing`.** Al cerrar una sesión, el host la deja en «cerrando» hasta que no queda nada suyo: ni el programa (y su grupo) ni un lanzamiento que se estuviera preparando, que también tiene el candado. Si se pide abrirla mientras tanto, el host lo apunta y **la abre él solo** en cuanto el candado queda libre (`Opened::WhenClosed`). Ya no se pide el candado mientras lo tiene nuestro propio hijo, así que no puede salir `OpenElsewhere` con su pid.
+- **Etiqueta.** `Opening` → «abriendo», sea cual sea el estado guardado. Y con el programa ya en marcha pero sin que Claude haya avisado (el estado guardado sigue siendo `ended`, `hibernated` o `new`, de la corrida anterior), también «abriendo».
+- **Una sesión que la app no tiene** muestra el estado de la BD: puede estar abierta con `lithemux open` en otra terminal. Tras una caída ese estado puede ser viejo; lo corrige la §2.5.
+
+## D-44 · La interfaz no se prueba con el soporte de tests de gpui
+
+*2026-11-22.* Lo intenté (`gpui` con `test-support`, ventana simulada, atajos y comandos reales). No sirve aquí: su planificador exige que todo ocurra en el hilo del test y aborta con «Your test is not deterministic» en cuanto un hilo de verdad despierta una tarea, que es justo lo que hacen el PTY y el buzón del host. Además traía ~40 crates de desarrollo. Lo revertí.
+
+Lo que sí se prueba sin gpui: el árbol de paneles y su guardado, el árbol de la barra lateral, los estados, los menús, el orden, las acciones sobre SQLite real, el campo de texto, el host con PTY reales y el binario real en sus salidas. **Lo que no tiene test automático es el cableado de gpui** (clics, arrastres, foco, el menú flotante, escribir en un campo): se verifica a mano (`docs/fases/F2-prueba-manual.md`, pasos G a K).
+
+## D-45 · El socket de la app cuando la ruta del home no cabe
+
+*2026-11-22, corrección de la auditoría del bloque 3.*
+
+La dirección de un socket Unix admite 103 bytes en macOS. Con un `LITHEMUX_HOME` largo o un nombre de usuario largo, `<home>/app.sock` no cabía y la app no arrancaba.
+
+`core::platform::paths::app_socket` es el único sitio que decide la ruta (regla `H-004`), y lo usan la app y el hook:
+
+- Si `<home>/app.sock` cabe, va ahí, como antes.
+- Si no, va en `/tmp/lithemux-<uid>/<hash>.sock`. El hash (FNV-1a de 64 bits, escrito a mano para que dé lo mismo en los dos binarios) sale de la ruta del home, así que cada home tiene su socket.
+- **`/tmp` es de todos.** La app crea el directorio con modo 0700 y se niega a arrancar si no es un directorio de verdad (no un enlace), del usuario y cerrado a los demás. El hook hace la misma comprobación antes de conectar: si no se cumple, no avisa a nadie (y, como siempre, termina con 0).
+
+Se usa `/tmp` y no `$TMPDIR` porque en macOS este último ya es largo.
+
+## D-46 · Borrar una sesión que está abierta
+
+*2026-11-22, corrección de la auditoría del bloque 3.*
+
+`lithemux rm` de una sesión que la app tenía en marcha dejaba a su `claude` vivo y sin tarjeta. Se cierran las dos puertas:
+
+- **La CLI se niega** a borrar una sesión abierta, esté en la app o en otra terminal: «the session is already open (pid N)». `lithemux cat rm` se niega si alguna de las sesiones de la categoría lo está, y dice cuál. Lo comprueba con el candado de la sesión (`ensure_closed`).
+- **La app cierra lo que ya no existe.** Cada vez que relee el tablero, cierra en el host las sesiones que la base de datos ya no tiene. Hace falta porque las sesiones de shell no toman candado (la CLI no puede saber que están abiertas) y por si la base cambia por otra vía.
+
+Borrar desde la barra lateral no cambia: pide confirmación, cierra el programa y borra.

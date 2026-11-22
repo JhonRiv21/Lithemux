@@ -17,6 +17,9 @@ pub enum CategoryError {
     #[error("category \"{0}\" already exists")]
     AlreadyExists(String),
 
+    #[error("a category needs a name")]
+    EmptyName,
+
     #[error("category \"{0}\" not found")]
     NotFound(String),
 

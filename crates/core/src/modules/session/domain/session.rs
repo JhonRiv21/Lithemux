@@ -24,11 +24,27 @@ pub struct Session {
     pub last_activity_at: Option<i64>,
     pub created_at: i64,
     pub sort: i64,
+    /// What the user called it; the slug stays its name for Claude.
+    pub title: Option<String>,
+    /// Its place among the pinned sessions; `None` when it is not pinned.
+    pub pin_sort: Option<i64>,
+    /// One line of the last thing said in it.
+    pub preview: Option<String>,
+    /// How many times it asked for attention since it was last looked at.
+    pub unread: i64,
 }
 
 impl Session {
     pub fn messaging_name(&self, category: &Category) -> String {
         messaging_name(&category.slug, &self.slug)
+    }
+
+    pub fn display_title(&self) -> &str {
+        self.title.as_deref().unwrap_or(&self.slug)
+    }
+
+    pub fn is_pinned(&self) -> bool {
+        self.pin_sort.is_some()
     }
 
     pub fn effective_cwd<'a>(&'a self, category: &'a Category) -> &'a str {

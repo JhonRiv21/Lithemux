@@ -1,10 +1,16 @@
 use std::path::{Path, PathBuf};
 
+use crate::platform::paths::app_socket::{AppSocket, app_socket};
 use crate::platform::paths::error::PathsError;
 use crate::platform::paths::fs_error::FsError;
 
 pub const HOME_ENV: &str = "LITHEMUX_HOME";
 pub const SESSION_ENV: &str = "LITHEMUX_SESSION_ID";
+
+/// The user the process runs as.
+pub fn current_user() -> u32 {
+    rustix::process::getuid().as_raw()
+}
 
 /// Root of everything lithemux stores on disk.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -69,8 +75,14 @@ impl Home {
         self.0.join("app.lock")
     }
 
+    /// Where the app listens for the hooks: in the home, or in a short
+    /// private directory when the home's path is too long for a socket.
+    pub fn app_socket(&self) -> AppSocket {
+        app_socket(&self.0, current_user())
+    }
+
     pub fn app_socket_path(&self) -> PathBuf {
-        self.0.join("app.sock")
+        self.app_socket().path().to_path_buf()
     }
 
     pub fn board_path(&self, category_slug: &str) -> PathBuf {

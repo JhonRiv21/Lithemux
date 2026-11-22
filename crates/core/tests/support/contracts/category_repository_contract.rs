@@ -9,6 +9,7 @@ fn category(id: &str, slug: &str, sort: i64) -> Category {
         color: Some("#0094ff".to_string()),
         sort,
         created_at: 10,
+        collapsed: false,
     }
 }
 
@@ -28,6 +29,20 @@ pub fn category_repository_contract(repo: &dyn CategoryRepository) {
     assert_eq!(repo.find_by_id("c2").unwrap(), Some(second.clone()));
     assert_eq!(repo.find_by_slug("missing").unwrap(), None);
     assert_eq!(repo.find_by_id("missing").unwrap(), None);
+
+    // What the sidebar changes (PLAN §2.2).
+    repo.update_name("c1", "Demo app").unwrap();
+    repo.update_collapsed("c1", true).unwrap();
+    let changed = repo.find_by_id("c1").unwrap().unwrap();
+    assert_eq!(
+        (changed.name.as_str(), changed.collapsed),
+        ("Demo app", true)
+    );
+    assert_eq!(changed.slug, "demo");
+    repo.update_sort("c1", 5).unwrap();
+    let slugs: Vec<String> = repo.list().unwrap().into_iter().map(|c| c.slug).collect();
+    assert_eq!(slugs, ["selektal", "demo"]);
+    repo.update_name("missing", "x").unwrap();
 
     repo.delete("c1").unwrap();
     assert_eq!(repo.list().unwrap(), vec![second]);

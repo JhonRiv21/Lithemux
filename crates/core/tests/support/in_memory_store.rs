@@ -20,6 +20,12 @@ impl InMemoryStore {
         Self::default()
     }
 
+    fn update_category(&self, id: &str, change: impl FnOnce(&mut Category)) {
+        if let Some(category) = self.categories.borrow_mut().iter_mut().find(|c| c.id == id) {
+            change(category);
+        }
+    }
+
     fn update(&self, id: &str, change: impl FnOnce(&mut Session)) -> Result<(), SessionError> {
         if let Some(session) = self.sessions.borrow_mut().iter_mut().find(|s| s.id == id) {
             change(session);
@@ -69,6 +75,21 @@ impl CategoryRepository for InMemoryStore {
             .cloned())
     }
 
+    fn update_name(&self, id: &str, name: &str) -> Result<(), CategoryError> {
+        self.update_category(id, |c| c.name = name.to_string());
+        Ok(())
+    }
+
+    fn update_sort(&self, id: &str, sort: i64) -> Result<(), CategoryError> {
+        self.update_category(id, |c| c.sort = sort);
+        Ok(())
+    }
+
+    fn update_collapsed(&self, id: &str, collapsed: bool) -> Result<(), CategoryError> {
+        self.update_category(id, |c| c.collapsed = collapsed);
+        Ok(())
+    }
+
     fn delete(&self, id: &str) -> Result<(), CategoryError> {
         self.categories.borrow_mut().retain(|c| c.id != id);
         self.sessions.borrow_mut().retain(|s| s.category_id != id);
@@ -97,6 +118,12 @@ impl SessionRepository for InMemoryStore {
             .cloned()
             .collect();
         all.sort_by_key(|s| (s.sort, s.created_at, s.slug.clone()));
+        Ok(all)
+    }
+
+    fn list_all(&self) -> Result<Vec<Session>, SessionError> {
+        let mut all = self.sessions.borrow().clone();
+        all.sort_by_key(|s| (s.category_id.clone(), s.sort, s.created_at, s.slug.clone()));
         Ok(all)
     }
 
@@ -172,6 +199,48 @@ impl SessionRepository for InMemoryStore {
                 s.state = to;
             }
         })
+    }
+
+    fn update_title(&self, id: &str, title: Option<&str>) -> Result<(), SessionError> {
+        self.update(id, |s| s.title = title.map(str::to_string))
+    }
+
+    fn update_sort(&self, id: &str, sort: i64) -> Result<(), SessionError> {
+        self.update(id, |s| s.sort = sort)
+    }
+
+    fn update_pin_sort(&self, id: &str, pin_sort: Option<i64>) -> Result<(), SessionError> {
+        self.update(id, |s| s.pin_sort = pin_sort)
+    }
+
+    fn list_pinned(&self) -> Result<Vec<Session>, SessionError> {
+        let mut pinned: Vec<Session> = self
+            .sessions
+            .borrow()
+            .iter()
+            .filter(|s| s.pin_sort.is_some())
+            .cloned()
+            .collect();
+        pinned.sort_by_key(|s| (s.pin_sort, s.created_at, s.slug.clone()));
+        Ok(pinned)
+    }
+
+    fn note_message(
+        &self,
+        id: &str,
+        preview: Option<&str>,
+        asks_for_attention: bool,
+    ) -> Result<(), SessionError> {
+        self.update(id, |s| {
+            if let Some(preview) = preview {
+                s.preview = Some(preview.to_string());
+            }
+            s.unread += i64::from(asks_for_attention);
+        })
+    }
+
+    fn clear_unread(&self, id: &str) -> Result<(), SessionError> {
+        self.update(id, |s| s.unread = 0)
     }
 
     fn delete(&self, id: &str) -> Result<(), SessionError> {

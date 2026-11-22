@@ -1,0 +1,3 @@
+    let platform = gpui_platform::current_platform(true);
+    app_shell::run(request)
+    window::open(live, cx);

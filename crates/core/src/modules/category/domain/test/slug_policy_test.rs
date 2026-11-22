@@ -47,3 +47,35 @@ fn slug_is_capped_at_forty_eight_characters() {
     assert!(is_valid_slug(&"a".repeat(48)));
     assert!(!is_valid_slug(&"a".repeat(49)));
 }
+
+// PLAN §2.2: categories and sessions are created from the sidebar, where
+// the user types a name, not a slug.
+#[test]
+fn a_typed_name_gives_a_valid_slug() {
+    use crate::modules::category::domain::slug_policy::slug_from_name;
+    assert_eq!(slug_from_name("My API").as_deref(), Some("my-api"));
+    assert_eq!(
+        slug_from_name("  Diana — Calidad 2!  ").as_deref(),
+        Some("diana-calidad-2")
+    );
+    assert_eq!(
+        slug_from_name("already-a-slug").as_deref(),
+        Some("already-a-slug")
+    );
+    assert_eq!(slug_from_name("¡¡¡"), None);
+    assert_eq!(slug_from_name(""), None);
+    let long = slug_from_name(&"word ".repeat(30)).unwrap();
+    assert!(crate::modules::category::domain::slug_policy::is_valid_slug(&long));
+}
+
+// PLAN §2.3: each new terminal needs a name of its own.
+#[test]
+fn a_taken_slug_gets_the_next_free_number() {
+    use crate::modules::category::domain::slug_policy::free_slug;
+    assert_eq!(free_slug("terminal", |_| false), "terminal");
+    let taken = ["terminal", "terminal-2"];
+    assert_eq!(
+        free_slug("terminal", |slug| taken.contains(&slug)),
+        "terminal-3"
+    );
+}

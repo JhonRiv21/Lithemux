@@ -1,0 +1,2 @@
+        self.0.join("app.sock")
+    let listener = UnixListener::bind(home.path().join("app.sock"))?;

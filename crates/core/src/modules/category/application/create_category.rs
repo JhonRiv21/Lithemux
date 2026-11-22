@@ -23,6 +23,7 @@ pub fn create_category(
         color: new.color,
         sort: categories.next_sort()?,
         created_at: now,
+        collapsed: false,
     };
     categories.insert(&category)?;
     boards.ensure(&category)?;

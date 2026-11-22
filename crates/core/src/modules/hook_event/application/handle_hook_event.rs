@@ -2,12 +2,13 @@ use std::fmt::Display;
 
 use crate::modules::context::build_session_context;
 use crate::modules::hook_event::application::hook_ports::HookPorts;
+use crate::modules::hook_event::domain::card_note::card_note;
 use crate::modules::hook_event::domain::hook_event::HookEvent;
 use crate::modules::hook_event::domain::hook_input::HookInput;
 use crate::modules::hook_event::domain::session_start_output::session_start_output;
 use crate::modules::hook_event::domain::transition::{Transition, transition};
 use crate::modules::session::{
-    SessionError, SessionRepository, apply_state, follow_claude_session, move_state,
+    SessionError, SessionRepository, apply_state, follow_claude_session, move_state, note_message,
     record_activity, record_claude_version,
 };
 
@@ -42,6 +43,12 @@ pub fn handle_hook_event(
         && let Err(error) = apply_transition(sessions, session_id, change, now)
     {
         problem("updating the state", &error);
+    }
+    if let Some(note) = card_note(event, &input)
+        && let Err(error) =
+            note_message(sessions, session_id, note.message, note.asks_for_attention)
+    {
+        problem("updating the card", &error);
     }
     let stdout = (event == HookEvent::SessionStart)
         .then(|| session_start_stdout(ports, session_id, &input, now, &problem))

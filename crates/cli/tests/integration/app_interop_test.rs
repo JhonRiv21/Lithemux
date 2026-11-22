@@ -1,6 +1,6 @@
 use std::time::{Duration, Instant};
 
-use lithemux_app::session_host::{Opened, Phase, SessionHost};
+use lithemux_app::session_host::{Phase, SessionHost};
 use lithemux_app::terminal_view::GridSize;
 use lithemux_core::modules::session::SessionRef;
 
@@ -12,7 +12,7 @@ fn open_in_the_app(host: &mut SessionHost, target: &str) -> (String, Phase) {
     let asked = host
         .open(&SessionRef::parse(target).unwrap(), GridSize::INITIAL)
         .unwrap();
-    let (Opened::Opening { session_id } | Opened::AlreadyHere { session_id }) = asked;
+    let session_id = asked.session_id().to_string();
     attend_until(host, "the session to stop opening", |host| {
         host.phase(&session_id) != Some(&Phase::Opening)
     });
@@ -119,4 +119,36 @@ fn the_app_does_not_launch_what_the_cli_has_open() {
         open_in_the_app(&mut host, "demo/ejecutora").1,
         Phase::Running
     );
+}
+
+// Audit of block 3 (3): a session that is open, here in the app, is not
+// removed under its `claude`; once closed, it is.
+#[test]
+fn the_cli_does_not_remove_a_session_that_is_open() {
+    let sandbox = Sandbox::new().with_demo();
+    sandbox.use_fake_claude();
+    sandbox.steer_fake_claude("fake-claude.sleep", "30");
+    let mut host = sandbox.app_host();
+    let (_, phase) = open_in_the_app(&mut host, "demo/ejecutora");
+    assert_eq!(phase, Phase::Running);
+    sandbox.wait_for_fake_claude();
+    let claude = sandbox.fake_claude_number("fake-claude.pid");
+
+    let refused = sandbox.fail(&["rm", "demo/ejecutora", "--yes"]);
+    assert!(
+        refused.contains(&format!("already open (pid {claude})")),
+        "{refused}"
+    );
+    let refused = sandbox.fail(&["cat", "rm", "demo", "--yes"]);
+    assert!(refused.contains("demo/ejecutora"), "{refused}");
+    assert!(
+        refused.contains(&format!("already open (pid {claude})")),
+        "{refused}"
+    );
+    assert!(status_line(&sandbox, "demo-ejecutora").contains("open"));
+
+    drop(host);
+    signals::wait_until_gone(claude);
+    sandbox.run(&["rm", "demo/ejecutora", "--yes"]);
+    assert!(!sandbox.run(&["status"]).contains("demo-ejecutora"));
 }

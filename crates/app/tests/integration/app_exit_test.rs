@@ -114,6 +114,10 @@ fn a_command_line_that_makes_no_sense_is_refused() {
         &["--open"][..],
         &["--open", "demo/uno", "stray"],
         &["--open", "demo/uno", "--open", "demo/uno"],
+        // PLAN §2.2 (carried from 2.1): with a window, sessions are opened
+        // from the sidebar, and the spike that ran any program is gone.
+        &["--open", "demo/uno"],
+        &["/bin/echo", "hello"],
     ] {
         let output = app().args(arguments).output().unwrap();
 
@@ -123,4 +127,55 @@ fn a_command_line_that_makes_no_sense_is_refused() {
             "{arguments:?}"
         );
     }
+}
+
+// PLAN §2.2 (carried from 2.1): the app always starts with its session
+// host, also with a window, so a second one never shows: it leaves before.
+#[test]
+fn a_second_app_with_a_window_leaves_too() {
+    let world = HostedWorld::new();
+    let (first, _session, claude) = app_with_a_stubborn_session(&world);
+
+    let second = app()
+        .env("PATH", "/usr/bin:/bin")
+        .env("HOME", world.dir.path())
+        .env("LITHEMUX_HOME", world.home.path())
+        .output()
+        .unwrap();
+
+    assert_eq!(second.status.code(), Some(1));
+    let said = String::from_utf8_lossy(&second.stderr).to_string();
+    assert!(
+        said.contains(&format!("already running (pid {})", first.id())),
+        "{said}"
+    );
+    assert!(is_alive(claude));
+
+    kill_process(
+        Pid::from_raw(first.id().try_into().unwrap()).unwrap(),
+        Signal::TERM,
+    )
+    .unwrap();
+    wait_for_exit(first);
+    wait_until_gone(claude);
+}
+
+// Audit of block 3 (2): the real app starts on a home whose path is too
+// long for a socket address, and leaves nothing behind.
+#[test]
+fn the_app_starts_on_a_home_too_long_for_a_socket_address() {
+    let world = HostedWorld::with_a_long_home();
+    let (app, _session, claude) = app_with_a_stubborn_session(&world);
+    let socket = world.home.app_socket_path();
+    assert!(socket.exists());
+
+    kill_process(
+        Pid::from_raw(app.id().try_into().unwrap()).unwrap(),
+        Signal::TERM,
+    )
+    .unwrap();
+    let said = wait_for_exit(app);
+    assert!(!said.contains("SUN_LEN"), "{said}");
+    assert!(!socket.exists());
+    wait_until_gone(claude);
 }

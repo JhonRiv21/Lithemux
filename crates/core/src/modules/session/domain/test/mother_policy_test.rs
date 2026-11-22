@@ -21,6 +21,10 @@ fn mother(id: &str, slug: &str) -> Session {
         last_activity_at: None,
         created_at: 0,
         sort: 1,
+        title: None,
+        pin_sort: None,
+        preview: None,
+        unread: 0,
     }
 }
 

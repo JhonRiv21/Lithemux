@@ -8,6 +8,9 @@ pub trait SessionRepository {
     fn next_sort(&self, category_id: &str) -> Result<i64, SessionError>;
     /// Ordered by `sort`, then creation time.
     fn list_in(&self, category_id: &str) -> Result<Vec<Session>, SessionError>;
+    /// Every session, those of one category together and ordered as
+    /// `list_in` orders them.
+    fn list_all(&self) -> Result<Vec<Session>, SessionError>;
     fn find(&self, category_id: &str, slug: &str) -> Result<Option<Session>, SessionError>;
     fn find_by_id(&self, id: &str) -> Result<Option<Session>, SessionError>;
     fn find_mother(&self, category_id: &str) -> Result<Option<Session>, SessionError>;
@@ -36,6 +39,23 @@ pub trait SessionRepository {
     /// Moves a session to `to` only while it is in `from`; anything else,
     /// unknown ids included, is left alone.
     fn move_state(&self, id: &str, from: State, to: State) -> Result<(), SessionError>;
+
+    fn update_title(&self, id: &str, title: Option<&str>) -> Result<(), SessionError>;
+    fn update_sort(&self, id: &str, sort: i64) -> Result<(), SessionError>;
+    /// `None` unpins.
+    fn update_pin_sort(&self, id: &str, pin_sort: Option<i64>) -> Result<(), SessionError>;
+    /// Every pinned session, of any category, ordered by `pin_sort`.
+    fn list_pinned(&self) -> Result<Vec<Session>, SessionError>;
+
+    /// Keeps the line as the preview when there is one, and adds one to the
+    /// unread count when `asks_for_attention`. Unknown ids are ignored.
+    fn note_message(
+        &self,
+        id: &str,
+        preview: Option<&str>,
+        asks_for_attention: bool,
+    ) -> Result<(), SessionError>;
+    fn clear_unread(&self, id: &str) -> Result<(), SessionError>;
 
     fn delete(&self, id: &str) -> Result<(), SessionError>;
 }

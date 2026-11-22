@@ -10,6 +10,15 @@ pub struct HookInput {
     pub source: Option<String>,
     #[serde(default)]
     pub notification_type: Option<String>,
+    /// Notification: its text.
+    #[serde(default)]
+    pub message: Option<String>,
+    /// UserPromptSubmit: what the user sent.
+    #[serde(default)]
+    pub prompt: Option<String>,
+    /// Stop: the text of Claude's final response of the turn.
+    #[serde(default)]
+    pub last_assistant_message: Option<String>,
     /// Not documented today; used only if Claude Code ever sends it.
     #[serde(default)]
     pub version: Option<String>,
