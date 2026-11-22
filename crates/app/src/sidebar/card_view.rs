@@ -11,6 +11,7 @@ use super::port_chips::ports_shown;
 use super::status_text::{card_status_text, status_color};
 use super::tree::Card;
 use super::view::Sidebar;
+use crate::status_bar::memory_label::memory_label;
 use crate::theme;
 
 pub(super) fn id_of(kind: &str, name: &str) -> ElementId {
@@ -192,6 +193,12 @@ impl Sidebar {
                     .text_color(rgb(theme::colors().text_faint))
                     .child(SharedString::from(card.cwd.clone())),
             )
+            .children(card.memory.map(|bytes| {
+                div()
+                    .flex_none()
+                    .text_color(rgb(theme::colors().text_faint))
+                    .child(memory_label(bytes))
+            }))
             .children(ports.iter().map(|port| self.render_port(card, *port, cx)))
             .children((more > 0).then(|| {
                 div()

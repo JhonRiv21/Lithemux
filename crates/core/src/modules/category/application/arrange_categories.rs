@@ -35,6 +35,15 @@ pub fn reorder_categories(
     Ok(())
 }
 
+/// Whether a turn the category's sessions finish out of view rings.
+pub fn set_notify(
+    categories: &dyn CategoryRepository,
+    category_id: &str,
+    notify: bool,
+) -> Result<(), CategoryError> {
+    categories.update_notify(category_id, notify)
+}
+
 pub fn set_collapsed(
     categories: &dyn CategoryRepository,
     category_id: &str,

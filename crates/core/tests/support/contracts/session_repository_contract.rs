@@ -11,6 +11,7 @@ fn category(id: &str, slug: &str) -> Category {
         sort: 1,
         created_at: 10,
         collapsed: false,
+        notify: true,
     }
 }
 
@@ -87,7 +88,9 @@ pub fn session_repository_contract(
     sessions.update_kind("s3", Kind::Coordinator).unwrap();
     sessions.update_keep_alive("s2", true).unwrap();
     sessions.update_model("s2", None).unwrap();
-    sessions.update_claude_version("s2", "2.1.330").unwrap();
+    sessions
+        .update_claude_version("s2", Some("2.1.330"))
+        .unwrap();
     sessions
         .update_claude_session_id("s2", "claude-new")
         .unwrap();
@@ -97,6 +100,11 @@ pub fn session_repository_contract(
     assert_eq!(updated.model, None);
     assert_eq!(updated.claude_version.as_deref(), Some("2.1.330"));
     assert_eq!(updated.claude_session_id.as_deref(), Some("claude-new"));
+    sessions.update_claude_version("s2", None).unwrap();
+    assert_eq!(
+        sessions.find_by_id("s2").unwrap().unwrap().claude_version,
+        None
+    );
     assert_eq!(sessions.find_coordinator("c2").unwrap().unwrap().id, "s3");
 
     // State: activity is kept when not given, and `unless` protects a state.

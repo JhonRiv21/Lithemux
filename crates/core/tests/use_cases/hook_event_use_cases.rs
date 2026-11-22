@@ -1,56 +1,9 @@
-use lithemux_core::modules::context::ContextPorts;
-use lithemux_core::modules::hook_event::{HookEvent, HookPorts, handle_hook_event};
-use lithemux_core::modules::session::{Kind, Session, State, apply_state, find_session_by_id};
+use lithemux_core::modules::hook_event::HookEvent;
+use lithemux_core::modules::session::{State, apply_state};
 use serde_json::Value;
 
-use crate::support::in_memory_store::{InMemoryBoards, InMemoryStore};
-use crate::support::recording_ports::{RecordingLog, RecordingNotifier};
-use crate::support::sample_data::{NOW, add_category, add_session};
-
-struct World {
-    store: InMemoryStore,
-    boards: InMemoryBoards,
-    log: RecordingLog,
-    notifier: RecordingNotifier,
-    executor: Session,
-}
-
-impl World {
-    fn new() -> Self {
-        let (store, boards) = (InMemoryStore::new(), InMemoryBoards::default());
-        add_category(&store, &boards, "demo");
-        add_session(&store, &store, "demo/planificadora", Kind::Coordinator);
-        let executor = add_session(&store, &store, "demo/ejecutora", Kind::Member);
-        World {
-            store,
-            boards,
-            log: RecordingLog::default(),
-            notifier: RecordingNotifier::default(),
-            executor,
-        }
-    }
-
-    fn fire(&self, subcommand: &str, stdin: &str, now: i64) -> Option<String> {
-        let ports = HookPorts {
-            context: ContextPorts {
-                categories: &self.store,
-                sessions: &self.store,
-                settings: &self.store,
-                boards: &self.boards,
-            },
-            log: &self.log,
-            notifier: &self.notifier,
-        };
-        handle_hook_event(&ports, &self.executor.id, subcommand, stdin, now)
-    }
-
-    fn executor_now(&self) -> Session {
-        find_session_by_id(&self.store, &self.store, &self.executor.id)
-            .unwrap()
-            .unwrap()
-            .1
-    }
-}
+use crate::support::hook_world::World;
+use crate::support::sample_data::NOW;
 
 // PLAN §0.4 table: session-start
 #[test]

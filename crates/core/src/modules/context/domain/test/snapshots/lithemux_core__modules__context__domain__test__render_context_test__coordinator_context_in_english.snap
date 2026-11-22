@@ -8,6 +8,6 @@ This session is the coordinator session of the category: it coordinates the cate
 The other sessions:
 - selektal-ejecutora (role: implementa las fases que define la planificadora; state: idle, last activity 5 min ago)
 - selektal-documental (role: requerimientos; state: hibernated, last activity 3 days ago)
-Sessions talk to each other with SendMessage using those names.
+Sessions talk to each other with SendMessage using those names. To hand a session a task, this session uses SendMessage with notify_when_idle: true, and is told when that session is free again; each session reports back by message when it is done.
 Category board (written only by this session): /Users/x/Library/Application Support/lithemux/categories/selektal/board.md
 This list is a snapshot taken at startup; `lithemux status selektal` shows the current state.

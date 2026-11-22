@@ -97,6 +97,9 @@ impl Sidebar {
             MenuCommand::ShiftCategory(id, by) => {
                 self.change(cx, |actions| actions.shift_category(&id, by));
             }
+            MenuCommand::SetNotify(id, notify) => {
+                self.change(cx, |actions| actions.set_notify(&id, notify));
+            }
             MenuCommand::SetCollapsed(id, collapsed) => {
                 self.change(cx, |actions| actions.set_collapsed(&id, collapsed));
             }

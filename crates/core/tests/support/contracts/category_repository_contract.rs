@@ -10,6 +10,7 @@ fn category(id: &str, slug: &str, sort: i64) -> Category {
         sort,
         created_at: 10,
         collapsed: false,
+        notify: true,
     }
 }
 
@@ -43,6 +44,19 @@ pub fn category_repository_contract(repo: &dyn CategoryRepository) {
     let slugs: Vec<String> = repo.list().unwrap().into_iter().map(|c| c.slug).collect();
     assert_eq!(slugs, ["selektal", "demo"]);
     repo.update_name("missing", "x").unwrap();
+    // Notifications are on until switched off (PLAN §3.1).
+    assert!(repo.find_by_id("c2").unwrap().unwrap().notify);
+    repo.update_notify("c2", false).unwrap();
+    assert!(!repo.find_by_id("c2").unwrap().unwrap().notify);
+    repo.update_notify("c2", true).unwrap();
+    // What is inserted is kept whole, this flag too.
+    let quiet = Category {
+        notify: false,
+        ..category("c3", "quiet", 9)
+    };
+    repo.insert(&quiet).unwrap();
+    assert_eq!(repo.find_by_id("c3").unwrap(), Some(quiet));
+    repo.delete("c3").unwrap();
 
     repo.delete("c1").unwrap();
     assert_eq!(repo.list().unwrap(), vec![second]);

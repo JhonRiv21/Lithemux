@@ -25,6 +25,7 @@ fn run(cli: Cli) -> anyhow::Result<u8> {
         CliCommand::Cat { command } => match command {
             CatCommand::Add(args) => commands::category::add(args)?,
             CatCommand::List { json } => commands::category::list(json)?,
+            CatCommand::Set(args) => commands::category::set(args)?,
             CatCommand::Rm { slug, yes } => commands::category::remove(&slug, yes)?,
         },
         CliCommand::New(args) => commands::session::new(args)?,

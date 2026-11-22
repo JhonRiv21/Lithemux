@@ -6,7 +6,7 @@ use crate::modules::category::ports::category_repository::CategoryRepository;
 use crate::platform::store::connection::Db;
 use crate::platform::store::error::StoreError;
 
-const COLUMNS: &str = "id, slug, name, root_dir, color, sort, created_at, collapsed";
+const COLUMNS: &str = "id, slug, name, root_dir, color, sort, created_at, collapsed, notify";
 
 pub struct SqliteCategoryRepository<'a> {
     db: &'a Db,
@@ -49,8 +49,9 @@ impl CategoryRepository for SqliteCategoryRepository<'_> {
         self.db
             .conn()
             .execute(
-                "INSERT INTO categories(id, slug, name, root_dir, color, sort, created_at) \
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                &format!(
+                    "INSERT INTO categories({COLUMNS}) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)"
+                ),
                 params![
                     category.id,
                     category.slug,
@@ -58,7 +59,9 @@ impl CategoryRepository for SqliteCategoryRepository<'_> {
                     category.root_dir,
                     category.color,
                     category.sort,
-                    category.created_at
+                    category.created_at,
+                    category.collapsed,
+                    category.notify
                 ],
             )
             .map_err(StoreError::from)?;
@@ -110,6 +113,10 @@ impl CategoryRepository for SqliteCategoryRepository<'_> {
         self.update("collapsed", id, &collapsed)
     }
 
+    fn update_notify(&self, id: &str, notify: bool) -> Result<(), CategoryError> {
+        self.update("notify", id, &notify)
+    }
+
     // Sessions go with it through ON DELETE CASCADE.
     fn delete(&self, id: &str) -> Result<(), CategoryError> {
         self.db
@@ -130,5 +137,6 @@ fn from_row(row: &Row<'_>) -> rusqlite::Result<Category> {
         sort: row.get::<_, Option<i64>>(5)?.unwrap_or(0),
         created_at: row.get::<_, Option<i64>>(6)?.unwrap_or(0),
         collapsed: row.get(7)?,
+        notify: row.get(8)?,
     })
 }

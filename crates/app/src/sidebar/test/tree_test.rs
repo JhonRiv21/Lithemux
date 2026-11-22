@@ -18,6 +18,7 @@ fn category(slug: &str, sort: i64) -> Category {
         sort,
         created_at: 0,
         collapsed: false,
+        notify: true,
     }
 }
 
@@ -52,6 +53,7 @@ fn tree_of(categories: &[Category], sessions: &[Session]) -> Tree {
         sessions,
         phases: &|_| None,
         ports: &HashMap::new(),
+        memory: &HashMap::new(),
         home: Some(Path::new("/Users/ana")),
     })
 }
@@ -148,11 +150,14 @@ fn a_card_carries_title_preview_status_unread_cwd_and_ports() {
     let mut shell = session("demo", "sh", Kind::Member);
     shell.profile = Profile::Shell;
     let ports = HashMap::from([(api.id.clone(), vec![3000, 52844])]);
+    // PLAN §3.3: memory per session.
+    let memory = HashMap::from([(api.id.clone(), 300 * 1024 * 1024)]);
     let tree = build(&Board {
         categories: &[category("demo", 1)],
         sessions: &[api, shell],
         phases: &|id| (id == "s-demo-api").then_some(Phase::Opening),
         ports: &ports,
+        memory: &memory,
         home: Some(Path::new("/Users/ana")),
     });
     let card = &tree.groups[0].cards[0];
@@ -163,10 +168,13 @@ fn a_card_carries_title_preview_status_unread_cwd_and_ports() {
     assert_eq!(card.unread, 3);
     assert_eq!(card.cwd, "~/…/acme/api");
     assert_eq!(card.ports, [3000, 52844]);
+    assert_eq!(card.memory, Some(300 * 1024 * 1024));
     assert!(card.keep_alive);
     let shell = &tree.groups[0].cards[1];
     assert!(shell.is_shell);
     assert_eq!(shell.cwd, "~/demo");
     assert_eq!(shell.status, Status::NotRunning);
     assert!(shell.ports.is_empty());
+    // A session that does not run here has no memory to show.
+    assert_eq!(shell.memory, None);
 }

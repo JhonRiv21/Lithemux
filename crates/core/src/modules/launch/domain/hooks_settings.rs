@@ -49,8 +49,15 @@ pub const HOOK_BINDINGS: [HookBinding; 7] = [
     },
 ];
 
+/// The tools of Claude Code's own messaging between sessions, by their
+/// documented names: a session reports to its coordinator with them (PLAN
+/// §3.1). Allowed so that a report never stops on a permission prompt; a
+/// `deny` of the user's still wins over this `allow`.
+pub const MESSAGING_TOOLS: [&str; 2] = ["SendMessage", "ListAgents"];
+
 /// The `--settings` payload. It is passed on every launch because Claude Code
-/// does not restore it on resume.
+/// does not restore it on resume. Claude Code merges its lists with those
+/// of the user's settings files rather than replacing them.
 pub fn hooks_settings_json(hook_bin: &Path) -> String {
     let hook = shell_quote(&hook_bin.display().to_string());
     let mut hooks = serde_json::Map::new();
@@ -66,7 +73,11 @@ pub fn hooks_settings_json(hook_bin: &Path) -> String {
             }]),
         );
     }
-    serde_json::json!({ "hooks": hooks }).to_string()
+    serde_json::json!({
+        "hooks": hooks,
+        "permissions": { "allow": MESSAGING_TOOLS },
+    })
+    .to_string()
 }
 
 // Hook commands run through `sh -c`, so a path with spaces must be quoted.

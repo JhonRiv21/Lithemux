@@ -8,6 +8,7 @@ pub const DEFAULT_HIBERNATE_AFTER_HOURS: i64 = 48;
 pub const DEFAULT_SCROLLBACK: usize = 5_000;
 pub const DEFAULT_FONT_FAMILY: &str = "Menlo";
 pub const DEFAULT_FONT_SIZE: u16 = 13;
+pub const DEFAULT_VERSION_CHECK_HOURS: i64 = 6;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum InterfaceLanguage {
@@ -38,6 +39,8 @@ pub struct Preferences {
     /// `None`: the `claude` of the user's shell.
     pub claude_path: Option<String>,
     pub theme: ThemeChoice,
+    /// How often the installed `claude` is asked for its version.
+    pub version_check_hours: i64,
 }
 
 impl Default for Preferences {
@@ -52,6 +55,7 @@ impl Default for Preferences {
             font_size: DEFAULT_FONT_SIZE,
             claude_path: None,
             theme: ThemeChoice::System,
+            version_check_hours: DEFAULT_VERSION_CHECK_HOURS,
         }
     }
 }
@@ -84,6 +88,9 @@ impl Preferences {
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(defaults.font_size),
             claude_path: valid(SettingKey::ClaudePath),
+            version_check_hours: valid(SettingKey::VersionCheckHours)
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(defaults.version_check_hours),
             theme: match valid(SettingKey::Theme).as_deref() {
                 Some("light") => ThemeChoice::Light,
                 Some("dark") => ThemeChoice::Dark,

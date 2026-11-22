@@ -4,11 +4,17 @@ use std::time::{Duration, Instant};
 
 use lithemux_app::session_host::{HostConfig, Phase, SessionHost};
 use lithemux_core::modules::category::{
-    FsBoardStore, NewCategory, Slug, SqliteCategoryRepository, create_category,
+    Category, CategoryRepository, FsBoardStore, NewCategory, Slug, SqliteCategoryRepository,
+    create_category,
+};
+use lithemux_core::modules::context::ContextPorts;
+use lithemux_core::modules::hook_event::{
+    FileHookLog, HookPorts, SocketAppNotifier, handle_hook_event,
 };
 use lithemux_core::modules::session::{
     Kind, NewSession, Profile, Session, SessionRef, SqliteSessionRepository, State, apply_state,
-    create_session, find_session_by_id, get_session, remove_session, set_keep_alive,
+    create_session, find_session_by_id, get_session, record_claude_version, remove_session,
+    set_keep_alive,
 };
 use lithemux_core::modules::settings::{SettingKey, SqliteSettingsRepository, write_setting};
 use lithemux_core::platform::paths::home::Home;
@@ -181,13 +187,61 @@ impl HostedWorld {
         .unwrap();
     }
 
+    /// Where the session works, as `lithemux new --cwd` sets it.
+    pub fn set_cwd(&self, session_id: &str, cwd: &str) {
+        self.db()
+            .conn()
+            .execute(
+                "UPDATE sessions SET cwd = ?2 WHERE id = ?1",
+                [session_id, cwd],
+            )
+            .unwrap();
+    }
+
     pub fn keep_alive(&self, session_id: &str) {
         let db = self.db();
         let sessions = SqliteSessionRepository::new(&db);
         set_keep_alive(&sessions, &self.stored(session_id), true).unwrap();
     }
 
+    /// As if the session had been launched with that `claude`.
+    pub fn set_claude_version(&self, session_id: &str, version: &str) {
+        let db = self.db();
+        record_claude_version(&SqliteSessionRepository::new(&db), session_id, version).unwrap();
+    }
+
     /// A file the fake claude reads to know how to behave.
+    /// What the hook binary does when Claude Code fires an event: write the
+    /// state and tell the app.
+    pub fn fire_hook(&self, session_id: &str, event: &str, stdin: &str) {
+        let db = self.db();
+        let ports = HookPorts {
+            context: ContextPorts {
+                categories: &SqliteCategoryRepository::new(&db),
+                sessions: &SqliteSessionRepository::new(&db),
+                settings: &SqliteSettingsRepository::new(&db),
+                boards: &FsBoardStore::new(&self.home),
+            },
+            log: &FileHookLog::new(&self.home),
+            notifier: &SocketAppNotifier::new(&self.home),
+        };
+        handle_hook_event(&ports, session_id, event, stdin, NOW + 100);
+    }
+
+    /// What Claude Code leaves of a conversation once it said something.
+    pub fn write_transcript(&self, conversation: &str) {
+        let project = self.claude_config().join("projects/-work");
+        fs::create_dir_all(&project).unwrap();
+        fs::write(project.join(format!("{conversation}.jsonl")), "{}\n").unwrap();
+    }
+
+    /// The category `demo`, as it is stored now.
+    pub fn category(&self) -> Category {
+        let db = self.db();
+        let found = SqliteCategoryRepository::new(&db).find_by_slug("demo");
+        found.unwrap().unwrap()
+    }
+
     pub fn steer_fake_claude(&self, file: &str, contents: &str) {
         fs::create_dir_all(self.home.path()).unwrap();
         fs::write(self.home.path().join(file), contents).unwrap();

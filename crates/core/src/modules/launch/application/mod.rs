@@ -3,6 +3,7 @@ pub mod ensure_closed;
 pub mod hook_inspection;
 pub mod inspect_claude;
 pub mod inspect_hook;
+pub mod installed_claude;
 pub mod launch_ports;
 pub mod open_session;
 pub mod plan_launch;

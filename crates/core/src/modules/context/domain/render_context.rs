@@ -78,7 +78,8 @@ fn family(scene: &Scene<'_>, shown: usize) -> Vec<String> {
             phrases.no_members(),
             shown,
         ));
-        lines.push(phrases.messaging().to_string());
+        let assigning = phrases.coordinator_assigning();
+        lines.push(format!("{} {assigning}", phrases.messaging()));
         lines.push(phrases.board_of_coordinator(board));
     } else if let Some(coordinator) = coordinator {
         lines.push(phrases.coordinator_is(&describe(scene, coordinator)));
@@ -88,8 +89,10 @@ fn family(scene: &Scene<'_>, shown: usize) -> Vec<String> {
             phrases.no_others(),
             shown,
         ));
-        let reporting = phrases.member_reporting();
-        lines.push(format!("{} {reporting}", phrases.messaging()));
+        let reporting = phrases.member_reporting(&coordinator.messaging_name(input.category));
+        // It names SendMessage and the address: the general line is not
+        // needed, and the context has to stay short.
+        lines.push(reporting);
         lines.push(phrases.board_of_member(board));
     } else {
         lines.push(phrases.no_coordinator().to_string());

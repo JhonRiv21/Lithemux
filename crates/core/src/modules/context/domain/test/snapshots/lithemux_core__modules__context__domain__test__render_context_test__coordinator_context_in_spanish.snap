@@ -8,6 +8,6 @@ Esta sesión es la sesión coordinadora de la categoría: coordina la categoría
 Las demás sesiones:
 - selektal-ejecutora (rol: implementa las fases que define la planificadora; estado: inactiva, última actividad hace 5 min)
 - selektal-documental (rol: requerimientos; estado: hibernada, última actividad hace 3 días)
-Las sesiones se comunican con SendMessage usando esos nombres.
+Las sesiones se comunican con SendMessage usando esos nombres. Para encargar una tarea, esta sesión usa SendMessage con notify_when_idle: true y recibe un aviso cuando esa sesión queda libre; cada sesión le reporta por mensaje al terminar.
 Tablero de la categoría (solo lo escribe esta sesión): /Users/x/Library/Application Support/lithemux/categories/selektal/board.md
 Esta lista es del momento del arranque; `lithemux status selektal` muestra el estado actual.

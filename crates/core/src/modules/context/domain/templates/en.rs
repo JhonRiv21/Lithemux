@@ -79,8 +79,14 @@ impl Phrases for En {
         "Sessions talk to each other with SendMessage using those names."
     }
 
-    fn member_reporting(&self) -> &'static str {
-        "When this session finishes a task or gets blocked, it reports to the coordinator; anything outside its role goes through the coordinator."
+    fn member_reporting(&self, coordinator: &str) -> String {
+        format!(
+            "On finishing a task from the coordinator, or if blocked, this session reports to the coordinator with SendMessage (to: \"{coordinator}\"): what it did, what is left and where the details are; then it stops. If the message cannot be delivered, it tells the user in its reply. Anything outside its role goes through the coordinator."
+        )
+    }
+
+    fn coordinator_assigning(&self) -> &'static str {
+        "To hand a session a task, this session uses SendMessage with notify_when_idle: true, and is told when that session is free again; each session reports back by message when it is done."
     }
 
     fn board_of_coordinator(&self, board: &str) -> String {

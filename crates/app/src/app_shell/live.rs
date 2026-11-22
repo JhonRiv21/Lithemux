@@ -7,15 +7,16 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::Duration;
 
-use gpui::{App, AppContext, Context, Task};
+use gpui::{App, Context, Task};
 use lithemux_core::modules::category::Category;
+use lithemux_core::modules::launch::Update;
 use lithemux_core::modules::session::{Session, SessionRef, SqliteSessionRepository, mark_read};
 use lithemux_core::modules::settings::Preferences;
 use lithemux_core::platform::paths::home::Home;
-use lithemux_core::platform::process::listening_ports::listening_ports;
 use lithemux_core::platform::store::connection::Db;
 
 use crate::i18n::{Language, Texts};
+use crate::notifications::policy::SoundGate;
 use crate::session_host::{HostError, Phase, SessionHost};
 use crate::sidebar::actions::SidebarActions;
 use crate::sidebar::error::SidebarError;
@@ -24,19 +25,7 @@ use crate::terminal_view::GridSize;
 
 /// How often the board is read again and the ports looked for. Changes
 /// made from the CLI, in another terminal, show up at this pace.
-const REFRESH_EVERY: Duration = Duration::from_secs(3);
-
-/// The ports found for each pid, by the session the pid belongs to.
-fn ports_by_session(
-    running: Vec<(String, u32)>,
-    found: &HashMap<u32, Vec<u16>>,
-) -> HashMap<String, Vec<u16>> {
-    running
-        .into_iter()
-        .filter_map(|(id, pid)| Some((id, found.get(&pid)?.clone())))
-        .filter(|(_, ports)| !ports.is_empty())
-        .collect()
-}
+pub(super) const REFRESH_EVERY: Duration = Duration::from_secs(3);
 
 pub struct Live {
     pub host: SessionHost,
@@ -45,12 +34,21 @@ pub struct Live {
     pub(super) preferences: Preferences,
     /// The font last asked for and the one in use for it.
     pub(super) checked_font: Option<(String, String)>,
+    /// The sessions the user is looking at right now.
+    pub(crate) in_view: Vec<String>,
+    /// What `claude --version` said last, for the one a launch would use.
+    pub(super) installed_claude: Option<String>,
+    pub(super) update: Update,
+    pub(crate) sound_gate: SoundGate,
+    _version_checks: Task<()>,
     pub(super) db: Db,
     home: Home,
     user_home: Option<PathBuf>,
     categories: Vec<Category>,
     sessions: Vec<Session>,
-    ports: HashMap<String, Vec<u16>>,
+    pub(super) ports: HashMap<String, Vec<u16>>,
+    /// The memory of each session that runs here (PLAN §3.3).
+    pub(crate) memory: HashMap<String, u64>,
     /// The last thing that went wrong, for the sidebar to show.
     pub notice: Option<String>,
     _refresh: Task<()>,
@@ -79,12 +77,18 @@ impl Live {
             texts: Rc::new(Texts::of(Language::English)),
             preferences: Preferences::default(),
             checked_font: None,
+            in_view: Vec::new(),
+            installed_claude: None,
+            update: Update::default(),
+            sound_gate: SoundGate::default(),
+            _version_checks: Self::keep_checking_the_version(cx),
             db,
             user_home: std::env::var_os("HOME").map(PathBuf::from),
             home,
             categories: Vec::new(),
             sessions: Vec::new(),
             ports: HashMap::new(),
+            memory: HashMap::new(),
             notice: None,
             _refresh: refresh,
         };
@@ -102,6 +106,7 @@ impl Live {
                         eprintln!("lithemux-app: {warning}");
                     }
                     live.reload(cx);
+                    live.announce_the_news(cx);
                     cx.notify();
                 });
                 if attended.is_err() {
@@ -110,38 +115,6 @@ impl Live {
             }
         })
         .detach();
-    }
-
-    /// Every while: the board again, for what changed outside the app, and
-    /// the ports of what runs, looked for away from the interface thread.
-    fn keep_refreshing(cx: &mut Context<Self>) -> Task<()> {
-        cx.spawn(async move |live, cx| {
-            loop {
-                cx.background_executor().timer(REFRESH_EVERY).await;
-                let Ok(running) = live.update(cx, |live, cx| {
-                    if live.reload(cx) {
-                        cx.notify();
-                    }
-                    live.host.running_programs()
-                }) else {
-                    return;
-                };
-                let pids: Vec<u32> = running.iter().map(|(_, pid)| *pid).collect();
-                let found = cx
-                    .background_spawn(async move { listening_ports(&pids) })
-                    .await;
-                let ports = ports_by_session(running, &found);
-                let updated = live.update(cx, |live, cx| {
-                    if live.ports != ports {
-                        live.ports = ports;
-                        cx.notify();
-                    }
-                });
-                if updated.is_err() {
-                    return;
-                }
-            }
-        })
     }
 
     /// Where lithemux keeps its files.
@@ -202,6 +175,7 @@ impl Live {
             sessions: &self.sessions,
             phases: &|id| self.host.phase(id).cloned(),
             ports: &self.ports,
+            memory: &self.memory,
             home: self.user_home.as_deref(),
         })
     }

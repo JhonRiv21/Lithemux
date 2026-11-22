@@ -34,6 +34,8 @@ impl Headless {
             while changes.recv().await.is_ok() {
                 let attended = headless.update(cx, |headless, _| {
                     headless.host.process_pending();
+                    // Nothing here notifies: the news of the hooks go unread.
+                    headless.host.take_news();
                     for warning in headless.host.take_warnings() {
                         eprintln!("lithemux-app: {warning}");
                     }

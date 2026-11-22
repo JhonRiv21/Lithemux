@@ -1,13 +1,13 @@
 use anyhow::{Context, bail};
 use lithemux_core::modules::category::{
     BoardStore, FsDirectories, NewCategory, Slug, create_category, get_category, list_categories,
-    locate_directory, remove_category,
+    locate_directory, remove_category, set_notify,
 };
 use lithemux_core::modules::launch::ensure_closed;
 use lithemux_core::modules::session::list_sessions;
 use lithemux_core::platform::clock::system_clock::now_unix;
 
-use crate::args::CatAddArgs;
+use crate::args::{CatAddArgs, CatSetArgs};
 use crate::output;
 use crate::prompt;
 use crate::wiring::Wiring;
@@ -39,6 +39,17 @@ pub fn list(json: bool) -> anyhow::Result<()> {
         output::category::list(&categories);
         Ok(())
     }
+}
+
+pub fn set(args: CatSetArgs) -> anyhow::Result<()> {
+    let wiring = Wiring::open()?;
+    let category = get_category(&wiring.categories(), &args.slug)?;
+    if let Some(notify) = args.sound {
+        set_notify(&wiring.categories(), &category.id, notify)?;
+    }
+    let category = get_category(&wiring.categories(), &args.slug)?;
+    output::category::updated(&category);
+    Ok(())
 }
 
 pub fn remove(slug: &str, yes: bool) -> anyhow::Result<()> {

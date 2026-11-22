@@ -5,32 +5,10 @@ use std::os::unix::net::{UnixListener, UnixStream};
 use std::time::{Duration, Instant};
 
 use lithemux_app::session_host::{HostError, SessionHost};
-use lithemux_core::modules::category::{FsBoardStore, SqliteCategoryRepository};
-use lithemux_core::modules::context::ContextPorts;
-use lithemux_core::modules::hook_event::{
-    FileHookLog, HookPorts, SocketAppNotifier, handle_hook_event,
-};
-use lithemux_core::modules::session::{Profile, SqliteSessionRepository, State};
-use lithemux_core::modules::settings::SqliteSettingsRepository;
+use lithemux_core::modules::hook_event::HookEvent;
+use lithemux_core::modules::session::{Profile, State};
 
 use crate::hosted_world::{HostedWorld, attend_until, run};
-
-/// What the hook binary does when Claude Code fires an event: write the
-/// state and tell the app.
-fn fire_hook(world: &HostedWorld, session_id: &str, event: &str, stdin: &str) {
-    let db = world.db();
-    let ports = HookPorts {
-        context: ContextPorts {
-            categories: &SqliteCategoryRepository::new(&db),
-            sessions: &SqliteSessionRepository::new(&db),
-            settings: &SqliteSettingsRepository::new(&db),
-            boards: &FsBoardStore::new(&world.home),
-        },
-        log: &FileHookLog::new(&world.home),
-        notifier: &SocketAppNotifier::new(&world.home),
-    };
-    handle_hook_event(&ports, session_id, event, stdin, 1_800_000_100);
-}
 
 // state in memory in under 100 ms
 #[test]
@@ -47,7 +25,7 @@ fn a_hook_event_changes_the_state_in_memory_within_100_ms() {
     while changes.try_recv().is_ok() {}
 
     let fired = Instant::now();
-    fire_hook(&world, &id, "prompt-submit", "{}");
+    world.fire_hook(&id, "prompt-submit", "{}");
     // The app waits on this channel and then reads its mail. Here the wait
     // has a deadline, so a lost event fails the test instead of hanging it.
     let deadline = fired + Duration::from_secs(5);
@@ -71,7 +49,7 @@ fn the_state_comes_from_the_database_and_not_from_the_message() {
     let world = HostedWorld::new();
     let session = world.add_session("ejecutora", Profile::Claude);
     let (mut host, _changes) = world.start();
-    fire_hook(&world, &session.id, "prompt-submit", "{}");
+    world.fire_hook(&session.id, "prompt-submit", "{}");
     attend_until(&mut host, "the first event", |host| {
         host.state(&session.id) == Some(State::Working)
     });
@@ -108,7 +86,7 @@ fn garbage_on_the_socket_does_not_stop_the_host_from_listening() {
     // One that connects and never says a word.
     let _silent = UnixStream::connect(&socket).unwrap();
 
-    fire_hook(&world, &session.id, "prompt-submit", "{}");
+    world.fire_hook(&session.id, "prompt-submit", "{}");
     attend_until(&mut host, "the event after the garbage", |host| {
         host.state(&session.id) == Some(State::Working)
     });
@@ -166,7 +144,7 @@ fn silent_and_slow_clients_do_not_delay_an_event() {
     });
 
     let fired = Instant::now();
-    fire_hook(&world, &session.id, "prompt-submit", "{}");
+    world.fire_hook(&session.id, "prompt-submit", "{}");
     attend_until(&mut host, "the event behind the slow clients", |host| {
         host.state(&session.id) == Some(State::Working)
     });
@@ -206,11 +184,38 @@ fn a_home_too_long_for_a_socket_still_hears_the_hooks() {
     let socket = world.home.app_socket_path();
     assert!(!socket.starts_with(world.home.path()));
     assert!(socket.exists());
-    fire_hook(&world, &id, "prompt-submit", "{}");
+    world.fire_hook(&id, "prompt-submit", "{}");
     attend_until(&mut host, "the hook to be heard", |host| {
         host.state(&id) == Some(State::Working)
     });
 
     drop(host);
     assert!(!socket.exists());
+}
+
+// PLAN §3.1: what a hook said reaches the app with its event, after the
+// state it changed is read: a notification can say what happened.
+#[test]
+fn the_news_of_a_hook_carries_its_event() {
+    let world = HostedWorld::new();
+    world.add_session("ejecutora", Profile::Claude);
+    world.steer_fake_claude("fake-claude.sleep", "30");
+    let (mut host, _changes) = world.start();
+    let id = run(&mut host, &world, "ejecutora");
+    host.take_news();
+
+    world.fire_hook(
+        &id,
+        "notification",
+        r#"{"message":"Claude needs your permission","notification_type":"permission_prompt"}"#,
+    );
+    attend_until(&mut host, "the news", |host| {
+        host.state(&id) == Some(State::Waiting)
+    });
+
+    let news = host.take_news();
+    assert_eq!(news.len(), 1);
+    assert_eq!(news[0].session_id, id);
+    assert_eq!(news[0].event, Some(HookEvent::Notification));
+    assert!(host.take_news().is_empty());
 }

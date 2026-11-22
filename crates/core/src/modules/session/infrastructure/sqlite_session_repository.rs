@@ -62,11 +62,10 @@ impl SqliteSessionRepository<'_> {
 impl SessionRepository for SqliteSessionRepository<'_> {
     fn insert(&self, session: &Session) -> Result<(), SessionError> {
         self.execute(
-            "INSERT INTO sessions(id, category_id, slug, role, kind, profile, cwd, \
-             claude_session_id, model, keep_alive, state, claude_version, last_activity_at, \
-             created_at, sort, title, pin_sort, preview, unread, notice) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, \
-             ?16, ?17, ?18, ?19, ?20)",
+            &format!(
+                "INSERT INTO sessions({COLUMNS}) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, \
+                 ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)"
+            ),
             params![
                 session.id,
                 session.category_id,
@@ -155,7 +154,7 @@ impl SessionRepository for SqliteSessionRepository<'_> {
         )
     }
 
-    fn update_claude_version(&self, id: &str, version: &str) -> Result<(), SessionError> {
+    fn update_claude_version(&self, id: &str, version: Option<&str>) -> Result<(), SessionError> {
         self.execute(
             "UPDATE sessions SET claude_version = ?2 WHERE id = ?1",
             params![id, version],

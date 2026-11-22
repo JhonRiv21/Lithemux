@@ -5,11 +5,12 @@ use crate::modules::hook_event::application::hook_ports::HookPorts;
 use crate::modules::hook_event::domain::card_note::{CardNote, card_note};
 use crate::modules::hook_event::domain::hook_event::HookEvent;
 use crate::modules::hook_event::domain::hook_input::HookInput;
+use crate::modules::hook_event::domain::hook_outcome::HookOutcome;
 use crate::modules::hook_event::domain::session_start_output::session_start_output;
 use crate::modules::hook_event::domain::transition::{Transition, transition};
 use crate::modules::session::{
-    SessionError, SessionRepository, apply_state, follow_claude_session, move_state, note_message,
-    note_request, record_activity, record_claude_version,
+    SessionError, SessionRepository, State, apply_state, follow_claude_session, move_state,
+    note_message, note_request, record_activity, record_claude_version,
 };
 
 /// Handles one hook invocation and returns what to print on stdout, if
@@ -39,11 +40,7 @@ pub fn handle_hook_event(
     if event == HookEvent::SessionStart {
         follow_conversation(ports, session_id, &input, &problem);
     }
-    if let Some(change) = transition(event, &input)
-        && let Err(error) = apply_transition(sessions, session_id, change, now)
-    {
-        problem("updating the state", &error);
-    }
+    let entered = change_the_state(sessions, session_id, event, &input, now, &problem);
     if let Some(note) = card_note(event, &input)
         && let Err(error) = leave_on_the_card(sessions, session_id, note)
     {
@@ -52,8 +49,37 @@ pub fn handle_hook_event(
     let stdout = (event == HookEvent::SessionStart)
         .then(|| session_start_stdout(ports, session_id, &input, now, &problem))
         .flatten();
-    ports.notifier.notify(session_id, event);
+    ports
+        .notifier
+        .notify(session_id, event, HookOutcome { entered });
     stdout
+}
+
+/// Applies what the event does to the state, and returns the state the
+/// session went into when it changed: the app rings for a turn that ends,
+/// not for every event heard after it.
+fn change_the_state(
+    sessions: &dyn SessionRepository,
+    session_id: &str,
+    event: HookEvent,
+    input: &HookInput,
+    now: i64,
+    problem: &dyn Fn(&str, &dyn Display),
+) -> Option<State> {
+    let change = transition(event, input)?;
+    let state_now = || {
+        sessions
+            .find_by_id(session_id)
+            .ok()
+            .flatten()
+            .map(|s| s.state)
+    };
+    let before = state_now();
+    if let Err(error) = apply_transition(sessions, session_id, change, now) {
+        problem("updating the state", &error);
+        return None;
+    }
+    state_now().filter(|after| Some(*after) != before)
 }
 
 fn leave_on_the_card(

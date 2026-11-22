@@ -6,6 +6,7 @@ use rustix::io::ioctl_fionbio;
 use rustix::net::{AddressFamily, SocketAddrUnix, SocketType, connect, socket};
 
 use crate::modules::hook_event::domain::hook_event::HookEvent;
+use crate::modules::hook_event::domain::hook_outcome::HookOutcome;
 use crate::modules::hook_event::ports::app_notifier::AppNotifier;
 use crate::platform::paths::home::{Home, current_user};
 
@@ -22,7 +23,7 @@ impl<'a> SocketAppNotifier<'a> {
 }
 
 impl AppNotifier for SocketAppNotifier<'_> {
-    fn notify(&self, session_id: &str, event: HookEvent) {
+    fn notify(&self, session_id: &str, event: HookEvent, outcome: HookOutcome) {
         let socket = self.home.app_socket();
         // A socket outside the home is only the app's in a directory that
         // is ours alone.
@@ -32,7 +33,11 @@ impl AppNotifier for SocketAppNotifier<'_> {
         let Some(mut stream) = connect_without_waiting(socket.path()) else {
             return;
         };
-        let line = serde_json::json!({ "session_id": session_id, "event": event.as_str() });
+        let line = serde_json::json!({
+            "session_id": session_id,
+            "event": event.as_str(),
+            "entered": outcome.entered.map(|state| state.as_str()),
+        });
         let _ = stream.write_all(format!("{line}\n").as_bytes());
     }
 }

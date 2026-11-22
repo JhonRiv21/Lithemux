@@ -38,7 +38,7 @@ fn old_database(temp: &TempHome, version: i64, schema: &[&str], data: &[&str]) {
 }
 
 fn assert_up_to_date_with_its_data(db: &Db) {
-    assert_eq!(db.schema_version().unwrap(), 4);
+    assert_eq!(db.schema_version().unwrap(), 5);
     let sessions = SqliteSessionRepository::new(db);
     let planner = sessions.find_by_id("s1").unwrap().unwrap();
     assert_eq!(planner.kind, Kind::Coordinator);

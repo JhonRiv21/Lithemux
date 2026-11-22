@@ -5,9 +5,11 @@ use std::sync::mpsc;
 
 use lithemux_core::modules::launch::{LaunchError, PreparedLaunch};
 
+use super::event_socket::HookNews;
+
 pub(super) enum Signal {
     /// A hook wrote something about this session to the database.
-    Hook { session_id: String },
+    Hook(HookNews),
     /// The launch the host asked for is ready, or could not be prepared.
     Prepared {
         session_id: String,

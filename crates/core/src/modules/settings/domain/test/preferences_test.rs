@@ -22,6 +22,7 @@ fn with_nothing_set_the_defaults_of_the_plan_apply() {
     assert_eq!(preferences.scrollback, 5_000);
     assert_eq!(preferences.claude_path, None);
     assert_eq!(preferences.theme, ThemeChoice::System);
+    assert_eq!(preferences.version_check_hours, 6);
     assert_eq!(preferences, Preferences::default());
 }
 

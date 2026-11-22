@@ -14,7 +14,7 @@ pub use application::find_session::{
 pub use application::follow_claude_session::follow_claude_session;
 pub use application::note_message::{mark_read, note_message, note_request};
 pub use application::record_activity::{
-    apply_state, move_state, record_activity, record_claude_version,
+    apply_state, forget_claude_version, move_state, record_activity, record_claude_version,
 };
 pub use application::remove_session::remove_session;
 pub use application::settle_after_restart::hibernate_what_was_left_running;

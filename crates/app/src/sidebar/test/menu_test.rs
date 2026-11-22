@@ -21,6 +21,7 @@ fn card() -> Card {
         unread: 0,
         cwd: "~/demo".to_string(),
         ports: Vec::new(),
+        memory: None,
         is_coordinator: false,
         is_pinned: false,
         keep_alive: false,
@@ -33,6 +34,7 @@ fn group() -> Group {
         category_id: "c1".to_string(),
         name: "Demo".to_string(),
         collapsed: false,
+        notify: true,
         header: None,
         cards: Vec::new(),
     }
@@ -280,4 +282,27 @@ fn every_entry_of_every_menu_has_its_text_in_both_languages() {
         assert_ne!(english.get(item.label), item.label, "{}", item.label);
         assert!(spanish.is_translated(item.label), "{}", item.label);
     }
+}
+
+// PLAN §3.1: «Se configuran por categoría.» Notifications are switched on
+// and off from the category's menu.
+#[test]
+fn a_category_turns_its_notifications_off_and_on_again() {
+    let on = category_menu(&group());
+    assert!(offers(
+        &on,
+        |c| matches!(c, MenuCommand::SetNotify(id, false) if id == "c1")
+    ));
+    assert!(!offers(&on, |c| matches!(
+        c,
+        MenuCommand::SetNotify(_, true)
+    )));
+    let off = category_menu(&Group {
+        notify: false,
+        ..group()
+    });
+    assert!(offers(
+        &off,
+        |c| matches!(c, MenuCommand::SetNotify(id, true) if id == "c1")
+    ));
 }

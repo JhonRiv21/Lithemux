@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 
-use lithemux_core::modules::hook_event::{AppNotifier, HookEvent, HookLog};
+use lithemux_core::modules::hook_event::{AppNotifier, HookEvent, HookLog, HookOutcome};
 use lithemux_core::modules::launch::LaunchNotices;
 
 // Same contract as FileHookLog: appending never fails.
@@ -19,13 +19,15 @@ impl HookLog for RecordingLog {
 #[derive(Default)]
 pub struct RecordingNotifier {
     pub events: RefCell<Vec<(String, HookEvent)>>,
+    pub outcomes: RefCell<Vec<HookOutcome>>,
 }
 
 impl AppNotifier for RecordingNotifier {
-    fn notify(&self, session_id: &str, event: HookEvent) {
+    fn notify(&self, session_id: &str, event: HookEvent, outcome: HookOutcome) {
         self.events
             .borrow_mut()
             .push((session_id.to_string(), event));
+        self.outcomes.borrow_mut().push(outcome);
     }
 }
 

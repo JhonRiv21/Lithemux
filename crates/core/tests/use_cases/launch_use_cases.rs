@@ -7,7 +7,7 @@ use lithemux_core::modules::launch::{
     hooks_settings_json, open_session, plan_launch,
 };
 use lithemux_core::modules::session::{
-    Kind, Profile, Session, SessionRef, create_session, find_session_by_id,
+    Kind, Profile, Session, SessionRef, create_session, find_session_by_id, record_claude_version,
 };
 
 use crate::support::fake_shell_probe::FakeShellProbe;
@@ -239,6 +239,25 @@ fn open_still_launches_when_the_version_is_unknown() {
         open_session(&world.ports(), &runner, &environment(), &target()).unwrap(),
         0
     );
+    let (_, session) = find_session_by_id(&world.store, &world.store, &world.executor.id)
+        .unwrap()
+        .unwrap();
+    assert_eq!(session.claude_version, None);
+}
+
+// PLAN §3.2, B5: a version that could not be read this time is unknown, not
+// the one of the run before; otherwise the notice of a new version would
+// stay after the session was resumed on it.
+#[test]
+fn a_launch_whose_version_cannot_be_read_forgets_the_version_of_the_run_before() {
+    let mut world = World::new();
+    record_claude_version(&world.store, &world.executor.id, "2.1.300").unwrap();
+    world.probe = FakeShellProbe::new()
+        .executable(CLAUDE)
+        .executable(HOOK_PATH)
+        .answers(ShellMode::LoginInteractive, "command -v claude", CLAUDE);
+    let runner = RecordingRunner::exiting_with(0);
+    open_session(&world.ports(), &runner, &environment(), &target()).unwrap();
     let (_, session) = find_session_by_id(&world.store, &world.store, &world.executor.id)
         .unwrap()
         .unwrap();

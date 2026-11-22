@@ -73,7 +73,7 @@ fn doctor_reports_the_claude_it_would_use() {
     assert!(report.contains(&fake_claude()), "{report}");
     assert!(report.contains("9.9.9"), "{report}");
     assert!(report.contains("used by lithemux"), "{report}");
-    assert!(report.contains("schema v4"), "{report}");
+    assert!(report.contains("schema v5"), "{report}");
     assert!(report.contains("data directory"), "{report}");
 }
 

@@ -2,7 +2,7 @@ use rusqlite::{Connection, TransactionBehavior};
 
 use crate::platform::store::error::StoreError;
 
-pub const SCHEMA_VERSION: i64 = 4;
+pub const SCHEMA_VERSION: i64 = 5;
 
 const MIGRATION_1: &str = "
 CREATE TABLE categories(
@@ -96,6 +96,11 @@ CREATE UNIQUE INDEX one_coordinator_per_category ON sessions(category_id)
   WHERE kind='coordinator';
 ";
 
+// Desktop notifications, on or off per category (PLAN §3.1).
+const MIGRATION_5: &str = "
+ALTER TABLE categories ADD COLUMN notify INTEGER NOT NULL DEFAULT 1;
+";
+
 pub fn user_version(conn: &Connection) -> Result<i64, StoreError> {
     Ok(conn.pragma_query_value(None, "user_version", |row| row.get(0))?)
 }
@@ -122,6 +127,10 @@ pub fn migrate(conn: &mut Connection) -> Result<(), StoreError> {
     if checked_version(&tx)? < 4 {
         tx.execute_batch(MIGRATION_4)?;
         tx.pragma_update(None, "user_version", 4)?;
+    }
+    if checked_version(&tx)? < 5 {
+        tx.execute_batch(MIGRATION_5)?;
+        tx.pragma_update(None, "user_version", 5)?;
     }
     tx.commit()?;
     Ok(())

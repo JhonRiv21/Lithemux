@@ -23,6 +23,7 @@ fn the_command_line_knows_the_settings_of_the_user_and_the_launchers_own() {
         ("font_family", SettingKey::FontFamily),
         ("font_size", SettingKey::FontSize),
         ("theme", SettingKey::Theme),
+        ("version_check_hours", SettingKey::VersionCheckHours),
     ] {
         assert_eq!(configurable_key(name), Some(key), "{name}");
     }
@@ -78,6 +79,11 @@ fn the_other_settings_accept_only_values_that_make_sense() {
         assert_eq!(ok(SettingKey::Theme, theme).as_deref(), Some(theme));
     }
     assert_eq!(ok(SettingKey::Theme, "blue"), None);
+    // PLAN §3.2: how often the version is checked, in hours.
+    assert_eq!(ok(SettingKey::VersionCheckHours, "6").as_deref(), Some("6"));
+    for wrong in ["0", "200", "often"] {
+        assert_eq!(ok(SettingKey::VersionCheckHours, wrong), None, "{wrong}");
+    }
 }
 
 // PLAN §0.6: context_language is es|en

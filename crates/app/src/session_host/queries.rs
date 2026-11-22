@@ -2,8 +2,14 @@
 
 use std::rc::Rc;
 
-use lithemux_core::modules::session::State;
+use lithemux_core::modules::category::SqliteCategoryRepository;
+use lithemux_core::modules::session::{
+    SessionRef, SqliteSessionRepository, State, find_session_by_id,
+};
+use lithemux_core::platform::clock::system_clock::now_unix;
+use lithemux_core::platform::log::app_log::Level;
 
+use super::event_socket::HookNews;
 use super::host::SessionHost;
 use super::phase::Phase;
 use crate::terminal_view::TerminalSession;
@@ -50,6 +56,29 @@ impl SessionHost {
             .filter(|hosted| self.is_running(&hosted.session_id))
             .filter_map(|hosted| Some((hosted.session_id.clone(), hosted.terminal.process_id()?)))
             .collect()
+    }
+
+    /// A problem that does not stop the host: to the log, and to stderr
+    /// for whoever started the app from a terminal. Only which session and
+    /// what went wrong; never what was said in it.
+    pub(super) fn log_problem(&self, what: &str, session_id: &str, error: &dyn std::fmt::Display) {
+        let line = format!("{what} {session_id}: {error}");
+        eprintln!("lithemux-app: {line}");
+        self.log.write(Level::Error, &line, now_unix());
+    }
+
+    /// The address of a session: how it is opened.
+    pub(super) fn target_of(&self, session_id: &str) -> Option<SessionRef> {
+        let categories = SqliteCategoryRepository::new(&self.db);
+        let sessions = SqliteSessionRepository::new(&self.db);
+        let (category, session) = find_session_by_id(&categories, &sessions, session_id).ok()??;
+        SessionRef::parse(&format!("{}/{}", category.slug, session.slug)).ok()
+    }
+
+    /// What the hooks said since the last time this was asked, oldest
+    /// first. The state they changed is already read.
+    pub fn take_news(&mut self) -> Vec<HookNews> {
+        std::mem::take(&mut self.news)
     }
 
     /// What the launcher had to say while opening sessions.

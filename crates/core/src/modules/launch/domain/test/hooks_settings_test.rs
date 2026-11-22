@@ -17,7 +17,7 @@ fn the_settings_json_matches_the_plan() {
         "SessionEnd":[{"hooks":[{"type":"command","command":"/abs/lithemux-hook session-end","timeout":2}]}],
         "PostToolUse":[{"hooks":[{"type":"command","command":"/abs/lithemux-hook post-tool-use","timeout":2}]}],
         "PostToolUseFailure":[{"hooks":[{"type":"command","command":"/abs/lithemux-hook post-tool-use-failure","timeout":2}]}]}});
-    assert_eq!(actual, expected);
+    assert_eq!(actual["hooks"], expected["hooks"]);
 }
 
 // PLAN §0.3 + §2.0 bug 4 + D-20: the five events plus the two that close a
@@ -42,4 +42,21 @@ fn a_hook_path_with_spaces_is_quoted_for_the_shell() {
         settings["hooks"]["Stop"][0]["hooks"][0]["command"],
         "'/Users/x/Application Support/lithemux-hook' stop"
     );
+}
+
+// PLAN §3.1 (22-nov): the sessions of a category report to their
+// coordinator with Claude Code's own messaging. `SendMessage` and
+// `ListAgents` are allowed by name, the documented form for these tools
+// (code.claude.com/docs/en/permissions, /cross-session-messaging), and
+// nothing else is: no other permission is granted.
+#[test]
+fn messaging_the_other_sessions_is_allowed_and_nothing_else_is() {
+    let settings: Value =
+        serde_json::from_str(&hooks_settings_json(Path::new("/abs/lithemux-hook"))).unwrap();
+    assert_eq!(
+        settings["permissions"],
+        json!({"allow": ["SendMessage", "ListAgents"]})
+    );
+    let keys: Vec<&String> = settings.as_object().unwrap().keys().collect();
+    assert_eq!(keys.len(), 2, "{keys:?}");
 }

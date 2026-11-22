@@ -95,8 +95,14 @@ impl Phrases for Es {
         "Las sesiones se comunican con SendMessage usando esos nombres."
     }
 
-    fn member_reporting(&self) -> &'static str {
-        "Al terminar una tarea o al bloquearse, esta sesión reporta a la coordinadora; lo que esté fuera de su rol pasa por la coordinadora."
+    fn member_reporting(&self, coordinator: &str) -> String {
+        format!(
+            "Al terminar una tarea de la coordinadora, o si se bloquea, esta sesión reporta a la coordinadora con SendMessage (a: \"{coordinator}\"): qué hizo, qué quedó pendiente y dónde está el detalle; y se detiene. Si el envío falla, se lo dice al usuario en su respuesta. Lo que esté fuera de su rol pasa por la coordinadora."
+        )
+    }
+
+    fn coordinator_assigning(&self) -> &'static str {
+        "Para encargar una tarea, esta sesión usa SendMessage con notify_when_idle: true y recibe un aviso cuando esa sesión queda libre; cada sesión le reporta por mensaje al terminar."
     }
 
     fn board_of_coordinator(&self, board: &str) -> String {

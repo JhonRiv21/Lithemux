@@ -11,6 +11,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use lithemux_core::modules::hook_event::HookEvent;
+use lithemux_core::modules::session::State;
+
 use super::error::HostError;
 use super::mailbox::{Mailbox, Signal};
 
@@ -77,8 +80,8 @@ fn accept_until_closed(listener: &UnixListener, mailbox: &Mailbox, closing: &Ato
             Ok(stream) => {
                 let mailbox = mailbox.clone();
                 thread::spawn(move || {
-                    if let Some(session_id) = session_named_by(stream) {
-                        mailbox.post(Signal::Hook { session_id });
+                    if let Some(news) = news_from(stream) {
+                        mailbox.post(Signal::Hook(news));
                     }
                 });
             }
@@ -88,9 +91,9 @@ fn accept_until_closed(listener: &UnixListener, mailbox: &Mailbox, closing: &Ato
     }
 }
 
-/// The session a well-formed message names; `None` for anything else, and
+/// What a well-formed message says; `None` for anything else, and
 /// for a client that does not finish its line within `READ_PATIENCE`.
-fn session_named_by(mut stream: UnixStream) -> Option<String> {
+fn news_from(mut stream: UnixStream) -> Option<HookNews> {
     let deadline = Instant::now() + READ_PATIENCE;
     let mut message = Vec::new();
     let mut chunk = [0_u8; 256];
@@ -108,13 +111,32 @@ fn session_named_by(mut stream: UnixStream) -> Option<String> {
         }
     }
     let line = message.split(|byte| *byte == b'\n').next()?;
-    session_id_of(std::str::from_utf8(line).ok()?)
+    news_of(std::str::from_utf8(line).ok()?)
 }
 
-/// `{"session_id": "…", "event": "…"}`, both of them text.
-pub(super) fn session_id_of(message: &str) -> Option<String> {
+/// What a hook said: which session changed and, when this build knows
+/// it, what happened.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HookNews {
+    pub session_id: String,
+    pub event: Option<HookEvent>,
+    /// The state the event moved the session into, if it moved it.
+    pub entered: Option<State>,
+}
+
+/// `{"session_id": "…", "event": "…", "entered": "…"}`, all text; `entered`
+/// may be missing (a hook of an older build, or an event that moved
+/// nothing).
+pub(super) fn news_of(message: &str) -> Option<HookNews> {
     let message: serde_json::Value = serde_json::from_str(message.trim()).ok()?;
-    message.get("event")?.as_str()?;
+    let event = message.get("event")?.as_str()?;
     let session_id = message.get("session_id")?.as_str()?;
-    (!session_id.is_empty()).then(|| session_id.to_string())
+    (!session_id.is_empty()).then(|| HookNews {
+        session_id: session_id.to_string(),
+        event: HookEvent::parse(event),
+        entered: message
+            .get("entered")
+            .and_then(serde_json::Value::as_str)
+            .and_then(State::parse),
+    })
 }

@@ -518,9 +518,25 @@ Al abrir la app:
 
 ## Fase 3 — Robustez y pulido
 
-- **3.1 Notificaciones nativas de macOS** cuando una sesión pasa a `waiting` (permiso) o termina un turno, **solo si no está a la vista**. Se configuran por categoría.
+Se ejecuta en **tres bloques**, cada uno con su checklist de cierre, su auditoría independiente y su commit:
+1. **3A:** §3.1, §3.2, §3.3 y §3.6;
+2. **3B:** §3.4 y §3.5;
+3. **3C:** el spike de la §3.7, con su propia decisión go/no-go.
+
+Pendiente de la Fase 2: el criterio 4 (reiniciar el Mac). Lo hace Jhon cuando le convenga; si falla, el arreglo entra en el bloque que esté en curso.
+
+- **3.1 Aviso al terminar** (rediseñado el 22-nov-2026 a pedido de Jhon; reemplaza las notificaciones nativas y D-53):
+  1. **Un sonido simple** cuando una sesión que corre en la app termina un turno (`Stop`) y **no está a la vista**. «A la vista» significa en la pestaña visible y con la ventana activa. Usa un sonido del sistema vía `afplay`, sin banners ni `osascript`. Se apaga por categoría y suena como mucho una vez cada 2 s.
+     - No hay aviso para `waiting`: el contador de la tarjeta basta.
+  2. **La sesión le reporta a su coordinadora** con la mensajería entre sesiones del propio Claude Code, la misma que usan la planificadora y la ejecutora de este proyecto:
+     - cada sesión se lanza con `-n <categoría>-<slug>`, que la hace direccionable;
+     - el contexto de cada sesión le dice a quién reportar al terminar una tarea encargada (`SendMessage` a la coordinadora);
+     - a la coordinadora le dice cómo encargar con aviso al quedar libre.
+
+     Lithemux no lee ni escribe los sockets de Claude: solo usa el flag documentado y el contexto. Si la categoría no tiene coordinadora, o la sesión es la coordinadora, no hay reporte.
 - **3.2 Versión de Claude:** comparar `claude --version` con el `claude_version` de cada sesión viva. Si hay una versión nueva, mostrar un aviso discreto: «Hay una versión nueva de Claude Code: reanudar las sesiones idle», en lote y solo con las idle.
 - **3.3 Medidor de memoria** por sesión y total, a partir del árbol de procesos (`libproc`), en la barra de estado.
+  - *Ajuste del 22-nov-2026 (D-54):* se mide con `sysinfo` porque `darwin-libproc` choca con `vte`. La cifra es la memoria residente (RSS), no el *footprint*. El mapa de padres se rehace con un barrido completo cada 30 s, de unos 5 ms. La planificadora lo aceptó.
 - **3.4 Importador desde cmux:** lee `~/Library/Application Support/cmux/session-com.cmuxterm.app.json`, que trae workspaces con `customTitle`, `currentDirectory` y `terminal.agent.sessionId`. Propone categorías y sesiones que conservan su `claude_session_id`, para no perder las conversaciones actuales. Solo lectura sobre cmux.
 - **3.5 Búsqueda y salto rápido** de sesiones (paleta con cmd+p) y navegación completa con teclado.
 - **3.7 Navegador embebido (spike con go/no-go).**

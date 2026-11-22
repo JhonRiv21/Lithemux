@@ -7,7 +7,7 @@ use lithemux_core::modules::category::{
     Category, CategoryError, FsBoardStore, FsDirectories, NewCategory, Slug,
     SqliteCategoryRepository, create_category, find_category_by_id, free_slug, list_categories,
     locate_directory, remove_category, rename_category, reorder_categories, set_collapsed,
-    slug_from_name,
+    set_notify, slug_from_name,
 };
 use lithemux_core::modules::session::{
     Kind, NewSession, Profile, Session, SessionRef, SessionRepository, SqliteSessionRepository,
@@ -157,6 +157,10 @@ impl SidebarActions<'_> {
     pub fn set_keep_alive(&self, id: &str, keep_alive: bool) -> Result<(), SidebarError> {
         let (_, session) = self.session(id)?;
         Ok(set_keep_alive(&self.sessions(), &session, keep_alive)?)
+    }
+
+    pub fn set_notify(&self, category_id: &str, notify: bool) -> Result<(), SidebarError> {
+        Ok(set_notify(&self.categories(), category_id, notify)?)
     }
 
     pub fn set_collapsed(&self, category_id: &str, collapsed: bool) -> Result<(), SidebarError> {

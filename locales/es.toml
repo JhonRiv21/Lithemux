@@ -41,6 +41,8 @@ move_down = "Bajar"
 delete = "Borrar"
 new_claude_session = "Nueva sesión de Claude"
 new_terminal = "Nueva terminal"
+notify_off = "Desactivar sonido al terminar"
+notify_on = "Activar sonido al terminar"
 collapse = "Contraer"
 expand = "Expandir"
 
@@ -121,6 +123,8 @@ memory_valve_hint = "Cuando a macOS le falta memoria de forma crítica, hiberna 
 on = "Activada"
 off = "Desactivada"
 claude_path = "Ruta de claude"
+version_check_hours = "Comprobar la versión de Claude cada (horas)"
+version_check_hours_hint = "Cada cuánto lithemux pregunta su versión al claude instalado, para avisarte si hay sesiones con una más vieja. Por defecto: 6."
 claude_path_hint = "Opcional. Vacío usa el claude de tu shell, con sus actualizaciones automáticas."
 
 [menu_bar]
@@ -148,3 +152,12 @@ zoom = "Zoom"
 open_data_folder = "Abrir la carpeta de datos"
 about_detail = "Versión {version}. Un gestor ligero de sesiones de terminal y de Claude Code. No hace ninguna conexión de red propia."
 ok = "Aceptar"
+
+[status_bar]
+memory_one = "Memoria: {memory} en 1 sesión"
+memory_other = "Memoria: {memory} en {count} sesiones"
+new_claude = "Hay una versión nueva de Claude Code: reanudar las sesiones en reposo"
+resume_idle_one = "Reanudar 1 sesión en reposo"
+resume_idle_other = "Reanudar {count} sesiones en reposo"
+busy_on_old_one = "1 sesión ocupada sigue en la versión anterior de Claude Code"
+busy_on_old_other = "{count} sesiones ocupadas siguen en la versión anterior de Claude Code"

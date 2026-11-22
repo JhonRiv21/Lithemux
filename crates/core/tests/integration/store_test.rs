@@ -29,6 +29,7 @@ fn category(id: &str, slug: &str) -> Category {
         sort: 1,
         created_at: 0,
         collapsed: false,
+        notify: true,
     }
 }
 
@@ -72,7 +73,7 @@ fn the_database_uses_wal_a_250_ms_busy_timeout_and_user_version() {
     assert_eq!(pragma(&db, "journal_mode"), "wal");
     assert_eq!(pragma(&db, "busy_timeout"), "250");
     assert_eq!(pragma(&db, "foreign_keys"), "1");
-    assert_eq!(db.schema_version().unwrap(), 4);
+    assert_eq!(db.schema_version().unwrap(), 5);
 }
 
 // PLAN §0.2: migrations run once
@@ -83,7 +84,7 @@ fn reopening_keeps_the_data_and_the_schema_version() {
         .insert(&category("c1", "demo"))
         .unwrap();
     let reopened = temp.db();
-    assert_eq!(reopened.schema_version().unwrap(), 4);
+    assert_eq!(reopened.schema_version().unwrap(), 5);
     assert_eq!(
         SqliteCategoryRepository::new(&reopened)
             .list()

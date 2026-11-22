@@ -85,6 +85,11 @@ impl CategoryRepository for InMemoryStore {
         Ok(())
     }
 
+    fn update_notify(&self, id: &str, notify: bool) -> Result<(), CategoryError> {
+        self.update_category(id, |c| c.notify = notify);
+        Ok(())
+    }
+
     fn update_collapsed(&self, id: &str, collapsed: bool) -> Result<(), CategoryError> {
         self.update_category(id, |c| c.collapsed = collapsed);
         Ok(())
@@ -163,8 +168,8 @@ impl SessionRepository for InMemoryStore {
         self.update(id, |s| s.model = model.map(str::to_string))
     }
 
-    fn update_claude_version(&self, id: &str, version: &str) -> Result<(), SessionError> {
-        self.update(id, |s| s.claude_version = Some(version.to_string()))
+    fn update_claude_version(&self, id: &str, version: Option<&str>) -> Result<(), SessionError> {
+        self.update(id, |s| s.claude_version = version.map(str::to_string))
     }
 
     fn update_claude_session_id(&self, id: &str, claude_id: &str) -> Result<(), SessionError> {

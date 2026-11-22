@@ -6,7 +6,9 @@ use crate::modules::launch::application::prepared_launch::PreparedLaunch;
 use crate::modules::launch::domain::claude_version::parse_version_output;
 use crate::modules::launch::domain::launch_environment::LaunchEnvironment;
 use crate::modules::launch::error::LaunchError;
-use crate::modules::session::{Profile, SessionRef, get_session, record_claude_version};
+use crate::modules::session::{
+    Profile, SessionRef, forget_claude_version, get_session, record_claude_version,
+};
 
 const VERSION_TIMEOUT: Duration = Duration::from_secs(2);
 
@@ -30,13 +32,14 @@ pub fn prepare_launch(
     let lock = ports.locks.acquire(&session.id)?;
     let plan = plan_launch(ports, environment, &category, &session)?;
     // Best effort: a missing version never blocks or delays the launch.
-    if let Some(version) = ports
+    let version = ports
         .shell
         .version_output(&plan.program, VERSION_TIMEOUT)
         .as_deref()
-        .and_then(parse_version_output)
-    {
-        let _ = record_claude_version(ports.sessions, &session.id, &version);
-    }
+        .and_then(parse_version_output);
+    let _ = match version {
+        Some(version) => record_claude_version(ports.sessions, &session.id, &version),
+        None => forget_claude_version(ports.sessions, &session.id),
+    };
     Ok(PreparedLaunch::new(category, session, plan, Some(lock)))
 }

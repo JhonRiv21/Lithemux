@@ -69,50 +69,55 @@ const SWITCH: [(&str, &str); 2] = [("on", "settings.on"), ("off", "settings.off"
 pub fn rows() -> Vec<Row> {
     use SettingKey::{
         ClaudePath, ContextLanguage, FontFamily, FontSize, HibernateAfterHours, Language,
-        MemoryValve, Scrollback, Theme,
+        MemoryValve, Scrollback, Theme, VersionCheckHours,
+    };
+    let row = |key: SettingKey, choices_of: &[(&'static str, &'static str)]| {
+        let (label, hint) = texts_of(key);
+        if choices_of.is_empty() {
+            text(key, label, hint)
+        } else {
+            choices(key, label, hint, choices_of)
+        }
     };
     vec![
-        choices(
-            Language,
-            "settings.language",
-            "settings.language_hint",
-            &LANGUAGES,
-        ),
-        choices(
-            ContextLanguage,
+        row(Language, &LANGUAGES),
+        row(ContextLanguage, &CONTEXT_LANGUAGES),
+        row(Theme, &THEMES),
+        row(FontFamily, &[]),
+        row(FontSize, &[]),
+        row(Scrollback, &[]),
+        row(HibernateAfterHours, &[]),
+        row(MemoryValve, &SWITCH),
+        row(ClaudePath, &[]),
+        row(VersionCheckHours, &[]),
+    ]
+}
+
+/// The label and the hint of a setting: `settings.<key>` and
+/// `settings.<key>_hint` in the locales.
+fn texts_of(key: SettingKey) -> (&'static str, &'static str) {
+    match key {
+        SettingKey::Language => ("settings.language", "settings.language_hint"),
+        SettingKey::ContextLanguage => (
             "settings.context_language",
             "settings.context_language_hint",
-            &CONTEXT_LANGUAGES,
         ),
-        choices(Theme, "settings.theme", "settings.theme_hint", &THEMES),
-        text(
-            FontFamily,
-            "settings.font_family",
-            "settings.font_family_hint",
-        ),
-        text(FontSize, "settings.font_size", "settings.font_size_hint"),
-        text(
-            Scrollback,
-            "settings.scrollback",
-            "settings.scrollback_hint",
-        ),
-        text(
-            HibernateAfterHours,
+        SettingKey::Theme => ("settings.theme", "settings.theme_hint"),
+        SettingKey::FontFamily => ("settings.font_family", "settings.font_family_hint"),
+        SettingKey::FontSize => ("settings.font_size", "settings.font_size_hint"),
+        SettingKey::Scrollback => ("settings.scrollback", "settings.scrollback_hint"),
+        SettingKey::HibernateAfterHours => (
             "settings.hibernate_after_hours",
             "settings.hibernate_after_hours_hint",
         ),
-        choices(
-            MemoryValve,
-            "settings.memory_valve",
-            "settings.memory_valve_hint",
-            &SWITCH,
+        SettingKey::MemoryValve => ("settings.memory_valve", "settings.memory_valve_hint"),
+        SettingKey::ClaudePath => ("settings.claude_path", "settings.claude_path_hint"),
+        SettingKey::VersionCheckHours => (
+            "settings.version_check_hours",
+            "settings.version_check_hours_hint",
         ),
-        text(
-            ClaudePath,
-            "settings.claude_path",
-            "settings.claude_path_hint",
-        ),
-    ]
+        SettingKey::LastClaudePath => ("settings.claude_path", "settings.claude_path_hint"),
+    }
 }
 
 fn language(language: InterfaceLanguage) -> &'static str {
@@ -148,6 +153,7 @@ pub fn value_of(preferences: &Preferences, key: SettingKey) -> String {
         }
         .to_string(),
         SettingKey::ClaudePath => preferences.claude_path.clone().unwrap_or_default(),
+        SettingKey::VersionCheckHours => preferences.version_check_hours.to_string(),
         SettingKey::LastClaudePath => String::new(),
     }
 }

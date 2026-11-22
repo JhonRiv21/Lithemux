@@ -46,7 +46,7 @@ impl SessionHost {
         }
         let sessions = SqliteSessionRepository::new(&self.db);
         if let Err(error) = apply_state(&sessions, session_id, State::Hibernated, None, None) {
-            eprintln!("lithemux-app: could not hibernate {session_id}: {error}");
+            self.log_problem("could not hibernate", session_id, &error);
             return false;
         }
         for hosted in self.take_hosted(session_id) {
@@ -150,7 +150,7 @@ impl SessionHost {
         for hosted in claudes {
             let id = &hosted.session_id;
             if let Err(error) = apply_state(&sessions, id, State::Hibernated, None, None) {
-                eprintln!("lithemux-app: could not hibernate {id}: {error}");
+                self.log_problem("could not hibernate", id, &error);
             }
         }
     }

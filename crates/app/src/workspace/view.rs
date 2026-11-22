@@ -140,6 +140,7 @@ impl Workspace {
             for id in &seen {
                 live.mark_read(id, cx);
             }
+            live.set_in_view(seen);
         });
     }
 

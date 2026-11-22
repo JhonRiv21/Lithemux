@@ -19,6 +19,7 @@ pub enum MenuCommand {
     RenameCategory(String),
     ShiftCategory(String, isize),
     SetCollapsed(String, bool),
+    SetNotify(String, bool),
     DeleteCategory(String),
 }
 
@@ -86,6 +87,11 @@ pub fn category_menu(group: &Group) -> Vec<MenuItem> {
             MenuCommand::NewSession(id(), Profile::Shell),
         ),
         item("menu.rename", MenuCommand::RenameCategory(id())),
+        if group.notify {
+            item("menu.notify_off", MenuCommand::SetNotify(id(), false))
+        } else {
+            item("menu.notify_on", MenuCommand::SetNotify(id(), true))
+        },
         if group.collapsed {
             item("menu.expand", MenuCommand::SetCollapsed(id(), false))
         } else {

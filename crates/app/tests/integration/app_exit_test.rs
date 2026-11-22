@@ -179,3 +179,24 @@ fn the_app_starts_on_a_home_too_long_for_a_socket_address() {
     assert!(!socket.exists());
     wait_until_gone(claude);
 }
+
+// PLAN §3.6: «panic hook que escribe en <home>/logs/app.log». The hook is
+// the first thing the app sets up: a panic at its very start is logged.
+#[test]
+fn a_panic_at_the_start_of_the_app_is_logged() {
+    let world = HostedWorld::new();
+    let finished = app()
+        .env("LITHEMUX_HOME", world.home.path())
+        .env("LITHEMUX_PANIC_ON_START", "1")
+        .arg("--no-window")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .unwrap();
+    assert!(!finished.success());
+    let log = std::fs::read_to_string(world.home.app_log_path()).unwrap_or_default();
+    assert!(log.contains("ERROR panic"), "{log:?}");
+    assert!(log.contains("run.rs:"), "{log:?}");
+    assert!(log.contains("induced at start for a test"), "{log:?}");
+}

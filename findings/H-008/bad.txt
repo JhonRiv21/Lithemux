@@ -1,0 +1,6 @@
+                "INSERT INTO categories(id, slug, name, root_dir, color, sort, created_at, collapsed, \
+                "INSERT INTO categories (id, slug) VALUES (?1, ?2)",
+                "insert into sessions(id, category_id) values (?1, ?2)",
+                "INSERT OR REPLACE INTO sessions(id, slug) VALUES (?1, ?2)",
+                "insert or ignore into Categories (id) values (?1)",
+                "INSERT INTO sessions(

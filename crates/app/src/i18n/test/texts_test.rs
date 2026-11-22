@@ -69,3 +69,43 @@ fn an_unknown_language_setting_is_english() {
     assert_eq!(Language::from_setting(Some("fr")), Language::English);
     assert_eq!(Language::from_setting(Some("es")), Language::Spanish);
 }
+
+// Correction round of 3A (15): «Memoria: 227 MB en 1 sesiones». One reads
+// in singular and any other count in plural, in both languages.
+#[test]
+fn a_count_of_one_reads_in_singular_and_any_other_in_plural() {
+    let english = Texts::of(Language::English);
+    let spanish = Texts::of(Language::Spanish);
+    let memory = [("memory", "227 MB")];
+    assert_eq!(
+        english.count("status_bar.memory", 1, &memory),
+        "Memory: 227 MB in 1 session"
+    );
+    assert_eq!(
+        english.count("status_bar.memory", 3, &memory),
+        "Memory: 227 MB in 3 sessions"
+    );
+    assert_eq!(
+        spanish.count("status_bar.memory", 1, &memory),
+        "Memoria: 227 MB en 1 sesión"
+    );
+    assert_eq!(
+        spanish.count("status_bar.memory", 0, &memory),
+        "Memoria: 227 MB en 0 sesiones"
+    );
+}
+
+// Every text that has a singular has its plural, and the other way round.
+#[test]
+fn every_counted_text_has_both_forms() {
+    let english = Texts::of(Language::English);
+    let keys: Vec<&str> = english.keys().collect();
+    for key in &keys {
+        for (form, other) in [("_one", "_other"), ("_other", "_one")] {
+            if let Some(base) = key.strip_suffix(form) {
+                let pair = format!("{base}{other}");
+                assert!(keys.contains(&pair.as_str()), "{key} has no {pair}");
+            }
+        }
+    }
+}

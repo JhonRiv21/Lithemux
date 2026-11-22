@@ -42,6 +42,8 @@ move_down = "Move down"
 delete = "Delete"
 new_claude_session = "New Claude session"
 new_terminal = "New terminal"
+notify_off = "Turn off sound when done"
+notify_on = "Turn on sound when done"
 collapse = "Collapse"
 expand = "Expand"
 
@@ -122,6 +124,8 @@ memory_valve_hint = "When macOS is critically short of memory, hibernate the idl
 on = "On"
 off = "Off"
 claude_path = "Path to claude"
+version_check_hours = "Check the Claude version every (hours)"
+version_check_hours_hint = "How often lithemux asks the installed claude for its version, to tell you when sessions run an older one. Default: 6."
 claude_path_hint = "Optional. Empty uses the claude of your shell, with its automatic updates."
 
 [menu_bar]
@@ -149,3 +153,12 @@ zoom = "Zoom"
 open_data_folder = "Open Data Folder"
 about_detail = "Version {version}. A lightweight manager of terminal and Claude Code sessions. It makes no network connections of its own."
 ok = "OK"
+
+[status_bar]
+memory_one = "Memory: {memory} in 1 session"
+memory_other = "Memory: {memory} in {count} sessions"
+new_claude = "A new Claude Code version is available: resume idle sessions"
+resume_idle_one = "Resume 1 idle session"
+resume_idle_other = "Resume {count} idle sessions"
+busy_on_old_one = "1 busy session is still on the previous Claude Code version"
+busy_on_old_other = "{count} busy sessions are still on the previous Claude Code version"

@@ -3,7 +3,7 @@ use crate::modules::settings::domain::setting_key::SettingKey;
 /// The settings the command line knows: the same ones the settings window
 /// changes (PLAN §2.6), and `last_claude_path`, which the launcher writes
 /// and can only be read or unset from here.
-pub const CONFIGURABLE_KEYS: [SettingKey; 10] = [
+pub const CONFIGURABLE_KEYS: [SettingKey; 11] = [
     SettingKey::ClaudePath,
     SettingKey::ContextLanguage,
     SettingKey::Language,
@@ -13,12 +13,14 @@ pub const CONFIGURABLE_KEYS: [SettingKey; 10] = [
     SettingKey::FontFamily,
     SettingKey::FontSize,
     SettingKey::Theme,
+    SettingKey::VersionCheckHours,
     SettingKey::LastClaudePath,
 ];
 
 pub const HIBERNATE_HOURS: std::ops::RangeInclusive<i64> = 1..=8760;
 pub const SCROLLBACK_LINES: std::ops::RangeInclusive<i64> = 100..=100_000;
 pub const FONT_SIZES: std::ops::RangeInclusive<i64> = 8..=32;
+pub const VERSION_CHECK_HOURS: std::ops::RangeInclusive<i64> = 1..=168;
 const MAX_FONT_FAMILY_CHARS: usize = 80;
 
 pub fn configurable_key(name: &str) -> Option<SettingKey> {
@@ -47,6 +49,9 @@ pub fn checked_value(key: SettingKey, value: &str) -> Result<String, &'static st
             whole_number_in(value, &FONT_SIZES).ok_or("expected a size, from 8 to 32")
         }
         SettingKey::FontFamily => font_family(value).ok_or("expected the name of a font"),
+        SettingKey::VersionCheckHours => {
+            whole_number_in(value, &VERSION_CHECK_HOURS).ok_or("expected hours, from 1 to 168")
+        }
         SettingKey::Theme => one_of(value, &["light", "dark", "system"])
             .ok_or("expected `light`, `dark` or `system`"),
         SettingKey::LastClaudePath => Err("lithemux writes this one; it can only be read or unset"),

@@ -11,7 +11,8 @@ use std::thread;
 use lithemux_core::modules::category::SqliteCategoryRepository;
 use lithemux_core::modules::launch::{
     ClaudeProjectsTranscriptLocator, FlockSessionLocks, HookBinary, LaunchEnvironment, LaunchError,
-    LaunchNotices, LaunchPorts, LoginShellProbe, PreparedLaunch, prepare_launch,
+    LaunchNotices, LaunchPorts, LoginShellProbe, PreparedLaunch, installed_claude_version,
+    prepare_launch,
 };
 use lithemux_core::modules::session::{SessionRef, SqliteSessionRepository};
 use lithemux_core::modules::settings::SqliteSettingsRepository;
@@ -94,6 +95,14 @@ fn prepare(
         lithemux_home: config.lithemux_home.clone(),
     };
     prepare_launch(&ports, &environment, target)
+}
+
+/// The version of the `claude` a launch would use now, asked the way a
+/// launch asks, on a database connection of its own.
+pub(super) fn installed_version(config: &HostConfig) -> Option<String> {
+    let db = Db::open(&config.home).ok()?;
+    let settings = SqliteSettingsRepository::new(&db);
+    installed_claude_version(&settings, &LoginShellProbe::new(&config.shell))
 }
 
 /// What the program gets from the environment the app was started in:

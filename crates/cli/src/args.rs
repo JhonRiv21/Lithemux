@@ -66,12 +66,22 @@ pub enum CatCommand {
         #[arg(long)]
         json: bool,
     },
+    /// Change a category
+    Set(CatSetArgs),
     /// Remove a category and its sessions (the board file is kept)
     Rm {
         slug: String,
         #[arg(long)]
         yes: bool,
     },
+}
+
+#[derive(Args)]
+pub struct CatSetArgs {
+    pub slug: String,
+    /// A sound when one of its sessions finishes a turn out of view
+    #[arg(long, num_args = 0..=1, default_missing_value = "true")]
+    pub sound: Option<bool>,
 }
 
 #[derive(Args)]

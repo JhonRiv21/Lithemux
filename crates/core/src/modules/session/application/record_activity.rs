@@ -52,5 +52,14 @@ pub fn record_claude_version(
     session_id: &str,
     version: &str,
 ) -> Result<(), SessionError> {
-    sessions.update_claude_version(session_id, version)
+    sessions.update_claude_version(session_id, Some(version))
+}
+
+/// The version of this run could not be read: it is unknown, not the one of
+/// the run before.
+pub fn forget_claude_version(
+    sessions: &dyn SessionRepository,
+    session_id: &str,
+) -> Result<(), SessionError> {
+    sessions.update_claude_version(session_id, None)
 }

@@ -27,7 +27,10 @@ pub trait Phrases {
     ) -> String;
 
     fn messaging(&self) -> &'static str;
-    fn member_reporting(&self) -> &'static str;
+    /// How a session reports to its coordinator, by its address.
+    fn member_reporting(&self, coordinator: &str) -> String;
+    /// How the coordinator hands out a task.
+    fn coordinator_assigning(&self) -> &'static str;
 
     fn board_of_coordinator(&self, board: &str) -> String;
     fn board_of_member(&self, board: &str) -> String;

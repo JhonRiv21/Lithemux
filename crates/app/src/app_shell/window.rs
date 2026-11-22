@@ -20,6 +20,7 @@ use super::title_bar::title_bar;
 use crate::edit_actions;
 use crate::settings_window::SettingsWindow;
 use crate::sidebar::Sidebar;
+use crate::status_bar::StatusBar;
 use crate::theme;
 use crate::workspace::{Workspace, bind_keys};
 
@@ -27,12 +28,14 @@ pub struct MainWindow {
     live: Entity<Live>,
     pub sidebar: Entity<Sidebar>,
     pub workspace: Entity<Workspace>,
+    status_bar: Entity<StatusBar>,
 }
 
 impl MainWindow {
     pub fn new(live: Entity<Live>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let workspace = cx.new(|cx| Workspace::new(live.clone(), window, cx));
         let sidebar = cx.new(|cx| Sidebar::new(live.clone(), workspace.clone(), cx));
+        let status_bar = cx.new(|cx| StatusBar::new(live.clone(), cx));
         workspace.update(cx, |workspace, cx| workspace.arrange(window, cx));
         // The theme may be «system»: it follows macOS when that changes.
         cx.observe_window_appearance(window, |this, _, cx| {
@@ -48,6 +51,7 @@ impl MainWindow {
             live,
             sidebar,
             workspace,
+            status_bar,
         }
     }
 }
@@ -74,6 +78,7 @@ impl Render for MainWindow {
                             .child(self.workspace.clone()),
                     ),
             )
+            .child(self.status_bar.clone())
     }
 }
 

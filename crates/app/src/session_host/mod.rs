@@ -4,6 +4,7 @@
 //! what the background threads see; `leaving` keeps what is still on its
 //! way out of the sessions that were closed.
 
+mod claude_version;
 mod closing;
 mod config;
 mod error;
@@ -19,12 +20,15 @@ mod opened;
 mod opening;
 mod phase;
 mod queries;
+mod running;
+mod startup;
 
 #[cfg(test)]
 mod test;
 
 pub use config::{HIBERNATE_GRACE, HostConfig};
 pub use error::HostError;
+pub use event_socket::HookNews;
 pub use failure::Failure;
 pub use host::SessionHost;
 pub use opened::Opened;

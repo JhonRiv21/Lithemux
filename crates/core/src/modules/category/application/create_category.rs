@@ -24,6 +24,7 @@ pub fn create_category(
         sort: categories.next_sort()?,
         created_at: now,
         collapsed: false,
+        notify: true,
     };
     categories.insert(&category)?;
     boards.ensure(&category)?;

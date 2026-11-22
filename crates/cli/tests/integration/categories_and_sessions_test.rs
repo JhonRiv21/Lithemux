@@ -205,3 +205,28 @@ fn removing_a_category_keeps_its_board_and_says_where_it_is() {
     assert!(!sandbox.run(&["cat", "list"]).contains("demo"));
     assert!(sandbox.fail(&["status", "demo"]).contains("not found"));
 }
+
+// PLAN §3.1: the sound when done is set per category, from the command line too.
+#[test]
+fn a_category_turns_its_sound_off_and_on() {
+    let sandbox = Sandbox::new().with_demo();
+    let listed = |sandbox: &Sandbox| sandbox.run(&["cat", "list", "--json"]);
+    assert!(listed(&sandbox).contains("\"notify\": true"));
+
+    let said = sandbox.run(&["cat", "set", "demo", "--sound", "false"]);
+    assert!(said.contains("sound when done off"), "{said}");
+    assert!(listed(&sandbox).contains("\"notify\": false"));
+    assert!(
+        sandbox
+            .run(&["cat", "list"])
+            .contains("sound when done off")
+    );
+
+    sandbox.run(&["cat", "set", "demo", "--sound"]);
+    assert!(listed(&sandbox).contains("\"notify\": true"));
+    assert!(
+        sandbox
+            .fail(&["cat", "set", "missing", "--sound", "false"])
+            .contains("not found")
+    );
+}

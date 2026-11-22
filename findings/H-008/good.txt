@@ -1,0 +1,4 @@
+                    "INSERT INTO categories({COLUMNS}) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)"
+                "INSERT INTO sessions ({COLUMNS}) VALUES (?1)",
+                "INSERT INTO settings(key, value) VALUES (?1, ?2) \
+                "INSERT INTO workspace_layout(id, layout) VALUES (1, ?1) \

@@ -9,6 +9,7 @@ pub enum SettingKey {
     FontFamily,
     FontSize,
     Theme,
+    VersionCheckHours,
     /// Written by the launcher, not by the user: the `claude` the
     /// interactive shell reported last.
     LastClaudePath,
@@ -26,6 +27,7 @@ impl SettingKey {
             SettingKey::FontFamily => "font_family",
             SettingKey::FontSize => "font_size",
             SettingKey::Theme => "theme",
+            SettingKey::VersionCheckHours => "version_check_hours",
             SettingKey::LastClaudePath => "last_claude_path",
         }
     }

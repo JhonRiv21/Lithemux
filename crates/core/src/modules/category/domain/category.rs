@@ -13,6 +13,9 @@ pub struct Category {
     pub created_at: i64,
     /// Whether the sidebar shows it folded.
     pub collapsed: bool,
+    /// Whether a turn its sessions finish out of view rings («Sound when
+    /// done»). Stored as `notify` (migration 5).
+    pub notify: bool,
 }
 
 #[derive(Debug, Clone)]

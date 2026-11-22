@@ -19,7 +19,7 @@ pub trait SessionRepository {
     fn update_kind(&self, id: &str, kind: Kind) -> Result<(), SessionError>;
     fn update_keep_alive(&self, id: &str, keep_alive: bool) -> Result<(), SessionError>;
     fn update_model(&self, id: &str, model: Option<&str>) -> Result<(), SessionError>;
-    fn update_claude_version(&self, id: &str, version: &str) -> Result<(), SessionError>;
+    fn update_claude_version(&self, id: &str, version: Option<&str>) -> Result<(), SessionError>;
     fn update_claude_session_id(&self, id: &str, claude_id: &str) -> Result<(), SessionError>;
 
     /// Sets the state. `last_activity_at` is left alone when `None`. With

@@ -1,5 +1,6 @@
 mod claude_candidates_test;
 mod claude_plan_test;
+mod claude_update_test;
 mod claude_version_test;
 mod fixtures;
 mod hooks_settings_test;

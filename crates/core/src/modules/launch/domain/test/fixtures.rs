@@ -14,6 +14,7 @@ pub fn category() -> Category {
         sort: 1,
         created_at: 0,
         collapsed: false,
+        notify: true,
     }
 }
 

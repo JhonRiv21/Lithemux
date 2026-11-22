@@ -10,6 +10,7 @@ pub trait CategoryRepository {
     fn find_by_id(&self, id: &str) -> Result<Option<Category>, CategoryError>;
     fn update_name(&self, id: &str, name: &str) -> Result<(), CategoryError>;
     fn update_sort(&self, id: &str, sort: i64) -> Result<(), CategoryError>;
+    fn update_notify(&self, id: &str, notify: bool) -> Result<(), CategoryError>;
     fn update_collapsed(&self, id: &str, collapsed: bool) -> Result<(), CategoryError>;
     /// Also removes the sessions that belong to the category.
     fn delete(&self, id: &str) -> Result<(), CategoryError>;

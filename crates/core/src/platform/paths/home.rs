@@ -66,6 +66,11 @@ impl Home {
         self.locks_dir().join(format!("{session_id}.lock"))
     }
 
+    /// The app's own log (PLAN §3.6), next to the hook's.
+    pub fn app_log_path(&self) -> PathBuf {
+        self.0.join("logs").join("app.log")
+    }
+
     pub fn hook_log_path(&self) -> PathBuf {
         self.0.join("logs").join("hook.log")
     }

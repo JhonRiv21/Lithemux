@@ -8,6 +8,8 @@ use lithemux_core::modules::session::{
 };
 
 use super::host::SessionHost;
+use super::opening::installed_version;
+use crate::terminal_view::GridSize;
 
 impl SessionHost {
     /// The Claude sessions whose program runs here, as the database has
@@ -66,5 +68,28 @@ impl SessionHost {
         }
         self.valve_last_used_at = Some(now);
         Some(taken)
+    }
+
+    /// Starts a running Claude session again, on the `claude` a launch
+    /// would use now: hibernated, and opened once its program is gone,
+    /// which resumes its conversation. Returns whether it was running.
+    pub fn restart(&mut self, session_id: &str) -> bool {
+        let Some(target) = self.target_of(session_id) else {
+            return false;
+        };
+        if !self.hibernate(session_id) {
+            return false;
+        }
+        if let Err(error) = self.open(&target, GridSize::INITIAL) {
+            self.log_problem("could not resume", session_id, &error);
+        }
+        true
+    }
+
+    /// Asks, away from the interface thread, for the version of the
+    /// `claude` a launch would use now (PLAN §3.2).
+    pub fn version_asker(&self) -> impl FnOnce() -> Option<String> + Send + use<> {
+        let config = self.config.clone();
+        move || installed_version(&config)
     }
 }

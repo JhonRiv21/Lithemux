@@ -816,3 +816,165 @@ Borrar desde la barra lateral no cambia: pide confirmación, cierra el programa 
 - **Interfaz:** etiqueta «coordinator»/«coordinadora»; «Make coordinator»/«Hacer coordinadora»; «Remove as coordinator»/«Quitar como coordinadora»; «already has a coordinator session».
 - **Quedan con el término viejo, por ser historia:** los reportes de las fases 0, 1 y 2 y las decisiones anteriores a esta. En `git log`, los commits anteriores.
 - **Regla `H-007`:** el vocabulario viejo no vuelve a `crates/*/src`, `locales/` ni al `README.md`. No prohíbe `child` a secas, como pedía el encargo, porque es también «proceso hijo» y el método `.child(…)` de gpui; atrapa las formas en que nombraba el tipo de sesión.
+
+## D-53 · Notificaciones nativas con `osascript` (reemplazada por D-58)
+
+*2026-11-22, bloque 3A, §3.1.* **Reemplazada el mismo día por D-58, por decisión de Jhon:** no hay notificaciones en pantalla, solo un sonido al terminar. La evidencia de abajo queda como historia: explica por qué no se integró un `.app` propio.
+
+**Se probaron las dos vías del encargo, en este Mac (macOS 26.5):**
+
+- **(a) Un `.app` mínimo sin firmar con `UNUserNotificationCenter`.** Se armaron tres bundles de prueba (`dev.lithemux.probe`, `probe2`, `probe3`). La autorización se negó siempre: «Notifications are not allowed for this application».
+  - Desde `/tmp`, `authorizationStatus` quedaba en `0` (sin decidir) y macOS nunca mostraba el diálogo.
+  - Desde el home, quedaba en `1` (negado).
+  - Además, llamarlo desde Rust pide FFI de Objective-C, es decir `unsafe` fuera de `detached.rs` (H-002).
+  - **Descartada.**
+- **(b) `osascript` con `display notification`.** Funciona sin permisos nuevos y sin `unsafe`, así que **es la elegida**.
+  - Se lanza con `command_without_session_markers` (H-001), con un tope de 3 s y en un hilo aparte, nunca en el de la interfaz.
+  - El título, el subtítulo y el cuerpo viajan como argumentos (`on run argv`) y no dentro del texto del script, así que nada de lo que diga Claude puede cerrar una comilla y ejecutarse. Cada uno va en una sola línea y con un máximo de 240 caracteres.
+
+**Lo que trae `osascript` y no se puede cambiar:**
+
+- La notificación lleva el ícono de Script Editor y aparece en Ajustes del Sistema como «Script Editor».
+- **Un clic no puede enfocar la sesión:** `display notification` no avisa a quien la lanzó. Según cómo se comporta `osascript`, el clic abre Script Editor. **No lo verifiqué con un clic real.**
+- Para que el clic lleve a la sesión hace falta un bundle firmado con su propio `UNUserNotificationCenter`. Eso queda para cuando la app tenga firma (fase de empaquetado).
+
+**Cuándo se notifica:**
+
+- `Notification` con la sesión en `waiting`: «Claude needs you»/«Claude te necesita», con el aviso de Claude como cuerpo.
+- `Stop`: «Claude finished»/«Claude terminó», con la vista previa de la tarjeta como cuerpo, o «The turn is over.» si no la hay.
+- Nunca si la sesión está a la vista. «A la vista» quiere decir que es la pestaña visible de algún panel **y** que la ventana es la activa. Con la ventana en segundo plano, sí se avisa.
+- Nunca si la categoría tiene las notificaciones apagadas.
+- El subtítulo es «título de la sesión · categoría».
+- El cuerpo sale solo de campos documentados de los hooks (`message` de `Notification` y `last_assistant_message` de `Stop`, D-48), nunca del transcript.
+
+**Por categoría:**
+
+- Se guarda en la columna `categories.notify` (migración 5, por defecto encendida).
+- Se cambia desde el menú de la categoría («Turn off notifications»/«Desactivar notificaciones») o con `lithemux cat set <slug> --notify [true|false]`.
+- **El encargo decía `lithemux category`; el subcomando real es `cat`** (fase 0), así que la opción se agregó ahí.
+
+**Restos de las pruebas:** los bundles de la vía (a) dejaron entradas `dev.lithemux.probe`, `probe2` y `probe3` en Ajustes del Sistema → Notificaciones. Los bundles ya no existen; las entradas se quitan a mano si molestan.
+
+## D-54 · Medidor de memoria: `sysinfo`, solo los árboles de las sesiones
+
+*2026-11-22, bloque 3A, §3.3.*
+
+- **`darwin-libproc` no entra:** pide `memchr ~2.3`, que choca con el `^2.7` de `vte`. Se usa `sysinfo`, que ya pasa `cargo deny`.
+- **Cuánto cuesta y cuándo se hace:**
+  - Un barrido completo de procesos para saber quién es hijo de quién cuesta ~5 ms con unos 630 procesos. Se hace cada 30 s, o antes si aparece una sesión nueva.
+  - Cada 3 s, en el mismo ciclo que los puertos y en segundo plano, solo se consulta la memoria de los pids de esos árboles: ~0,02 ms por pid.
+- **Se mide la memoria residente (RSS),** no el *footprint* de `accept-phase2`. Es lo que `sysinfo` da sin `unsafe`. Para un `claude` real los dos valores andan cerca.
+- **El valor se redondea al megabyte antes de guardarlo,** que es la precisión con que se muestra. La memoria se mueve unos kilobytes en cada medición y, sin redondear, la ventana se repintaba cada 3 s sin que cambiara nada de lo que muestra.
+- **Dónde se ve:**
+  - en cada tarjeta, junto a los puertos («3 MB»);
+  - el total, en la barra de estado nueva: «Memory: 8 MB in 3 sessions»/«Memoria: 8 MB en 3 sesiones».
+- Una terminal (perfil shell) también cuenta: su árbol es la shell y lo que corra dentro.
+- **Aceptada por la planificadora** en la ronda de correcciones: RSS, y un barrido completo cada 30 s en vez de solo los árboles.
+- **Un pid reutilizado entre barridos.** Si un proceso de un árbol termina y macOS le da su pid a otro proceso cualquiera antes del barrido siguiente, ese otro se cuenta en la sesión hasta 30 s. Con la raíz el riesgo es menor: es el hijo del host, y el host deja de medirla en cuanto recibe su salida. El error es acotado (un proceso, a lo sumo 30 s) y se acepta.
+- **Ronda de correcciones del 3A:**
+  - un programa que ya terminó no se mide: ni «0 MB» en su tarjeta ni nada en el total;
+  - redondear al megabyte no bastaba: la cifra saltaba de 95 a 175 MB en segundos, porque macOS comprime y descomprime páginas. Ahora se muestra el **máximo del último minuto** (`app_shell/shown_memory.rs`), que cambia solo con un pico nuevo o cuando el anterior cumple un minuto. Se descartó redondear a 10 MB: con saltos de 80 MB seguiría cambiando en casi cada medición;
+  - el total es la suma de lo que muestran las tarjetas, y «1 sesión» va en singular.
+
+## D-55 · Aviso de versión nueva de Claude Code
+
+*2026-11-22, bloque 3A, §3.2.*
+
+- **La versión instalada se pregunta como la preguntaría un lanzamiento:** el mismo `resolve_claude` y la misma shell de login, más `claude --version` con 5 s de tope. La pregunta se hace siempre en segundo plano.
+- **Cuándo se pregunta:** 15 s después de abrir la app, para no competir con las sesiones visibles que se están reanudando, y después cada `version_check_hours`.
+  - Es un ajuste nuevo, de 1 a 168 horas, 6 por defecto, en la ventana de Ajustes y en `lithemux config`.
+  - La app mira cada 10 min si ya pasaron esas horas.
+- **La comparación es numérica por posiciones:** `2.1.330` es más nueva que `2.1.99`. Lo que va después de `-` o `+` se ignora. Una versión que no se puede leer nunca cuenta como más nueva ni como más vieja.
+- **El aviso:**
+  - Sale si alguna sesión **viva** de Claude corre una versión más vieja que la instalada. La versión de cada sesión es su `claude_version`, que se graba al lanzarla (fase 1).
+  - El texto es «A new Claude Code version is available: resume idle sessions»/«Hay una versión nueva de Claude Code: reanudar las sesiones idle».
+  - Lleva el botón «Resume N idle»/«Reanudar N en reposo» solo si alguna de esas sesiones está en `idle`.
+- **El botón reinicia solo las sesiones `idle`:** cada una se hiberna y se abre de nuevo con la misma conversación. Las que están trabajando o esperando respuesta no se tocan.
+  - La reapertura sigue la regla de la fase 1: `--resume` si el transcript existe, y si no, `--session-id` con el mismo id.
+- **Ronda de correcciones del 3A:**
+  - **Las sesiones `keep_alive` quedan fuera.** Suelen ser servidores de desarrollo: ni el lote las reinicia ni el aviso las cuenta. La sesión que el usuario está mirando sí entra, porque pulsa el botón viéndola.
+  - **Si al relanzar no se pudo leer la versión,** `claude_version` queda en NULL y no conserva la de la corrida anterior. Si no, el aviso seguía después de reanudar.
+  - **Cuando solo quedan desactualizadas sesiones ocupadas,** la barra ya no ofrece reanudarlas. Dice «1 busy session is still on the previous Claude Code version», o «N busy sessions…», sin botón.
+  - **La selección y el lote están en el host** (`session_host/claude_version.rs`), así se prueban sin interfaz. La app recalcula el aviso en el ciclo de refresco de 3 s, no al pintar.
+
+## D-56 · Registro de la app y panic hook
+
+*2026-11-22, bloque 3A, §3.6.*
+
+- **El archivo:** `<home>/logs/app.log`.
+  - Rota a `app.log.1` y `app.log.2` al pasar de 1 MB, así que nunca hay más de tres archivos.
+  - Cada entrada es una línea: `AAAA-MM-DDTHH:MM:SSZ NIVEL mensaje`, en UTC. Los saltos de línea del mensaje se aplanan.
+  - No se envía a ningún lado.
+- **Qué se registra:**
+  - un pánico, con su mensaje y el archivo:línea;
+  - una sesión que no pudo arrancar (`ERROR`);
+  - una sesión cuyo candado tiene otro (`WARN … is open elsewhere (pid N)`);
+  - no poder abrir la base;
+  - una migración o una base nueva (`INFO database migrated from schema v4 to v5`);
+  - un error al hibernar.
+  - **Nunca contenido de conversaciones:** se registran ids de sesión y errores, no textos de Claude ni del usuario.
+- **El panic hook se instala lo primero al arrancar** y luego llama al hook anterior, así que el mensaje de siempre sigue saliendo por stderr.
+- **Un pánico en el hilo principal:** el encargo pedía documentar si no se podía atrapar.
+  - Se puede **registrar** siempre. El hook corre antes de que el proceso decida si desenrolla o aborta.
+  - Un pánico dentro de una función `extern "C"` (las que macOS llama para dibujar o para los eventos) aborta el proceso, sin desenrollar, pero la línea llega igual al archivo. Hay un test con un proceso hijo para ese caso.
+  - Lo que no se puede es **recuperarse** de él: la app se cierra.
+- **Ronda de correcciones del 3A:**
+  - **El hook es lo primero de `run()`,** antes de `HostConfig::from_environment()`. Lo comprueba una prueba que arranca el binario con un pánico inducido. El disparador (`LITHEMUX_PANIC_ON_START`) existe solo en compilaciones de depuración.
+  - **Un solo escritor por archivo:** `AppLog::shared(ruta)` le da el mismo `AppLog` al hook y al host, para que dos rotaciones no se pisen.
+  - **Del mensaje del pánico se registran solo los primeros 120 caracteres,** además del archivo, la línea y el hilo. Los pánicos de corte de `str` o de `unwrap` sobre un error pueden traer un trozo del texto que se estaba manejando.
+  - **Riesgo residual:** esos 120 caracteres todavía pueden contener un fragmento de una conversación. El registro no sale de este Mac y rota a los 3 MB. Quitar el mensaje del todo dejaría los pánicos sin pista, y se prefirió el recorte.
+  - **Una base existente cuya versión no se pudo leer** ya no se registra como «database created». Se distinguen tres casos: no había base, tenía la versión N, no se pudo leer.
+
+## D-57 · Prueba de humo del ciclo y medición de la CPU
+
+*2026-11-22, bloque 3A, §3.6 y cierre.*
+
+- **La prueba de humo** (`crates/app/tests/integration/smoke_test.rs`) corre en el host real, con el `claude` falso, un PTY real, una base SQLite real y un reloj que se le pasa:
+  1. crea la categoría y la sesión como lo hace la barra lateral;
+  2. la abre (`--session-id`);
+  3. escribe el transcript como lo haría Claude en su primer turno;
+  4. la hiberna con 49 h de inactividad y nada a la vista, y comprueba que el programa terminó y el candado quedó libre;
+  5. la reabre y comprueba `--resume <la misma conversación>`, el transcript intacto y que al cerrar el host todo queda hibernado.
+- **Para la CPU, `accept-phase2` se corrió sobre el commit anterior y sobre este bloque, en la misma máquina,** porque el número de la fase 2 ya no sirve de comparación exacta. La ventana estándar del script empieza a los 12 s y por eso incluye la pregunta de versión de los 15 s. Se midió también una ventana desde los 40 s, que excluye esa pregunta. Los números están en el reporte del bloque.
+
+## D-58 · Un sonido al terminar y el reporte a la coordinadora
+
+*2026-11-22, ronda de correcciones del bloque 3A, §3.1. Decisión de Jhon; reemplaza a D-53.*
+
+**El sonido:**
+
+- **Cuándo suena:** cuando una sesión cuyo programa corre en la app termina un turno, es decir, un `Stop` que la deja en `idle`, y no está a la vista. «A la vista» es la pestaña visible con la ventana activa.
+- **Cuándo no suena:**
+  - `waiting`: el contador de la tarjeta se encarga;
+  - un `Stop` que no cambió nada (la sesión ya estaba `idle`, o se hibernó a propósito);
+  - una sesión abierta con `lithemux open` en otra terminal.
+- **Cómo suena:** `afplay /System/Library/Sounds/Glass.aiff`, lanzado con `stdout_within`. Eso pasa por `command_without_session_markers`, corta a los 3 s y recoge al hijo. Va en un hilo aparte.
+- **Como mucho un sonido cada 2 s,** aunque terminen varias sesiones a la vez.
+- **Sin banners:** se quitaron `osascript`, «Claude needs you» y el cuerpo con el mensaje.
+- **Para saber si un evento «terminó un turno»,** el hook manda en el socket el estado al que entró la sesión, solo si cambió (`entered`). Lo calcula leyendo el estado antes y después de aplicar la transición.
+- **El interruptor por categoría** sigue en la columna `notify` (migración 5, sin renombrar):
+  - en la interfaz se llama «Sound when done»/«Sonido al terminar»;
+  - en la CLI es `lithemux cat set <slug> --sound [true|false]`; la opción `--notify` desaparece sin alias, porque la app no se ha publicado.
+
+**El reporte a la coordinadora** usa la mensajería del propio Claude Code:
+
+- **El nombre:** cada sesión de Claude se lanza con `-n <categoría>-<slug>` desde la fase 1. Es el nombre de `lithemux status` y la dirección para `SendMessage`.
+  - **Renombrar una sesión no cambia esa dirección:** renombrar solo cambia el título que muestra la app. El slug no cambia nunca, así que la dirección dura lo que dura la sesión.
+- **El contexto de una sesión con coordinadora** dice:
+  - que al terminar una tarea de la coordinadora, o si se bloquea, le reporta con `SendMessage (to: "<dirección>")` qué hizo, qué quedó pendiente y dónde está el detalle, y se detiene;
+  - que si el envío falla se lo dice al usuario en su respuesta.
+  - La línea general «las sesiones se comunican con SendMessage» se quitó en este caso, porque el reporte ya la incluye. Hacía falta: con las frases nuevas, el peor caso de la prueba de tamaño pasaba de los 2.000 caracteres del §0.5 (2.063 en inglés y 2.078 en español). Ahora queda por debajo.
+- **El contexto de la coordinadora** dice que encarga con `SendMessage` y `notify_when_idle: true`, y que así se entera cuando la sesión queda libre. Sus sesiones ya estaban listadas con sus direcciones.
+- **Sin coordinadora, o en la propia coordinadora,** no aparece la parte del reporte.
+- **Permisos:** el `--settings` que lithemux pasa al lanzar ahora lleva `"permissions": {"allow": ["SendMessage", "ListAgents"]}`. Según la documentación oficial, consultada hoy:
+  - **los nombres:** las dos herramientas están documentadas con esos nombres (code.claude.com/docs/en/tools-reference, /cross-session-messaging);
+  - **piden permiso:** la tabla de herramientas dice que ninguna de las dos lo pide;
+  - **la forma de la regla:** las dos se nombran solas, sin especificador. Así aparecen en el ejemplo oficial con `deny` (/permissions, /cross-session-messaging);
+  - **cómo se combina:** lo que llega por `--settings` se aplica sobre los archivos del usuario y combina sus listas en vez de reemplazarlas (/settings, /cli-reference).
+  - La regla es una garantía por si algún ajuste del usuario los pidiera. Un `deny` del usuario o de la organización sigue ganando. **Falta confirmarlo con el claude real;** lo prueba la planificadora.
+- **Lithemux no lee ni escribe los sockets de Claude Code** (`/tmp/cc-socks`). La guarda `crates/core/tests/claude_sockets_guard.rs` falla si `cc-socks`, en cualquiera de sus formas escritas, aparece en el código fuente.
+- **Lo que no se hace:**
+  - colas propias de mensajes;
+  - escribir en la terminal de la coordinadora;
+  - despertar a una coordinadora hibernada. Si está hibernada, el envío falla y la sesión se lo dice al usuario.
+

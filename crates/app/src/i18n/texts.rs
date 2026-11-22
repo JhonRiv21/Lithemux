@@ -63,6 +63,16 @@ impl Texts {
         })
     }
 
+    /// `<key>_one` for a count of one and `<key>_other` for any other,
+    /// with `{count}` and the values in place.
+    pub fn count(&self, key: &str, count: usize, values: &[(&str, &str)]) -> String {
+        let form = if count == 1 { "one" } else { "other" };
+        let count = count.to_string();
+        let mut all = vec![("count", count.as_str())];
+        all.extend_from_slice(values);
+        self.with(&format!("{key}_{form}"), &all)
+    }
+
     pub fn keys(&self) -> impl Iterator<Item = &str> {
         self.english.keys().map(String::as_str)
     }

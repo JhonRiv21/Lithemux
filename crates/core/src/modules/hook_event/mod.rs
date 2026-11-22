@@ -8,6 +8,7 @@ pub use application::hook_ports::HookPorts;
 pub use domain::card_note::{CardNote, card_note};
 pub use domain::hook_event::HookEvent;
 pub use domain::hook_input::HookInput;
+pub use domain::hook_outcome::HookOutcome;
 pub use domain::session_start_output::session_start_output;
 pub use domain::transition::{Transition, WAITING_NOTIFICATIONS, transition};
 pub use infrastructure::file_hook_log::FileHookLog;
