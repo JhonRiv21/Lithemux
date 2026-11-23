@@ -55,3 +55,19 @@ pub fn shown_phase(
             .or_else(|| host.cloned()),
     }
 }
+
+/// The sessions whose «open elsewhere» holder (its pid, from `holders`)
+/// was seen gone. A pid seen gone stays gone: macOS gives pids again, and
+/// the process that gets this one later is not the holder. A session that
+/// no longer has a holder, or has another one, starts over.
+pub fn ended_holders(
+    before: &HashMap<String, u32>,
+    holders: &[(String, u32)],
+    is_alive: &dyn Fn(u32) -> bool,
+) -> HashMap<String, u32> {
+    holders
+        .iter()
+        .filter(|(session, pid)| before.get(session) == Some(pid) || !is_alive(*pid))
+        .cloned()
+        .collect()
+}

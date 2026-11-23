@@ -5,9 +5,21 @@ use std::time::{Duration, Instant};
 use uuid::Uuid;
 
 use crate::modules::launch::domain::claude_candidates::TEMPORARY_ROOTS;
+use crate::modules::launch::domain::claude_path_policy::PathKind;
 use crate::modules::launch::domain::shell_answer::{marked_answer, marked_script};
 use crate::modules::launch::ports::shell_probe::{ShellMode, ShellProbe};
 use crate::platform::process::capture::stdout_within;
+
+/// What there is at `path` on this machine, following links.
+pub fn path_kind_on_disk(path: &Path) -> PathKind {
+    match path.metadata() {
+        Err(_) => PathKind::Missing,
+        Ok(meta) if meta.is_dir() => PathKind::Directory,
+        Ok(meta) => PathKind::File {
+            executable: meta.is_file() && meta.permissions().mode() & 0o111 != 0,
+        },
+    }
+}
 
 pub struct LoginShellProbe {
     shell: PathBuf,
@@ -58,8 +70,11 @@ impl ShellProbe for LoginShellProbe {
     }
 
     fn is_executable(&self, path: &Path) -> bool {
-        path.metadata()
-            .is_ok_and(|meta| meta.is_file() && meta.permissions().mode() & 0o111 != 0)
+        self.path_kind(path) == PathKind::File { executable: true }
+    }
+
+    fn path_kind(&self, path: &Path) -> PathKind {
+        path_kind_on_disk(path)
     }
 
     fn version_output(&self, claude_bin: &Path, timeout: Duration) -> Option<String> {

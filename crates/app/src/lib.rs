@@ -1,4 +1,5 @@
 pub mod app_shell;
+pub mod browser_spike;
 pub mod edit_actions;
 pub mod i18n;
 pub mod import_window;

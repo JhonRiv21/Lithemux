@@ -6,6 +6,7 @@ mod lifecycle_test;
 mod notification_news_test;
 mod processes;
 mod sandbox;
+mod session_host_claude_path_test;
 mod session_host_hibernation_test;
 mod session_host_lifecycle_test;
 mod session_host_reopen_test;

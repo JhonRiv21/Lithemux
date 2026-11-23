@@ -1,0 +1,26 @@
+[package]
+name = "lithemux-webview-spike"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "PLAN §3.7 spike: a WKWebView inside a lithemux pane"
+publish = false
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2.workspace = true
+objc2-web-kit.workspace = true
+raw-window-handle.workspace = true
+thiserror.workspace = true
+wry.workspace = true
+
+# The workspace forbids `unsafe`; this crate denies it instead, so that its
+# one exception, src/configuration.rs, can be allowed where it is (D-64,
+# spike only). Keep the rest equal to the workspace.
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"

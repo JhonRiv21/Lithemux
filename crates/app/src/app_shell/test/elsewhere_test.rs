@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use lithemux_core::modules::session::{Kind, Profile, Session, State};
 
-use crate::app_shell::elsewhere::{open_elsewhere, shown_phase};
+use crate::app_shell::elsewhere::{ended_holders, open_elsewhere, shown_phase};
 use crate::session_host::{Failure, Phase};
 
 fn session(id: &str, conversation: Option<&str>) -> Session {
@@ -91,4 +91,37 @@ fn a_session_not_running_here_shows_who_runs_it() {
         Some(Phase::Ended)
     );
     assert_eq!(shown_phase(None, None, false), None);
+}
+
+// ronda 3C, bug 2: macOS gives a pid again. Once the holder of «open
+// elsewhere» is seen gone, a process that gets its pid later is not it,
+// and the card does not go back to «open elsewhere».
+#[test]
+fn a_holder_seen_gone_stays_gone_when_its_pid_comes_back() {
+    let holders = vec![("api".to_string(), 7)];
+    let mut ended = HashMap::new();
+
+    ended = ended_holders(&ended, &holders, &|_| true);
+    assert!(ended.is_empty(), "it still runs");
+
+    ended = ended_holders(&ended, &holders, &|_| false);
+    assert_eq!(ended.get("api"), Some(&7));
+
+    // Hours later, another process has pid 7.
+    ended = ended_holders(&ended, &holders, &|_| true);
+    assert_eq!(ended.get("api"), Some(&7));
+    let told = Phase::OpenElsewhere { pid: Some(7) };
+    let holder_runs = ended.get("api") != Some(&7);
+    assert_eq!(shown_phase(Some(&told), None, holder_runs), None);
+}
+
+// ronda 3C, bug 2: a new «open elsewhere» of the session, by another
+// process, is not taken for the one that ended.
+#[test]
+fn a_new_holder_of_the_session_is_not_taken_for_the_ended_one() {
+    let ended = HashMap::from([("api".to_string(), 7)]);
+
+    let now = ended_holders(&ended, &[("api".to_string(), 9)], &|_| true);
+
+    assert!(now.is_empty());
 }

@@ -1,7 +1,12 @@
 //! What the settings window shows: one row per setting, as a choice among
 //! a few values or as a text to type. No gpui.
 
+use std::path::Path;
+
+use lithemux_core::modules::launch::{PathKind, claude_path_problem};
 use lithemux_core::modules::settings::{InterfaceLanguage, Preferences, SettingKey, ThemeChoice};
+
+use crate::i18n::{Message, claude_path_message};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Choice {
@@ -156,4 +161,20 @@ pub fn value_of(preferences: &Preferences, key: SettingKey) -> String {
         SettingKey::VersionCheckHours => preferences.version_check_hours.to_string(),
         SettingKey::LastClaudePath => String::new(),
     }
+}
+
+/// What is wrong with what the row shows, said as a launch would say it.
+/// Only `claude_path` is kept as stored when it cannot be used: `kind_of`
+/// says what is at its path.
+pub fn warning_of(
+    preferences: &Preferences,
+    key: SettingKey,
+    kind_of: impl FnOnce(&Path) -> PathKind,
+) -> Option<Message> {
+    if key != SettingKey::ClaudePath {
+        return None;
+    }
+    let value = preferences.claude_path.as_deref()?;
+    let problem = claude_path_problem(value, kind_of)?;
+    Some(claude_path_message(value, problem))
 }

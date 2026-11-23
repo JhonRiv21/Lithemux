@@ -1,7 +1,7 @@
 //! Why a session could not start, as something the interface can put in
 //! words of its own language.
 
-use lithemux_core::modules::launch::LaunchError;
+use lithemux_core::modules::launch::{ClaudePathProblem, LaunchError};
 
 use super::error::HostError;
 
@@ -9,6 +9,12 @@ use super::error::HostError;
 pub enum Failure {
     /// `claude` is nowhere to be found; with what the lookup said.
     ClaudeNotFound(String),
+    /// The `claude_path` setting, as stored, is not a program that runs,
+    /// and why.
+    ClaudePathUnusable {
+        value: String,
+        problem: ClaudePathProblem,
+    },
     /// The session's working directory is gone.
     MissingFolder(String),
     /// `lithemux-hook` is not next to the app.
@@ -24,6 +30,12 @@ impl From<&HostError> for Failure {
         match error {
             HostError::Launch(LaunchError::ClaudeNotFound(detail)) => {
                 Failure::ClaudeNotFound(detail.clone())
+            }
+            HostError::Launch(LaunchError::ClaudePathUnusable { value, problem }) => {
+                Failure::ClaudePathUnusable {
+                    value: value.clone(),
+                    problem: *problem,
+                }
             }
             HostError::Launch(LaunchError::MissingCwd(folder)) => {
                 Failure::MissingFolder(folder.display().to_string())

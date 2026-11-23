@@ -42,5 +42,7 @@ Antes de revisar el repo, cada regla se prueba contra sus dos ejemplos. Si no ma
 | `H-006` | prueba con teclas reales del bloque 3, corregido en el bloque 4 | Un atajo con `shift-` y una tecla que no es letra (`cmd-shift-]`): gpui lo recibe como `cmd-}` y no coincide nunca |
 | `H-008` | contrato del repositorio en el bloque 3A de la fase 3 (bug de la fase 2) | Un INSERT de `categories` o `sessions` con su propia lista de columnas en vez de `COLUMNS`: la migración 4 sumó `collapsed` a la lectura y no a la escritura |
 | `H-009` | auditoría de la ronda de correcciones del bloque 3B de la fase 3 | Una transacción de SQLite `DEFERRED` (`unchecked_transaction()`, `transaction()`, `BEGIN`): la importación leía fuera del lock lo que decidía qué escribir, y dos a la vez podían duplicar una conversación |
+| `H-010` | prueba de la planificadora en el bloque 3B, corregido al inicio del 3C | Un estado de sesión para el usuario calculado con `host.phase` en vez de `shown_phase`: el panel seguía en «open elsewhere (pid N)» cuando la tarjeta ya había vuelto a hibernada |
+| `H-011` | prueba de la planificadora en el bloque 3B, corregido al inicio del 3C | Un mensaje que dice que se usa otro `claude` en lugar de un `claude_path` que no sirve: la app lanzaba un binario que el usuario no eligió |
 
 El funcionamiento del mecanismo se prueba en `crates/core/tests/findings_lint.rs` con una regla de muestra en un directorio temporal.

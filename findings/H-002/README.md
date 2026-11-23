@@ -8,4 +8,6 @@
 
 **Regla.** La palabra `unsafe` no aparece en ningún archivo bajo `crates/*/src`, sea `.rs` o no (el código se puede traer desde un archivo con otra extensión), fuera de ese archivo. `cli`, `hook` y `app` siguen además con `unsafe_code = "forbid"`; `core` lo tiene en `deny` para poder permitir esa función.
 
+**Segunda excepción, solo del spike del 3C (D-64).** `crates/webview-spike/src/configuration.rs`, aprobada por la planificadora el 22-nov-2026 solo para el spike de la §3.7: arma la configuración de WebKit (`objc2-web-kit` 0.3 declara `unsafe` todos sus métodos) para apagar el aviso de sitios fraudulentos y guardar los datos de la página en memoria. El crate `webview-spike` tiene `unsafe_code = "deny"` y ese único archivo lo permite; `app`, `cli` y `hook` siguen en `forbid`. Si el spike es NO-GO, esta excepción se borra junto con el crate. Si es GO, mantenerla en la versión final lo decide Jhon al planificar la pestaña completa.
+
 **Cómo se arregla un hallazgo.** No usar `unsafe`. Si hiciera falta otra excepción, se decide con la planificadora y se documenta como decisión antes de tocar `exclude`.

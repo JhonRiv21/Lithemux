@@ -8,7 +8,7 @@ use lithemux_core::modules::category::Category;
 use lithemux_core::modules::session::{Kind, Profile, Session};
 
 use super::cwd_label::cwd_label;
-use super::status::{Status, status_of};
+use super::status::{Status, session_status};
 use crate::session_host::Phase;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -69,11 +69,7 @@ fn card_of(board: &Board<'_>, category: &Category, session: &Session) -> Card {
         category_id: category.id.clone(),
         title: session.display_title().to_string(),
         preview: session.card_line().map(str::to_string),
-        status: status_of(
-            (board.phases)(&session.id).as_ref(),
-            session.state,
-            session.profile,
-        ),
+        status: session_status(board.phases, session),
         unread: session.unread,
         cwd: cwd_label(session.effective_cwd(category), board.home),
         ports: board.ports.get(&session.id).cloned().unwrap_or_default(),

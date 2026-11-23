@@ -3,10 +3,11 @@
 //! memoria; scrollback; fuente y tamaño; `claude_path` (opcional); tema
 //! claro, oscuro o del sistema.»
 
+use lithemux_core::modules::launch::PathKind;
 use lithemux_core::modules::settings::{Preferences, SettingKey, checked_value};
 
 use crate::i18n::{Language, Texts};
-use crate::settings_window::form::{Input, rows, value_of};
+use crate::settings_window::form::{Input, rows, value_of, warning_of};
 
 #[test]
 fn the_window_has_every_setting_of_the_plan() {
@@ -114,4 +115,39 @@ fn every_label_hint_and_choice_has_its_text_in_both_languages() {
             assert!(spanish.is_translated(key), "{key}");
         }
     }
+}
+
+// ronda 3C: Settings shows a claude_path that cannot run as it is stored,
+// with why and how to fix it, in the words of the card.
+#[test]
+fn a_claude_path_that_cannot_run_is_shown_with_why() {
+    let preferences = Preferences {
+        claude_path: Some("\"/opt/claude\"".to_string()),
+        ..Preferences::default()
+    };
+    let runs = |_: &std::path::Path| PathKind::File { executable: true };
+
+    assert_eq!(
+        value_of(&preferences, SettingKey::ClaudePath),
+        "\"/opt/claude\""
+    );
+    let warning = warning_of(&preferences, SettingKey::ClaudePath, runs).unwrap();
+    let said = Texts::of(Language::Spanish).say(&warning);
+    assert!(said.contains("comillas"), "{said}");
+    assert!(said.contains("vacía"), "{said}");
+}
+
+// ronda 3C: nothing to say of a path that runs, of an unset one, or of the
+// other settings.
+#[test]
+fn a_claude_path_that_runs_or_is_unset_has_no_warning() {
+    let runs = |_: &std::path::Path| PathKind::File { executable: true };
+    let set = Preferences {
+        claude_path: Some("/opt/claude".to_string()),
+        ..Preferences::default()
+    };
+
+    assert!(warning_of(&set, SettingKey::ClaudePath, runs).is_none());
+    assert!(warning_of(&Preferences::default(), SettingKey::ClaudePath, runs).is_none());
+    assert!(warning_of(&set, SettingKey::Theme, |_| PathKind::Missing).is_none());
 }

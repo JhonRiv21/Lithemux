@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use lithemux_core::modules::launch::{ShellMode, ShellProbe, TEMPORARY_ROOTS};
+use lithemux_core::modules::launch::{PathKind, ShellMode, ShellProbe, TEMPORARY_ROOTS};
 
 // Same contract as LoginShellProbe: `None` stands for a failure or a timeout.
 // Its clock is made up: a question takes what `taking` says, or nothing when
@@ -11,6 +11,8 @@ use lithemux_core::modules::launch::{ShellMode, ShellProbe, TEMPORARY_ROOTS};
 pub struct FakeShellProbe {
     outputs: HashMap<(ShellMode, String), String>,
     executables: Vec<PathBuf>,
+    plain_files: Vec<PathBuf>,
+    directories: Vec<PathBuf>,
     versions: HashMap<PathBuf, String>,
     temporary_roots: Vec<PathBuf>,
     costs: HashMap<ShellMode, Duration>,
@@ -24,6 +26,8 @@ impl FakeShellProbe {
         FakeShellProbe {
             outputs: HashMap::new(),
             executables: Vec::new(),
+            plain_files: Vec::new(),
+            directories: Vec::new(),
             versions: HashMap::new(),
             temporary_roots: TEMPORARY_ROOTS.iter().map(PathBuf::from).collect(),
             costs: HashMap::new(),
@@ -49,6 +53,17 @@ impl FakeShellProbe {
 
     pub fn executable(mut self, path: &str) -> Self {
         self.executables.push(PathBuf::from(path));
+        self
+    }
+
+    /// A file that is there but cannot run.
+    pub fn plain_file(mut self, path: &str) -> Self {
+        self.plain_files.push(PathBuf::from(path));
+        self
+    }
+
+    pub fn directory(mut self, path: &str) -> Self {
+        self.directories.push(PathBuf::from(path));
         self
     }
 
@@ -86,6 +101,19 @@ impl ShellProbe for FakeShellProbe {
 
     fn is_executable(&self, path: &Path) -> bool {
         self.executables.iter().any(|known| known == path)
+    }
+
+    fn path_kind(&self, path: &Path) -> PathKind {
+        let known = |list: &[PathBuf]| list.iter().any(|known| known == path);
+        if known(&self.executables) {
+            PathKind::File { executable: true }
+        } else if known(&self.plain_files) {
+            PathKind::File { executable: false }
+        } else if known(&self.directories) {
+            PathKind::Directory
+        } else {
+            PathKind::Missing
+        }
     }
 
     fn version_output(&self, claude_bin: &Path, _timeout: Duration) -> Option<String> {

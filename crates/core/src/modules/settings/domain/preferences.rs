@@ -36,7 +36,9 @@ pub struct Preferences {
     pub scrollback: usize,
     pub font_family: String,
     pub font_size: u16,
-    /// `None`: the `claude` of the user's shell.
+    /// `None`: the `claude` of the user's shell. As stored, even when it
+    /// could not run: Settings shows it to be fixed, and the launch refuses
+    /// it and says why.
     pub claude_path: Option<String>,
     pub theme: ThemeChoice,
     /// How often the installed `claude` is asked for its version.
@@ -69,7 +71,7 @@ fn language(value: &str) -> InterfaceLanguage {
 
 impl Preferences {
     /// `stored` gives what the database has for a key. A value that would
-    /// not be accepted today counts as unset.
+    /// not be accepted today counts as unset, except `claude_path`.
     pub fn from_stored(stored: impl Fn(SettingKey) -> Option<String>) -> Self {
         let valid = |key| stored(key).and_then(|value| checked_value(key, &value).ok());
         let defaults = Preferences::default();
@@ -87,7 +89,7 @@ impl Preferences {
             font_size: valid(SettingKey::FontSize)
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(defaults.font_size),
-            claude_path: valid(SettingKey::ClaudePath),
+            claude_path: stored(SettingKey::ClaudePath),
             version_check_hours: valid(SettingKey::VersionCheckHours)
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(defaults.version_check_hours),

@@ -62,8 +62,22 @@ impl MainWindow {
     }
 }
 
+#[cfg(all(feature = "webview-spike", target_os = "macos"))]
+impl MainWindow {
+    /// A page is drawn over gpui: while the palette, a menu or a dragged
+    /// tab is on screen, every page hides (PLAN §3.7, criterion 3).
+    fn hide_pages_under_overlays(&self, cx: &mut Context<Self>) {
+        let covered =
+            self.palette.is_some() || self.sidebar.read(cx).has_menu_open() || cx.has_active_drag();
+        self.workspace
+            .update(cx, |workspace, _| workspace.browsers.set_covered(covered));
+    }
+}
+
 impl Render for MainWindow {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        #[cfg(all(feature = "webview-spike", target_os = "macos"))]
+        self.hide_pages_under_overlays(cx);
         let root = self.handle_session_keys(div(), cx);
         root.relative()
             .flex()

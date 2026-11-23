@@ -5,7 +5,7 @@ use lithemux_core::modules::workspace::Pane;
 
 use super::tab_drag::TabDrag;
 use super::view::Workspace;
-use crate::sidebar::status::{Status, status_of};
+use crate::sidebar::status::{Status, session_status};
 use crate::sidebar::status_text::status_color;
 use crate::theme;
 
@@ -50,6 +50,14 @@ fn tab_frame(pane_id: u32, session_id: &str, is_shown: bool) -> Stateful<Div> {
 }
 
 impl Workspace {
+    /// The pane shows its browser tab instead of a session (PLAN §3.7 spike).
+    pub(crate) fn shows_browser(&self, _pane: u32) -> bool {
+        #[cfg(all(feature = "webview-spike", target_os = "macos"))]
+        return self.browsers.is_chosen(_pane);
+        #[cfg(not(all(feature = "webview-spike", target_os = "macos")))]
+        false
+    }
+
     pub(super) fn tab_info(&self, session_id: &str, cx: &Context<Self>) -> TabInfo {
         let live = self.live.read(cx);
         let session = live.session(session_id);
@@ -60,7 +68,7 @@ impl Workspace {
                 .unwrap_or_default()
                 .into(),
             status: session.map_or(Status::NotRunning, |session| {
-                status_of(live.host.phase(session_id), session.state, session.profile)
+                session_status(&|id| live.shown_phase(id), session)
             }),
         }
     }
@@ -70,8 +78,11 @@ impl Workspace {
         let mut tabs = Vec::new();
         for (index, session_id) in pane.tabs.iter().enumerate() {
             let info = self.tab_info(session_id, cx);
-            tabs.push(self.render_tab(pane_id, index, index == pane.active, info, cx));
+            let is_shown = index == pane.active && !self.shows_browser(pane_id);
+            tabs.push(self.render_tab(pane_id, index, is_shown, info, cx));
         }
+        #[cfg(all(feature = "webview-spike", target_os = "macos"))]
+        tabs.extend(self.render_browser_tab(pane_id, cx));
         div()
             .flex()
             .flex_none()

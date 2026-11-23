@@ -11,7 +11,7 @@ use super::window::MainWindow;
 use crate::palette::entries::entries;
 use crate::palette::{Palette, PaletteEvent};
 use crate::sidebar::keyboard_order::{step, visible_order};
-use crate::sidebar::status::status_of;
+use crate::sidebar::status::session_status;
 use crate::sidebar::status_text::status_text;
 
 impl MainWindow {
@@ -26,8 +26,7 @@ impl MainWindow {
             .sessions()
             .iter()
             .map(|session| {
-                let phase = live.shown_phase(&session.id);
-                let status = status_of(phase.as_ref(), session.state, session.profile);
+                let status = session_status(&|id| live.shown_phase(id), session);
                 (session.id.clone(), status_text(&status, &texts))
             })
             .collect();

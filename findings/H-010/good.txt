@@ -1,0 +1,1 @@
+                status_of(live.shown_phase(session_id).as_ref(), session.state, session.profile)

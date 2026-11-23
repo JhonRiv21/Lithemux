@@ -1,0 +1,1 @@
+            "the claude_path setting points to {fixed}, which is not an executable; looking in the PATH instead"

@@ -28,31 +28,28 @@ pub(super) struct Shown {
 
 pub struct Workspace {
     pub(super) live: Entity<Live>,
-    pub(super) layout: Layout,
+    pub(crate) layout: Layout,
     pub(super) shown: HashMap<String, Shown>,
-    pub(super) texts: Rc<Texts>,
-    pub(super) notice: Option<String>,
+    pub(crate) texts: Rc<Texts>,
+    pub(crate) notice: Option<String>,
     pub(super) focus_handle: FocusHandle,
     /// The save of a divider that is still being dragged. Replacing it
     /// drops the one before: only the last move is saved.
     pending_save: Option<Task<()>>,
     _lifecycle: Task<()>,
+    #[cfg(all(feature = "webview-spike", target_os = "macos"))]
+    pub(crate) browsers: crate::browser_spike::web_page::WebBrowsers,
+    /// The pages say which pane was clicked here.
+    #[cfg(all(feature = "webview-spike", target_os = "macos"))]
+    pub(crate) browser_clicks: async_channel::Sender<u32>,
+    #[cfg(all(feature = "webview-spike", target_os = "macos"))]
+    _browser_clicks: Task<()>,
 }
 
 impl Workspace {
     pub fn new(live: Entity<Live>, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let (layout, texts) = {
-            let live = live.read(cx);
-            let layouts = SqliteLayoutRepository::new(live.db());
-            let restored = restore_layout(&layouts, |id| live.session_exists(id));
-            (
-                restored.unwrap_or_else(|error| {
-                    eprintln!("lithemux-app: {error}");
-                    Layout::single()
-                }),
-                Rc::clone(&live.texts),
-            )
-        };
+        let layout = Self::restored_layout(live.read(cx));
+        let texts = Rc::clone(&live.read(cx).texts);
         cx.observe_in(&live, window, |this, live, window, cx| {
             // The language may have changed.
             this.texts = Rc::clone(&live.read(cx).texts);
@@ -71,7 +68,15 @@ impl Workspace {
             async {}
         })
         .detach();
+        #[cfg(all(feature = "webview-spike", target_os = "macos"))]
+        let (browser_clicks, _browser_clicks) = Self::listen_to_page_clicks(window, cx);
         Workspace {
+            #[cfg(all(feature = "webview-spike", target_os = "macos"))]
+            browsers: Default::default(),
+            #[cfg(all(feature = "webview-spike", target_os = "macos"))]
+            browser_clicks,
+            #[cfg(all(feature = "webview-spike", target_os = "macos"))]
+            _browser_clicks,
             live,
             layout,
             shown: HashMap::new(),
@@ -81,6 +86,16 @@ impl Workspace {
             pending_save: None,
             _lifecycle: Self::keep_the_lifecycle(cx),
         }
+    }
+
+    /// The layout saved last time, without the sessions that are gone; a
+    /// single pane when it cannot be read.
+    fn restored_layout(live: &Live) -> Layout {
+        let layouts = SqliteLayoutRepository::new(live.db());
+        restore_layout(&layouts, |id| live.session_exists(id)).unwrap_or_else(|error| {
+            eprintln!("lithemux-app: {error}");
+            Layout::single()
+        })
     }
 
     /// Brings the workspace up to date with the sessions: drops the tabs
@@ -95,6 +110,8 @@ impl Workspace {
         if self.layout != before {
             self.save(cx);
         }
+        #[cfg(all(feature = "webview-spike", target_os = "macos"))]
+        self.follow_the_layout();
         // What is on show may have just been hibernated, or restored.
         self.wake_what_is_seen(cx);
         if self.adopt_the_terminals(window, cx) {
@@ -169,10 +186,12 @@ impl Workspace {
         self.relaunch_the_shells(cx);
         self.follow_the_sessions(window, cx);
         self.focus_what_is_shown(window, cx);
+        #[cfg(all(feature = "webview-spike", target_os = "macos"))]
+        self.measure_from_environment(window, cx);
     }
 
     /// After any change of tabs or panes.
-    pub(super) fn changed(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn changed(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.save(cx);
         self.wake_what_is_seen(cx);
         self.follow_the_sessions(window, cx);
@@ -182,7 +201,19 @@ impl Workspace {
 
     /// The keyboard goes to the terminal on show in the focused pane, or
     /// to the workspace itself, so that its shortcuts keep working.
-    pub fn focus_what_is_shown(&self, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn focus_what_is_shown(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        #[cfg(all(feature = "webview-spike", target_os = "macos"))]
+        {
+            let pane = self.layout.active_pane().id;
+            if self.browsers.is_chosen(pane) {
+                // gpui keeps its own focus off the terminals: their keys
+                // would be taken before the page sees them.
+                window.focus(&self.focus_handle, cx);
+                self.browsers.focus(Some(pane));
+                return;
+            }
+            self.browsers.focus(None);
+        }
         let on_show = self.layout.active_pane().active_session();
         match on_show.and_then(|id| self.shown.get(id)) {
             Some(shown) => window.focus(&shown.view.focus_handle(cx), cx),
@@ -218,6 +249,8 @@ impl Focusable for Workspace {
 
 impl Render for Workspace {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        #[cfg(all(feature = "webview-spike", target_os = "macos"))]
+        self.follow_the_layout();
         let tree = self.render_node(&self.layout.root().clone(), window, cx);
         let notice = self.notice.clone();
         let root = div()

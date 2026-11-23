@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/core", "crates/cli", "crates/hook", "crates/app"]
+members = ["crates/core", "crates/cli", "crates/hook", "crates/app", "crates/webview-spike"]
 
 [workspace.package]
 version = "0.1.0"
@@ -11,6 +11,7 @@ repository = "https://github.com/JhonRiv21/lithemux"
 
 [workspace.dependencies]
 lithemux-core = { path = "crates/core", version = "0.1.0" }
+lithemux-webview-spike = { path = "crates/webview-spike", version = "0.1.0" }
 alacritty_terminal = "0.26"
 anyhow = "1"
 assert_cmd = "2"
@@ -34,6 +35,11 @@ tempfile = "3"
 thiserror = "2"
 toml = "1"
 uuid = { version = "1", features = ["v4"] }
+# PLAN §3.7 spike only: behind the app's `webview-spike` feature, off by default.
+objc2 = "=0.6.5"
+raw-window-handle = "0.6"
+objc2-web-kit = { version = "=0.3.2", default-features = false, features = ["std", "objc2-app-kit", "WKWebViewConfiguration", "WKPreferences", "WKWebsiteDataStore"] }
+wry = { version = "=0.57.2", default-features = false }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

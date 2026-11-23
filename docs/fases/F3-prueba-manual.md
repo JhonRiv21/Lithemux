@@ -202,3 +202,107 @@ scripts/accept-phase2
 Debe quedar por debajo del 1 %. En mis corridas del 3B dio 0,45–0,47 %. Guardar las líneas de comandos le suma alrededor de una décima de punto (ver el reporte).
 
 - [ ] PASA  - [ ] FALLA
+
+## Bloque 3C
+
+### 1. El panel sigue a la tarjeta (arrastrado del 3B)
+
+1. Abre en cmux, o en otra terminal con `lithemux open <cat>/<sesión>`, una sesión que lithemux también tenga.
+2. En la app, ábrela en el panel. La tarjeta y el panel dicen «open elsewhere (pid N)».
+3. Cierra ese `claude` externo. En unos 3 s, **la tarjeta y el panel** vuelven juntos a «hibernated» con el botón Open, sin pulsar nada.
+
+- [ ] PASA  - [ ] FALLA
+
+### 2. Un `claude_path` que no sirve (arrastrado del 3B)
+
+```sh
+lithemux config set claude_path /no/existe/claude
+lithemux doctor            # «FAIL claude  the claude_path setting is "/no/existe/claude", …»
+```
+
+1. En la app, abre una sesión de Claude:
+   - la tarjeta y el panel dicen «there is nothing at the claude path in Settings (/no/existe/claude); fix it, or leave it empty to use the claude of your PATH»;
+   - Ajustes muestra `/no/existe/claude` en el campo, con ese mismo texto debajo, en el color de aviso;
+   - no arranca ningún `claude`: `pgrep -fl claude` no muestra uno nuevo.
+2. `tail ~/Library/Application\ Support/lithemux/logs/app.log` tiene la línea «could not start … the claude_path setting is …».
+3. Repite con una carpeta (`lithemux config set claude_path /tmp`): el texto dice que es una carpeta, no un programa.
+4. `lithemux config unset claude_path` y vuelve a abrirla: arranca con el `claude` del PATH.
+
+- [ ] PASA  - [ ] FALLA
+
+### 3. Spike del navegador: teclado (criterio 4), a cargo de la planificadora y Jhon
+
+Build con el spike (no es la de release normal):
+
+```sh
+cd ~/Personal/lithemux
+cargo build --release -p lithemux-app --features webview-spike
+cd /tmp && python3 -m http.server 8765 --bind 127.0.0.1 &   # una página local cualquiera
+LITHEMUX_SPIKE_URL=http://127.0.0.1:8765/ ~/Personal/lithemux/target/release/lithemux-app
+```
+
+La pestaña se abre con el botón ◎ de la barra del panel, que con el spike está activo. Sin `LITHEMUX_SPIKE_URL` abre `about:blank`.
+
+Esa build reemplaza el `target/release/lithemux-app` normal. Al terminar, `cargo build --release -p lithemux-app` lo deja otra vez sin el spike (`otool -L target/release/lithemux-app | grep WebKit` no debe mostrar nada).
+
+1. Con una terminal abierta, pulsa ◎. Aparece la pestaña «Browser» y la página ocupa el panel.
+2. Clic en un campo de la página y escribe: el texto va a la página, no a la terminal.
+3. Con el foco en la página:
+   - `cmd+p`: se abre la paleta y la página se oculta mientras está abierta. Escribe: va a la paleta. Esc: la página vuelve y el teclado vuelve al campo.
+   - `cmd+alt+↓`: pasa a la sesión siguiente y la pestaña del navegador deja de estar elegida.
+   - De vuelta en la pestaña «Browser», `cmd+w` cierra la pestaña del navegador, no la terminal.
+   - `cmd+1` / `cmd+shift+→`: cambian de pestaña de sesión.
+4. Clic en la pestaña de la terminal, o en una terminal de otro panel: el teclado vuelve a la terminal.
+5. Con dos paneles, cada uno con su página: un clic dentro de la página del otro panel hace que ese panel sea el enfocado (el borde azul cambia de panel).
+6. **A verificar, sin probar todavía:** `cmd+c`, `cmd+v` y `cmd+a` dentro de un campo de la página. Según el código de `wry` 0.57, su vista hija devuelve «no» a los atajos con cmd para que lleguen al menú. Si el menú Edit de la app no los reenvía a la página, copiar y pegar dentro de ella no funcionará. Anotar qué pasa.
+
+- [ ] PASA  - [ ] FALLA
+
+### 4. Spike del navegador: latencia de tecleo (criterio 8), a cargo de la planificadora y Jhon
+
+La Fase 2 no midió la latencia de tecleo, así que no hay una cifra de antes. El método propuesto mide de la tecla al programa:
+- un programa envía 200 letras con `CGEvent` y anota la hora de cada una;
+- dentro de la terminal de lithemux, `r.py` anota la hora en que le llega cada byte;
+- los dos usan el reloj `CLOCK_UPTIME_RAW`.
+
+No incluye el dibujo en pantalla.
+
+Las herramientas están en el scratchpad de la ejecutora:
+- `keylat`: solo envía si el pid dado es la app al frente, lo comprueba antes de cada tecla, solo usa letras sin q/h/m/w y vacía los modificadores;
+- `latency.py` y `c3/work/r.py`.
+
+El scratchpad se borra al reiniciar el Mac. Si ya no están, se piden de nuevo a la ejecutora antes de la prueba.
+
+Se corren tres veces:
+1. **Release sin el spike** (`cargo build --release`), una terminal a la vista.
+2. **Release con el spike, sin abrir ninguna página.**
+3. **Release con el spike y una página abierta** en otro panel (`cmd+d`, ◎ en el panel nuevo), con el foco de vuelta en la terminal.
+
+En cada una:
+1. En la terminal de lithemux: `cd` a la carpeta de `r.py` y `python3 r.py 200 a.txt`. Queda esperando, sin eco.
+2. **Sin tocar el teclado ni el ratón**, desde otra terminal (cmux) y con lithemux al frente:
+
+   ```sh
+   S=/private/tmp/claude-502/-Users-jhonrivero/e03700c2-ffcb-4df3-a4d9-c7a89b646eac/scratchpad
+   sleep 5; $S/keylat 200 50 /tmp/sent.txt <pid de lithemux-app>
+   ```
+
+   En esos 5 s, haz clic en la terminal de lithemux. Si lithemux no está al frente, `keylat` no envía nada.
+3. Cuando `r.py` diga «done 200»: `python3 $S/latency.py /tmp/sent.txt <carpeta de r.py>/a.txt`, que da la mediana, el p95 y el máximo en ms.
+
+**Pasa** si la mediana y el p95 de 2 y 3 están dentro de ±1 ms de los de 1.
+
+- [ ] PASA  - [ ] FALLA
+
+### 5. Spike del navegador: ninguna página fuera de un panel (ronda de correcciones), a cargo de la planificadora y Jhon
+
+Con la build del spike del paso 3:
+
+1. Divide (`cmd+d`). En el panel nuevo, abre una sesión de prueba que sea la única de ese panel, y pulsa ◎.
+2. Desde otra terminal, borra esa sesión: `lithemux rm <cat>/<sesión>`.
+   - El panel desaparece y **su página con él**: no queda ninguna página encima del otro panel.
+   - Un clic en el panel que queda llega a su terminal.
+3. Divide otra vez: el panel nuevo está vacío, sin la página de antes.
+
+- [ ] PASA  - [ ] FALLA
+

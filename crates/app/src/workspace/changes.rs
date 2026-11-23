@@ -104,6 +104,10 @@ impl Workspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        #[cfg(all(feature = "webview-spike", target_os = "macos"))]
+        if let Some(pane) = self.layout.pane_of(session_id) {
+            self.browsers.choose(pane, false);
+        }
         self.layout.select_tab(session_id);
         self.changed(window, cx);
     }

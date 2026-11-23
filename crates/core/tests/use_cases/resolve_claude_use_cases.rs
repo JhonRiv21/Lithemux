@@ -1,7 +1,9 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use lithemux_core::modules::launch::{LaunchError, ShellMode, inspect_claude, resolve_claude};
+use lithemux_core::modules::launch::{
+    ClaudePathProblem, LaunchError, ShellMode, inspect_claude, resolve_claude,
+};
 use lithemux_core::modules::settings::{SettingKey, write_setting};
 
 use crate::support::fake_shell_probe::FakeShellProbe;
@@ -29,9 +31,76 @@ fn claude_path_wins_and_the_shell_is_not_even_asked() {
     assert!(probe.calls.borrow().is_empty());
 }
 
-// PLAN §0.3 order, step 1: "si está definido y es ejecutable"
+/// What `resolve_claude` refuses for a `claude_path`, with a `claude` on
+/// the PATH it could have run instead.
+fn refused_with(value: &str, probe: FakeShellProbe) -> (String, ClaudePathProblem) {
+    let store = InMemoryStore::new();
+    write_setting(&store, SettingKey::ClaudePath, value).unwrap();
+    let probe = probe
+        .executable(NATIVE)
+        .answers(ShellMode::LoginInteractive, LOCATE, NATIVE);
+
+    let refused = resolve_claude(&store, &probe);
+
+    assert!(probe.calls.borrow().is_empty(), "the shell was asked");
+    match refused {
+        Err(LaunchError::ClaudePathUnusable { value, problem }) => (value, problem),
+        other => panic!("{other:?}"),
+    }
+}
+
+// PLAN §3.7, carried over from 3B: an unusable claude_path says why and
+// never runs another `claude` in its place.
 #[test]
-fn a_claude_path_that_is_not_executable_falls_back_to_the_path_with_a_warning() {
+fn a_claude_path_where_nothing_is_says_so_and_no_other_claude_is_looked_for() {
+    let refused = refused_with("/gone/claude", FakeShellProbe::new());
+
+    assert_eq!(
+        refused,
+        ("/gone/claude".to_string(), ClaudePathProblem::Missing)
+    );
+}
+
+// PLAN §3.7, carried over from 3B (ronda 3C): settings are stored without
+// JSON quotes, so a quoted path is not the path it quotes, even when that
+// one runs.
+#[test]
+fn a_claude_path_stored_with_quotes_says_it_has_quotes() {
+    let probe = FakeShellProbe::new()
+        .executable("/custom/claude")
+        .executable("\"/custom/claude\"");
+
+    let refused = refused_with("\"/custom/claude\"", probe);
+
+    assert_eq!(refused.1, ClaudePathProblem::Quoted);
+}
+
+// ronda 3C: a folder is not a program.
+#[test]
+fn a_claude_path_to_a_folder_says_it_is_a_folder() {
+    let refused = refused_with(
+        "/opt/claude",
+        FakeShellProbe::new().directory("/opt/claude"),
+    );
+
+    assert_eq!(refused.1, ClaudePathProblem::Directory);
+}
+
+// ronda 3C: a file that cannot run.
+#[test]
+fn a_claude_path_to_a_file_that_cannot_run_says_so() {
+    let refused = refused_with(
+        "/opt/claude",
+        FakeShellProbe::new().plain_file("/opt/claude"),
+    );
+
+    assert_eq!(refused.1, ClaudePathProblem::NotExecutable);
+}
+
+// PLAN §3.7, carried over from 3B: doctor tells the same, and does not
+// show another `claude` as the one a launch would use.
+#[test]
+fn doctor_reports_an_unusable_claude_path_and_chooses_nothing() {
     let store = InMemoryStore::new();
     write_setting(&store, SettingKey::ClaudePath, "/gone/claude").unwrap();
     let probe = FakeShellProbe::new().executable(NATIVE).answers(
@@ -40,10 +109,13 @@ fn a_claude_path_that_is_not_executable_falls_back_to_the_path_with_a_warning() 
         NATIVE,
     );
 
-    let resolved = resolve_claude(&store, &probe).unwrap();
+    let inspection = inspect_claude(&store, &probe);
 
-    assert_eq!(resolved.path, PathBuf::from(NATIVE));
-    assert!(resolved.warning.unwrap().contains("/gone/claude"));
+    assert!(matches!(
+        inspection.chosen,
+        Err(LaunchError::ClaudePathUnusable { .. })
+    ));
+    assert!(inspection.installations.iter().all(|found| !found.chosen));
 }
 
 // PLAN §0.3 order, step 2

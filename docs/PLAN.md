@@ -544,6 +544,18 @@ Pendiente de la Fase 2: el criterio 4 (reiniciar el Mac). Lo hace Jhon cuando le
   - En gpui no hay vista web: habría que incrustar un `WKWebView` nativo en la ventana, y Zed no lo hace. Spike de máximo 2 días.
   - Si no es viable, se queda con abrir el navegador por defecto desde los puertos de la §2.2.
   - Lo que navegue el usuario es tráfico suyo; la app sigue sin conexiones propias.
+  - *Criterios del spike (22-nov-2026).* El código vive tras un feature de cargo `webview-spike`, apagado por defecto y fuera del binario de release. Es **GO** solo si se cumplen todos:
+    1. una pestaña de navegador ocupa exactamente el área de su panel y la sigue al redimensionar la ventana, arrastrar divisores, dividir, cerrar paneles y mover la ventana entre pantallas con distinta escala;
+    2. se oculta cuando su pestaña o su panel no están a la vista y reaparece sin recargar la página;
+    3. **los elementos de gpui que se dibujan encima** (paleta cmd+p, menús contextuales, diálogos, arrastre de pestañas) no quedan tapados por la vista nativa, o hay una salida aceptable y medida (ocultar la vista mientras haya algo encima);
+    4. el teclado va a la web cuando tiene el foco y los atajos de la app (cmd+p, cmd+alt+↑/↓, cmd+w, cambio de pestaña) siguen funcionando; el foco vuelve a la terminal con clic o atajo;
+    5. **cero red propia**: sin aviso de sitios fraudulentos (Safe Browsing) ni ninguna otra llamada de WebKit que el usuario no haya pedido, comprobado con un registro de conexiones (`nettop` o `lsof -i`) en una página `about:blank` durante 2 min;
+    6. el costo se mide: footprint de la app y de los procesos `WebContent`/`Networking` con una pestaña abierta en `localhost` y tras cerrarla; los procesos de WebKit cuentan en el medidor de la §3.3 o se explica por qué no;
+    7. las dependencias nuevas pasan `cargo-deny` y no exigen Xcode completo;
+    8. no rompe la terminal: CPU en reposo y latencia de tecleo iguales a las de antes, medidas como en la Fase 2.
+
+    Si alguno falla y no tiene arreglo dentro de los 2 días, es **NO-GO**: se borra el código del spike y queda el reporte con lo medido. En ambos casos **se detiene y reporta**. Si es GO, la pestaña completa (botón del globo, barra de dirección, atrás/adelante/recargar, abrir desde los puertos, guardar la URL en la disposición) se planifica como un bloque aparte.
+- **Arrastrados del 3B, al inicio del 3C:** el panel conserva «open elsewhere (pid N)» después de que la tarjeta ya volvió a hibernada, hasta pulsar Abrir; un `claude_path` inválido en Ajustes cae en silencio al `claude` del PATH, y debe avisar en vez de lanzar otro binario.
 - **3.6** Panic hook que escribe en `<home>/logs/app.log` (rotado), sin enviar nada. Smoke test automatizado del ciclo: crear sesión → abrir → hibernar → reanudar.
 - **Cierre:** checklist de CI, reporte de la fase, **detente y reporta.**
 
@@ -600,7 +612,7 @@ Pendiente de la Fase 2: el criterio 4 (reiniciar el Mac). Lo hace Jhon cuando le
 
 ## Checklist de cierre de cada fase
 
-1. `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test`, `cargo build --release` y `cargo deny check` en verde.
+1. `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test`, `cargo build --release` y `cargo deny check` en verde. Mientras exista el feature `webview-spike`, Clippy y los tests se corren también con `--features lithemux-app/webview-spike`.
 2. `docs/fases/F<N>-reporte.md` con:
    - qué se hizo, por subfase;
    - qué quedó fuera y por qué;

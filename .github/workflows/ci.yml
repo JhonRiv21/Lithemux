@@ -33,6 +33,12 @@ jobs:
         run: cargo clippy --all-targets -- -D warnings
       - name: Test
         run: cargo test
+      # The browser spike (PLAN §3.7) is off by default: without these two
+      # steps it could break and nobody would see it.
+      - name: Clippy with the browser spike
+        run: cargo clippy --all-targets --features lithemux-app/webview-spike -- -D warnings
+      - name: Test with the browser spike
+        run: cargo test --features lithemux-app/webview-spike
       - name: Build release
         run: cargo build --release
       - name: cargo-deny

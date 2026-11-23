@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use lithemux_core::modules::category::{CategoryError, InvalidSlug};
-use lithemux_core::modules::launch::LaunchError;
+use lithemux_core::modules::launch::{ClaudePathProblem, LaunchError};
 use lithemux_core::modules::session::SessionError;
 use lithemux_core::modules::workspace::WorkspaceError;
 
@@ -18,7 +18,7 @@ fn every_problem() -> Vec<Message> {
         name: "demo-api".into(),
         owner: "demo/api".into(),
     };
-    vec![
+    let mut problems: Vec<Message> = vec![
         (&SidebarError::UnusableName("¡¡".into())).into(),
         (&SidebarError::Gone).into(),
         (&SidebarError::Session(coordinator)).into(),
@@ -33,12 +33,30 @@ fn every_problem() -> Vec<Message> {
         (&Failure::MissingFolder("/gone".into())).into(),
         (&Failure::HookMissing("/app/lithemux-hook".into())).into(),
         (&Failure::CouldNotStart("/bin/claude".into())).into(),
+    ];
+    let unusable = [
+        ClaudePathProblem::Quoted,
+        ClaudePathProblem::NotAbsolute,
+        ClaudePathProblem::Missing,
+        ClaudePathProblem::Directory,
+        ClaudePathProblem::NotExecutable,
+    ]
+    .map(|problem| {
+        let failure = Failure::ClaudePathUnusable {
+            value: "/opt/claude".into(),
+            problem,
+        };
+        Message::from(&failure)
+    });
+    problems.extend([
         (&Failure::Other("disk full".into())).into(),
         (&HostError::Launch(LaunchError::AlreadyOpen { pid: Some(7) })).into(),
         (&HostError::Session(SessionError::NotFound("demo/x".into()))).into(),
         (&WorkspaceError::TooManyPanes).into(),
         (&WorkspaceError::UnknownPane(9)).into(),
-    ]
+    ]);
+    problems.extend(unusable);
+    problems
 }
 
 // Audit of block 3 (7), PLAN §2.6: what goes wrong is said with a text of

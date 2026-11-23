@@ -6,6 +6,7 @@ use crate::modules::launch::application::shell_budget::ShellBudget;
 use crate::modules::launch::domain::claude_candidates::{
     candidate_paths, is_called_claude, is_injected_wrapper,
 };
+use crate::modules::launch::domain::claude_path_policy::claude_path_problem;
 use crate::modules::launch::error::LaunchError;
 use crate::modules::launch::ports::shell_probe::{ShellMode, ShellProbe};
 use crate::modules::settings::{SettingKey, SettingsRepository, read_setting, write_setting};
@@ -18,7 +19,8 @@ const LOCATE_SCRIPT: &str = "command -v claude";
 /// Finds the `claude` to run. Resolved on every launch and never cached, so
 /// an auto-updated `claude` is always the one that runs.
 ///
-/// 1. The `claude_path` setting, when it points to an executable.
+/// 1. The `claude_path` setting, when it is set: if it does not run, the
+///    launch fails and nothing else is looked for.
 /// 2. The interactive login shell, which sees the PATH the user works with.
 /// 3. The `claude` step 2 found last time, when that shell does not answer:
 ///    the plain login shell may find an older install.
@@ -40,13 +42,7 @@ pub(super) fn resolve_claude_within(
 ) -> Result<ResolvedClaude, LaunchError> {
     let mut warnings = Vec::new();
     if let Some(fixed) = read_setting(settings, SettingKey::ClaudePath)? {
-        let path = PathBuf::from(&fixed);
-        if probe.is_executable(&path) {
-            return Ok(resolved(path, warnings));
-        }
-        warnings.push(format!(
-            "the claude_path setting points to {fixed}, which is not an executable; looking in the PATH instead"
-        ));
+        return fixed_claude(probe, fixed);
     }
     if let Some(path) = locate(probe, budget, ShellMode::LoginInteractive) {
         remember(settings, &path);
@@ -71,6 +67,19 @@ pub(super) fn resolve_claude_within(
             .to_string(),
     );
     Ok(resolved(path, warnings))
+}
+
+/// The user chose this one: it runs, or nothing does. Another `claude` in
+/// its place would be a program the user did not choose. A stored
+/// `"/path"` (with quotes) is not taken for `/path`.
+fn fixed_claude(probe: &dyn ShellProbe, fixed: String) -> Result<ResolvedClaude, LaunchError> {
+    match claude_path_problem(&fixed, |path| probe.path_kind(path)) {
+        None => Ok(resolved(PathBuf::from(fixed), Vec::new())),
+        Some(problem) => Err(LaunchError::ClaudePathUnusable {
+            value: fixed,
+            problem,
+        }),
+    }
 }
 
 fn resolved(path: PathBuf, warnings: Vec<String>) -> ResolvedClaude {

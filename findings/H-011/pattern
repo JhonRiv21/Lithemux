@@ -1,0 +1,1 @@
+"[^"]*claude_path[^"]*(instead|looking in the PATH|falls?[[:space:]]+back|falling[[:space:]]+back)

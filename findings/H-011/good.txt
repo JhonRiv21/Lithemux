@@ -1,0 +1,1 @@
+        "the claude_path setting is {0:?}, which is not an executable; fix it or unset it (no other claude is run in its place)"

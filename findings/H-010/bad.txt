@@ -1,0 +1,1 @@
+                status_of(live.host.phase(session_id), session.state, session.profile)

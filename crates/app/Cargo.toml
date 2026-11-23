@@ -34,6 +34,14 @@ signal-hook.workspace = true
 thiserror.workspace = true
 toml.workspace = true
 
+# PLAN §3.7: the embedded browser spike. Off by default, never in a release
+# build; `cargo run -p lithemux-app --features webview-spike` turns it on.
+[features]
+webview-spike = ["dep:lithemux-webview-spike"]
+
+[target.'cfg(target_os = "macos")'.dependencies]
+lithemux-webview-spike = { workspace = true, optional = true }
+
 [dev-dependencies]
 async-channel.workspace = true
 lithemux-core.workspace = true

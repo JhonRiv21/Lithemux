@@ -1,4 +1,5 @@
 mod claude_candidates_test;
+mod claude_path_policy_test;
 mod claude_plan_test;
 mod claude_update_test;
 mod claude_version_test;

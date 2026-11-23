@@ -14,6 +14,11 @@ pub struct Layout {
     pub(super) root: Node,
     pub(super) panes: Vec<Pane>,
     pub(super) active_pane: u32,
+    /// The highest id this layout has given. A closed pane's id is never
+    /// given again, so what the app keeps by pane cannot pass to a new one.
+    /// A layout saved before it existed starts from the ids it has.
+    #[serde(default)]
+    pub(super) last_id: u32,
 }
 
 impl Layout {
@@ -22,6 +27,7 @@ impl Layout {
             root: Node::Pane(1),
             panes: vec![Pane::empty(1)],
             active_pane: 1,
+            last_id: 1,
         }
     }
 
@@ -66,7 +72,8 @@ impl Layout {
 
     fn next_id(&self) -> u32 {
         let panes = self.panes.iter().map(|pane| pane.id);
-        panes.chain(self.root.split_ids()).max().unwrap_or(0) + 1
+        let in_use = panes.chain(self.root.split_ids()).max().unwrap_or(0);
+        in_use.max(self.last_id) + 1
     }
 
     /// Shows the session: in the tab it already has, or in a new one of the
@@ -94,6 +101,7 @@ impl Layout {
         }
         let split_id = self.next_id();
         let added = split_id + 1;
+        self.last_id = added;
         self.root.split_pane(pane, axis, split_id, added);
         self.panes.push(Pane::empty(added));
         self.active_pane = added;

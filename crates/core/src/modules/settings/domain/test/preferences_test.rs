@@ -63,8 +63,18 @@ fn a_value_stored_wrong_counts_as_unset() {
         (SettingKey::MemoryValve, "maybe"),
         (SettingKey::Scrollback, "-1"),
         (SettingKey::FontSize, "900"),
-        (SettingKey::ClaudePath, "claude"),
         (SettingKey::Theme, "neon"),
     ]);
     assert_eq!(preferences, Preferences::default());
+}
+
+// ronda 3C: a claude_path that cannot be used is not hidden. Settings shows
+// it as stored, so that the user sees what to fix; the launch refuses it
+// and says why.
+#[test]
+fn a_claude_path_stored_wrong_is_shown_as_stored() {
+    for stored in ["\"/opt/claude\"", "claude"] {
+        let preferences = from(&[(SettingKey::ClaudePath, stored)]);
+        assert_eq!(preferences.claude_path.as_deref(), Some(stored));
+    }
 }

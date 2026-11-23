@@ -46,7 +46,7 @@ impl Live {
             loop {
                 cx.background_executor().timer(REFRESH_EVERY).await;
                 let Ok(running) = live.update(cx, |live, cx| {
-                    if live.reload(cx) | live.check_the_update() {
+                    if live.reload(cx) | live.check_the_update() | live.see_the_holders_go() {
                         cx.notify();
                     }
                     live.host.running_programs()

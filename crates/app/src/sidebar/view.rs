@@ -105,6 +105,10 @@ impl Sidebar {
         self.open_menu(card_menu(card), point(px(x), px(y)), window, cx);
     }
 
+    pub fn has_menu_open(&self) -> bool {
+        self.menu.is_some()
+    }
+
     /// Closes the menu and gives the keyboard back to what is on show.
     pub(super) fn close_menu(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.menu = None;

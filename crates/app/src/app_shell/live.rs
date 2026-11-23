@@ -16,7 +16,7 @@ use lithemux_core::platform::paths::home::Home;
 use lithemux_core::platform::process::liveness::is_alive;
 use lithemux_core::platform::store::connection::Db;
 
-use super::elsewhere::shown_phase;
+use super::elsewhere::{ended_holders, shown_phase};
 use crate::i18n::{Language, Texts};
 use crate::notifications::policy::SoundGate;
 use crate::session_host::{HostError, Phase, SessionHost};
@@ -53,6 +53,8 @@ pub struct Live {
     pub(crate) memory: HashMap<String, u64>,
     /// The sessions whose conversation another process runs, with it.
     pub(super) elsewhere: HashMap<String, u32>,
+    /// The holders of the host's «open elsewhere» seen gone, by session.
+    pub(super) ended_holders: HashMap<String, u32>,
     /// The last thing that went wrong, for the sidebar to show.
     pub notice: Option<String>,
     _refresh: Task<()>,
@@ -94,6 +96,7 @@ impl Live {
             ports: HashMap::new(),
             memory: HashMap::new(),
             elsewhere: HashMap::new(),
+            ended_holders: HashMap::new(),
             notice: None,
             _refresh: refresh,
         };
@@ -194,10 +197,29 @@ impl Live {
     pub fn shown_phase(&self, session_id: &str) -> Option<Phase> {
         let host = self.host.phase(session_id);
         let holder_runs = match host {
-            Some(Phase::OpenElsewhere { pid: Some(pid) }) => is_alive(*pid),
+            Some(Phase::OpenElsewhere { pid: Some(pid) }) => {
+                self.ended_holders.get(session_id) != Some(pid)
+            }
             _ => false,
         };
         shown_phase(host, self.elsewhere.get(session_id).copied(), holder_runs)
+    }
+
+    /// Looks, on each refresh, whether the holders of the host's «open
+    /// elsewhere» still run. Returns whether one was seen gone.
+    pub(super) fn see_the_holders_go(&mut self) -> bool {
+        let holders: Vec<(String, u32)> = self
+            .sessions
+            .iter()
+            .filter_map(|session| match self.host.phase(&session.id) {
+                Some(Phase::OpenElsewhere { pid: Some(pid) }) => Some((session.id.clone(), *pid)),
+                _ => None,
+            })
+            .collect();
+        let ended = ended_holders(&self.ended_holders, &holders, &is_alive);
+        let changed = ended != self.ended_holders;
+        self.ended_holders = ended;
+        changed
     }
 
     pub fn sessions(&self) -> &[Session] {

@@ -4,9 +4,10 @@ use gpui::{
     AnyElement, Context, ElementId, Entity, Focusable, IntoElement, Render, Window, div,
     prelude::*, px, rgb,
 };
+use lithemux_core::modules::launch::path_kind_on_disk;
 use lithemux_core::modules::settings::{Preferences, SettingKey};
 
-use super::form::{Choice, Input, Row, rows, value_of};
+use super::form::{Choice, Input, Row, rows, value_of, warning_of};
 use crate::app_shell::live::Live;
 use crate::app_shell::title_bar::title_bar;
 use crate::i18n::Texts;
@@ -101,7 +102,13 @@ impl SettingsWindow {
         field.update(cx, |field, cx| field.set_text(&shown, cx));
     }
 
-    fn render_row(&self, row: &Row, current: &str, cx: &mut Context<Self>) -> AnyElement {
+    fn render_row(
+        &self,
+        row: &Row,
+        current: &str,
+        warning: Option<String>,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let colors = theme::colors();
         let input = match &row.input {
             Input::Choices(choices) => self.render_choices(row.key, choices, current, cx),
@@ -133,7 +140,13 @@ impl SettingsWindow {
                             .text_xs()
                             .text_color(rgb(colors.text_muted))
                             .child(self.texts.get(row.hint)),
-                    ),
+                    )
+                    .children(warning.map(|warning| {
+                        div()
+                            .text_xs()
+                            .text_color(rgb(colors.attention))
+                            .child(warning)
+                    })),
             )
             .child(input)
             .into_any_element()
@@ -203,7 +216,9 @@ impl Render for SettingsWindow {
             .overflow_y_scroll();
         for row in rows() {
             let current = value_of(&preferences, row.key);
-            list = list.child(self.render_row(&row, &current, cx));
+            let warning = warning_of(&preferences, row.key, path_kind_on_disk)
+                .map(|warning| self.texts.say(&warning));
+            list = list.child(self.render_row(&row, &current, warning, cx));
         }
         div()
             .flex()

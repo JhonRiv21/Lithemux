@@ -1,5 +1,6 @@
 pub mod child_env;
 pub mod claude_candidates;
+pub mod claude_path_policy;
 pub mod claude_plan;
 pub mod claude_update;
 pub mod claude_version;

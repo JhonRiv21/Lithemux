@@ -94,6 +94,11 @@ pub(super) fn handle(root: Div, cx: &mut Context<Workspace>) -> Div {
             this.split(this.layout.active_pane().id, Axis::Vertical, window, cx);
         }))
         .on_action(cx.listener(|this, _: &CloseTab, window, cx| {
+            #[cfg(all(feature = "webview-spike", target_os = "macos"))]
+            if this.shows_browser(this.layout.active_pane().id) {
+                this.close_browser(this.layout.active_pane().id, window, cx);
+                return;
+            }
             if let Some(session) = this.session_in_focus().map(str::to_string) {
                 this.close_tab(&session, window, cx);
             }

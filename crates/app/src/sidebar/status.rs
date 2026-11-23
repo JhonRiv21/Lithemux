@@ -1,7 +1,7 @@
 //! What a card says about its session: where the host has it and, when it
 //! runs, what Claude last reported.
 
-use lithemux_core::modules::session::{Profile, State};
+use lithemux_core::modules::session::{Profile, Session, State};
 
 use crate::session_host::{Failure, Phase};
 
@@ -42,6 +42,13 @@ impl Status {
                 | Status::Running
         )
     }
+}
+
+/// What a session shows, on its card and on its tab in a panel. One
+/// function for both, fed with the same phases (`Live::shown_phase`), so
+/// that they always say the same (ronda 3C).
+pub fn session_status(phases: &dyn Fn(&str) -> Option<Phase>, session: &Session) -> Status {
+    status_of(phases(&session.id).as_ref(), session.state, session.profile)
 }
 
 pub fn status_of(phase: Option<&Phase>, state: State, profile: Profile) -> Status {

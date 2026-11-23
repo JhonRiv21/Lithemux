@@ -499,3 +499,232 @@ Corrida después del último cambio:
 
 - Repetir con el archivo real los pasos 1 a 3 del bloque 3B, en especial `cat add trabajo --root ~` + `--into trabajo`: la sesión de `memory` debe quedar en su categoría nueva.
 - La migración 6 sobre la base real: la abre la app nueva. Ya comprobé, solo leyendo, que no tiene conversaciones compartidas.
+
+## Bloque 3C · Arrastrados del 3B y spike del navegador (§3.7)
+
+*2026-11-22. Decisiones D-63 a D-66. Hallazgos nuevos: H-010 y H-011. Sin commit: todo queda en stage.*
+
+### Parte 1: arrastrados del 3B
+
+| Qué | Cómo |
+|---|---|
+| El panel conservaba «open elsewhere (pid N)» después de que la tarjeta volvía a hibernada | el panel toma la fase de `live.shown_phase`, la misma que la tarjeta, en vez de la del host (`tab_view.rs`). Regla **H-010**: `status_of(host.phase(…))` en la app |
+| Un `claude_path` inválido caía en silencio al `claude` del PATH | si `claude_path` está definido, es el único candidato. Si no pasa `checked_value` (un valor con comillas JSON no pasa) o no es ejecutable, `LaunchError::ClaudePathUnusable` y no se consulta ningún shell. Se ve en la tarjeta, el panel, `app.log` y `doctor` (D-63). Regla **H-011**: un texto de `src/` que hable de caer de `claude_path` a otra cosa |
+
+**Pruebas que vi fallar antes del arreglo:**
+
+- `a_claude_path_that_is_not_executable_is_an_error_and_no_other_claude_is_looked_for`;
+- `a_claude_path_stored_with_quotes_is_an_error_not_a_fallback`;
+- `doctor_reports_an_unusable_claude_path_and_chooses_nothing`;
+- `session_host_claude_path_test`, en sus dos variantes (ruta que no existe y ruta con comillas). Usa un shell falso que sí encuentra un `claude` en su PATH: antes del arreglo la sesión quedaba `Running` con ese otro binario.
+- H-010 y H-011 marcan su `bad.txt` y dejan pasar su `good.txt`. H-010 marca la línea vieja de `tab_view.rs` (`status_of(live.host.phase(session_id), …)`, tomada con `git show HEAD:`).
+
+**No la vi fallar:** la del panel que sigue a la tarjeta es de vista; la cubre H-010 y el paso 1 de la prueba manual del 3C.
+
+### Parte 2: spike del navegador
+
+**Build con el spike** (no es la de release normal, que no enlaza WebKit):
+
+```sh
+cargo build --release -p lithemux-app --features webview-spike
+```
+
+- Reemplaza el `target/release/lithemux-app` normal. `cargo build --release -p lithemux-app` lo deja otra vez sin el spike.
+- La pestaña se abre con el botón ◎ de la barra de cada panel. `LITHEMUX_SPIKE_URL` elige la página (por defecto `about:blank`); `LITHEMUX_SPIKE_FRAUD_WARNING=on` enciende el aviso de sitios fraudulentos, solo para medirlo.
+- Para medir sin teclado: `LITHEMUX_SPIKE_OPEN=1` abre una página al arrancar, `LITHEMUX_SPIKE_CLOSE_AFTER=<s>` la cierra y `LITHEMUX_SPIKE_QUIT_AFTER=<s>` cierra la app.
+- Tamaño: 9,67 MiB sin el spike, 9,86 MiB con él.
+
+**Diseño** (D-64): `wry` 0.57.2 crea el `WKWebView` como subvista del NSView de gpui, que gpui da por `HasWindowHandle`. El único `unsafe` está en `crates/webview-spike/src/configuration.rs`, que apaga el aviso de sitios fraudulentos y elige el almacén en memoria. El crate tiene `unsafe_code = "deny"` y H-002 se amplió con esa ruta exacta. **Lo que guarda la página** (D-65): todo en memoria (`nonPersistentDataStore`); nada en disco.
+
+#### Criterios
+
+| # | Criterio | Resultado | Cómo se comprobó |
+|---|---|---|---|
+| 1 | Ocupa el área de su panel y la sigue | **cumple, salvo el cambio de escala, que no se pudo probar** | capturas: dividir, arrastrar el divisor, redimensionar la ventana y cerrar paneles; la página sigue el área exacta y no queda vista fantasma. Solo hay una pantalla (Retina), así que mover la ventana a otra escala no se probó. La posición va en píxeles lógicos, que es lo que AppKit escala, pero no lo afirmo sin verlo |
+| 2 | Se oculta y reaparece sin recargar | **cumple** | capturas, antes del incidente: lo escrito en un campo de la página sigue allí después de pasar a la terminal y volver a la pestaña |
+| 3 | Lo de gpui que va encima no queda tapado | **cumple con salida** | la página se oculta mientras están abiertos la paleta, el menú contextual o un arrastre de pestaña, y vuelve al cerrarlos. La ventana principal no tiene diálogos sobre los paneles: los formularios de la barra lateral van dentro de la lista, y la importación y Ajustes son ventanas aparte. **Límite:** los tooltips de gpui que caen sobre el área de la página quedan debajo |
+| 4 | Teclado y atajos | **pendiente: lo prueban la planificadora y Jhon** | antes del incidente vi, con lithemux al frente: la escritura va a la página; `cmd+p`, `cmd+alt+↓` y `cmd+w` funcionan con la página enfocada; un clic en la terminal le devuelve el teclado; un clic en la página enfoca su panel. Falta repetirlo a mano y probar `cmd+c/v/a` dentro de la página. Pasos: `F3-prueba-manual.md`, Bloque 3C, paso 3 |
+| 5 | Cero red propia | **cumple, con el aviso de sitios fraudulentos apagado** | ver «Red», abajo. Con el aviso encendido, un servicio del sistema habla con Apple: el apagado (el `unsafe` de `configuration.rs`) es necesario |
+| 6 | Costo medido; WebKit en el medidor de la §3.3 o por qué no | **cumple (medido y explicado)** | ver «Memoria y CPU», abajo |
+| 7 | `cargo-deny` y sin Xcode completo | **cumple** | `cargo deny check` (con `all-features = true` en `deny.toml`, así que revisa `wry` y `objc2-web-kit`): advisories, bans, licenses y sources ok. La guarda de clientes HTTP y telemetría de `single_source_guards` pasa con el `Cargo.lock` nuevo. Compila con las Command Line Tools (`xcode-select -p` = `/Library/Developer/CommandLineTools`; no hay `Xcode.app`) |
+| 8 | No rompe la terminal | **CPU en reposo: cumple. Latencia de tecleo: pendiente, la miden la planificadora y Jhon** | ver «Memoria y CPU». La Fase 2 no midió la latencia de tecleo (no está en su reporte), así que no hay cifra de antes: hay que medir las tres variantes el mismo día. Pasos: `F3-prueba-manual.md`, Bloque 3C, paso 4 |
+
+#### Red (criterio 5)
+
+`measure.sh`, en el scratchpad: lanza la app del spike en un `LITHEMUX_HOME` desechable con una página abierta, sin teclado ni ratón. Durante 2 min toma 24 muestras de `lsof -i` sobre la app y los procesos de WebKit que nacieron con ella (GPU, Networking y WebContent), y al final `nettop`.
+
+| Aviso de sitios fraudulentos | Página | Sockets de internet (app + su WebKit) | Servicio Safe Browsing del sistema |
+|---|---|---|---|
+| apagado | `about:blank` | 0 de 24 muestras | no arranca |
+| apagado | localhost | 0 de 24 | no arranca |
+| encendido | `about:blank` | 0 de 24 | no arranca |
+| encendido | localhost | 0 de 24 | **arranca y conecta con `17.253.13.148:443` (Apple)** en 5 de 24 muestras |
+
+- El servicio de Safe Browsing es del sistema y lo comparte Safari: no es un proceso de la app ni lanzado por ella, pero arranca porque la página navegó con el aviso encendido. Se cuenta aparte.
+- Con localhost, el registro del servidor local muestra solo los GET de la página.
+- En las cuatro variantes, los procesos de WebKit terminan al salir la app.
+- **Disco:** tras las corridas no hay nada de la app en `~/Library/WebKit`, `~/Library/Caches`, `~/Library/HTTPStorages` ni `~/Library/Containers` (D-65).
+
+#### Memoria y CPU (criterios 6 y 8)
+
+`mem.sh`, en el scratchpad: la app del spike en release, en un `LITHEMUX_HOME` vacío (sin sesiones), sin teclado ni ratón. CPU de 15 a 75 s después de arrancar; footprint con `footprint`.
+
+| | App | WebKit GPU | WebKit Networking | WebKit WebContent | Total |
+|---|---|---|---|---|---|
+| Sin página: CPU en reposo | 0,13 % | — | — | — | 0,13 % |
+| Sin página: footprint | 61 MB | — | — | — | 61 MB |
+| Con una página en localhost: CPU en reposo | 0,13 % | 0,00 % | 0,02 % | 0,03 % | 0,18 % |
+| Con una página en localhost: footprint | 66 MB | 12 MB | 6 MB | 24 MB | 108 MB |
+| 20 s después de cerrar la página: footprint | 67 MB | 12 MB | 6 MB | 11 MB | 96 MB |
+
+- **La página cuesta unos 47 MB:** 5 MB en la app y 42 MB en los tres procesos de WebKit.
+- **Al cerrar la página, los procesos de WebKit siguen vivos** y WebContent baja a 11 MB. Terminan al salir la app (comprobado en las cuatro corridas de red). Si la pestaña completa sale adelante, conviene ver si soltar la última página puede soltarlos también.
+- Con 20 sesiones y dos a la vista, como en la Fase 2, la tabla siguiente.
+
+`scripts/accept-phase2` (20 sesiones, dos a la vista, sin página abierta), con el binario de release normal y con el del spike copiado en `target/release`, en orden normal, spike, spike, normal. Al final volvió el normal (idéntico byte a byte a la copia previa, sin WebKit en `otool -L`):
+
+| Corrida | Build | CPU en reposo (60 s) | Footprint | Pico | Programas vivos al salir |
+|---|---|---|---|---|---|
+| 1 | normal | 0,20 s (0,33 %) | 107 MB | 149 MB | 0 de 2 |
+| 2 | spike | 0,22 s (0,37 %) | 111 MB | 148 MB | 0 de 2 |
+| 3 | spike | 0,22 s (0,37 %) | 104 MB | 147 MB | 0 de 2 |
+| 4 | normal | 0,21 s (0,35 %) | 107 MB | 149 MB | 0 de 2 |
+
+La diferencia de CPU es de 0,01 a 0,02 s en 60 s, del orden de la resolución de `ps` (0,01 s): **igual dentro de lo que se puede medir así.** La memoria no cambia. Con una página abierta, la CPU de la app tampoco cambia (0,13 % con y sin página en `mem.sh`).
+
+**Por qué los procesos de WebKit no cuentan en el medidor de la §3.3:** el medidor suma el árbol de procesos de cada sesión, y su total el de la app. Los procesos de WebKit no son hijos de la app: los lanza `launchd` como servicios XPC (su padre es el pid 1). Para atribuírselos a la app habría que preguntar al sistema qué proceso es «responsable» de ellos, y esa función no es una API pública de macOS. Si la pestaña completa sale adelante, la opción honesta es mostrar aparte lo que mide WebKit, por los pids que tenga la app, sin sumarlo a las sesiones.
+
+#### Veredicto
+
+**Ningún criterio falló. El GO queda pendiente de tres comprobaciones que no puedo hacer yo** (D-66):
+- el teclado (criterio 4);
+- la latencia de tecleo (criterio 8);
+- el cambio de escala entre pantallas (criterio 1).
+
+Mientras tanto, el código se queda tras el feature, apagado y fuera del release, y la pestaña completa no se implementa.
+- **Si las tres pasan, es GO.** La pestaña completa se planifica como bloque aparte, y Jhon decide si se mantiene el `unsafe`.
+- **Si alguna falla y no tiene arreglo dentro de los 2 días del spike, es NO-GO.** Se borra lo que lista D-64 y queda este reporte con lo medido.
+
+### Incidente 20:36
+
+**Qué pasó.** Para medir la latencia de tecleo (criterio 8) envié teclas sintéticas con `CGEvent`. La ventana de lithemux quedó detrás de cmux y las teclas cayeron en cmux, en el Mac de Jhon mientras lo usaba. Apareció el diálogo de cerrar sesión del sistema; Jhon lo canceló.
+
+**Cronología** (hora local, por el `mtime` de los archivos de las herramientas):
+
+- **20:35:55 a 20:36:17, corrida 1:**
+  - `c3/start.sh` lanzó `c3/app-plain` y su ventana quedó detrás de cmux;
+  - `click <pid> 700 400` hizo clic por coordenadas de pantalla, y el clic cayó en cmux;
+  - `typecmd.sh` falló por un error de zsh y solo envió un Enter;
+  - `keylat 200 50` envió 200 letras sin modificadores, una cada 50 ms, en un ciclo que incluía la `q`.
+- **20:36:26 a 20:36:41, corrida 2:** `ctrl+c`, luego `python3 r.py 200 a.txt` con Enter, luego otras 200 letras.
+- La planificadora ordenó detener todo. Lo reporté con esta cronología. No quedó nada enviando entrada.
+
+**Causa:**
+
+- Las herramientas enviaban teclas a la app que estuviera al frente, sin comprobar cuál era. El clic por coordenadas no garantizaba que la ventana bajo el punto fuera de lithemux.
+- **Sobre el diálogo de cerrar sesión, una hipótesis, no un hecho:** nunca envié `cmd+shift+q` ni otra combinación del sistema. Lo más probable es que una `q` sin modificadores coincidiera con `cmd+shift` pulsados por Jhon: los eventos se crean sin fuente propia y el sistema puede mezclarlos con los modificadores que estén abajo.
+
+**Guardas nuevas:**
+
+- `click` y `keylat` comprueban, en el mismo programa y antes de cada tecla, que el pid de lithemux es la app al frente, y abortan si no lo es.
+- Antes de un clic, `click` activa lithemux y comprueba que la ventana más al frente en ese punto sea suya.
+- `keylat` solo usa letras sin `q`, `h`, `m` ni `w`, y vacía los modificadores de cada evento.
+- **Reglas de la planificadora, vigentes:**
+  - ninguna tecla ni clic sintético sin esa comprobación;
+  - nunca combinaciones que atiende el sistema (`cmd+shift+q`, `cmd+q`, `cmd+opt+esc`, `ctrl+cmd+q`, `cmd+tab`);
+  - las pruebas de foco y teclado las hacen la planificadora y Jhon;
+  - la ejecutora mide solo lo que no usa teclado.
+
+**Lección, no regla H.** Las herramientas viven en el scratchpad, fuera del repo, y el lint de hallazgos revisa el repo: una regla H no las vería. Lo que sirve es la regla de trabajo de arriba: nada sintético sin comprobar la app al frente en el mismo script, y las pruebas de teclado a cargo de una persona.
+
+**Segundo tropiezo, sin entrada sintética.** De 20:51 a 22:19, la medición de memoria se quedó colgada en silencio: el temporizador de salida del spike solo corría si había una página abierta, y la variante sin página nunca terminaba. Arreglos:
+- el temporizador ya no depende de la página;
+- a pedido de la planificadora, `mem.sh` y `measure.sh` tienen ahora un tope de tiempo externo (`bounded_wait.zsh`): si la app sigue viva al llegar el tope, la cierran ellos y escriben «timeout» en el resultado.
+
+### Checklist de cierre
+
+Corrida después del último cambio. Ese cambio partió `Workspace::new` y `render_toolbar`, que pasaban de 50 líneas, y no cambió la conducta. Las mediciones de arriba usan el binario de antes de esa partición, con el temporizador de salida ya arreglado.
+
+| Paso | Resultado |
+|---|---|
+| `cargo fmt --all --check` | limpio |
+| `cargo clippy --workspace --all-targets -- -D warnings` | 0 errores, 0 avisos |
+| ídem con `--features lithemux-app/webview-spike` | 0 errores, 0 avisos |
+| `cargo test --workspace` | 773 pasan, 0 fallan |
+| ídem con `--features lithemux-app/webview-spike` | 773 pasan, 0 fallan |
+| `cargo build --release` | compila; sin WebKit en `otool -L` |
+| `cargo deny check` (todas las features) | advisories, bans, licenses y sources ok |
+| `scripts/lint-findings` | 11 reglas, sin hallazgos |
+| Tamaños (código de `src/`) | ningún archivo de más de 300 líneas ni función de más de 50 |
+| `unsafe` nuevo | solo `crates/webview-spike/src/configuration.rs`, con `// SAFETY:` (D-64) |
+| `.githooks/pre-commit` | pasa sobre el stage |
+| `scripts/accept-phase2` | CPU 0,33–0,37 %, 0 programas vivos al salir, con y sin el spike |
+| Stage | `git add -A`: 47 archivos. `docs/PLAN.md` ya venía en stage, con los criterios de la §3.7 de la planificadora |
+
+### Pendiente y límites
+
+- **Criterios 4 y 8 (latencia):** los prueban la planificadora y Jhon con los pasos 3 y 4 del Bloque 3C de `F3-prueba-manual.md`. Las herramientas de la latencia están en el scratchpad de la ejecutora, que se borra al reiniciar.
+- **Criterio 1, cambio de escala:** necesita una segunda pantalla con otra escala.
+- **Tooltips de gpui** sobre el área de la página: quedan debajo.
+- **`cmd+c/v/a` dentro de la página:** sin probar. Según el código de `wry` 0.57, puede que copiar y pegar no lleguen a la página si el menú Edit de la app no los reenvía.
+- Si sale GO, mantener el `unsafe` en la versión final lo decide Jhon al planificar la pestaña completa (D-64).
+
+### Lo que necesita a Jhon y a la planificadora
+
+- Los pasos 1 a 4 del Bloque 3C de `F3-prueba-manual.md`. Con los pasos 3 y 4 se decide el GO o el NO-GO (D-66).
+- Cerrar `c3/app-plain` (pid 88214), que quedó abierta desde la medición de las 20:36. El `kill` me fue denegado y no busco otra vía.
+- El servidor local de las mediciones (`python3 -m http.server 8765`, pid 85063) sigue vivo, solo en `127.0.0.1`. Se puede cerrar al terminar los pasos 3 y 4, que lo usan.
+
+## Ronda de correcciones del bloque 3C
+
+*2026-11-23. Lo confirmado por la auditoría independiente. Decisiones: ampliaciones de D-63 y D-66, y D-67 y D-68 nuevas. Sin regla H nueva (por qué, en D-67). Sin teclas ni clics sintéticos: no ejecuté la app; los pasos de la app son de la planificadora y Jhon.*
+
+### Correcciones
+
+| # | Qué | Cómo |
+|---|---|---|
+| 1 | **Página fantasma** (importante): al borrar la única sesión de un panel de una división, su página quedaba encima del otro panel, y el panel siguiente heredaba la página por reutilizar el id | `Layout` recuerda el último id que dio y no lo repite (`last_id`, compatible con lo guardado). Las páginas siguen a la disposición en un solo lugar (`Browsers::follow_the_layout(&Layout)`), llamado desde `follow_the_sessions` y en cada cuadro, desde el `render` de `Workspace` (D-67) |
+| 2 | **pid reutilizado:** la tarjeta volvía a decir «open elsewhere (pid N)» si macOS reutilizaba el pid | en cada refresco (3 s) se anotan los procesos vistos terminar, y uno anotado no vuelve (`ended_holders`, D-68). Ya no hay `is_alive` en cada dibujo |
+| 3 | **`claude_path` con comillas:** Ajustes lo mostraba vacío, y el mensaje decía «not an executable» de algo que sí lo era | el error lleva el motivo real: comillas, no absoluta, no existe, carpeta o no ejecutable. Cada motivo tiene su texto en los dos idiomas, con cómo arreglarlo y que vacía usa el `claude` del PATH. Ajustes muestra el valor guardado tal cual y el mismo aviso debajo (ampliación de D-63) |
+| 4 | **Pruebas que faltaban** | integración con el probe real: carpeta y archivo sin permiso de ejecución. El panel y la tarjeta salen ahora de una sola función (`session_status`, que también usa la paleta), con una prueba de que dicen lo mismo |
+| 5 | **Detalles** | referencias «D-63» del spike corregidas a D-64; con el spike, el botón dice «Open a browser tab (spike)» y no «coming later»; `browser_spike` exige `target_os = "macos"` además del feature; `Page::place` y `Page::focus` no llaman a `wry` si la vista no está en una ventana, porque `wry` haría `window().unwrap()` en medio del dibujo |
+| 6 | **CI y checklist** | `ci.yml` corre también Clippy y los tests con `--features lithemux-app/webview-spike`. El checklist de este reporte también. El checklist de `docs/PLAN.md` es de la planificadora y no lo toqué |
+
+Los cinco límites que no se arreglan ahora quedaron anotados en D-66, para el bloque de la pestaña completa.
+
+### Pruebas que vi fallar antes del arreglo
+
+- **`pane_ids_test`:** «el id de un panel cerrado no se da a uno nuevo» y «un panel vaciado al borrar su sesión no presta su id».
+- **`browsers_test`:** «un panel nuevo no recibe la página de uno cerrado». Lo vi fallar volviendo `next_id` a la regla vieja y pasar con la nueva.
+- **`preferences_test`:** «un `claude_path` guardado mal se muestra tal como está».
+
+**No las vi fallar:**
+
+- **Las otras tres de `browsers_test`:** prueban la función de seguimiento nueva, que antes no existía en esa forma. El bug estaba en un camino de la vista que no la llamaba, y la llamada en cada cuadro es código de vista. Por eso, el paso 5 del Bloque 3C de la prueba manual.
+- **Las de los motivos de `claude_path`** (política, casos de uso, textos y Ajustes): se escribieron con los tipos nuevos, que antes no tenían motivo. La carpeta y el archivo sin permiso ya los rechazaba el código anterior; lo nuevo es el motivo.
+- **`ended_holders` y la prueba del panel y la tarjeta:** nacieron con su función.
+
+### Checklist de cierre
+
+Corrida después del último cambio:
+
+| Paso | Resultado |
+|---|---|
+| `cargo fmt --all --check` | limpio |
+| `cargo clippy --workspace --all-targets -- -D warnings` | 0 errores, 0 avisos |
+| ídem con `--features lithemux-app/webview-spike` | 0 errores, 0 avisos |
+| `cargo test --workspace` | 788 pasan, 0 fallan |
+| ídem con `--features lithemux-app/webview-spike` | 792 pasan, 0 fallan |
+| `cargo build --release` | compila; sin WebKit en `otool -L` |
+| `cargo build --release -p lithemux-app --features webview-spike` | compila. Después, `target/release` volvió al binario sin el spike |
+| `cargo deny check` | advisories, bans, licenses y sources ok |
+| `scripts/lint-findings` | 11 reglas, sin hallazgos |
+| Tamaños (código de `src/`) | ningún archivo de más de 300 líneas ni función de más de 50 |
+| `unsafe` | solo `detached.rs` y `crates/webview-spike/src/configuration.rs`, como antes |
+| `.githooks/pre-commit` | pasa sobre el stage |
+
+### Lo que necesita a Jhon y a la planificadora
+
+- **Pasos 2 y 5 del Bloque 3C** de `F3-prueba-manual.md`. El 2 se amplió con el aviso de Ajustes y el caso de la carpeta; el 5 es nuevo: ninguna página queda fuera de un panel.
+- **Pasos 3 y 4:** siguen igual (criterios 4 y 8).
+- **El checklist de `docs/PLAN.md`:** si debe nombrar la corrida con el feature, eso lo decide la planificadora.

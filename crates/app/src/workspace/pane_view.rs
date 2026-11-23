@@ -47,22 +47,30 @@ impl Workspace {
             .into_any_element()
     }
 
+    fn toolbar_button(
+        &self,
+        pane_id: u32,
+        name: &'static str,
+        glyph: &'static str,
+        label_key: &str,
+    ) -> Stateful<gpui::Div> {
+        div()
+            .id(id_of("button", pane_id, name))
+            .flex()
+            .items_center()
+            .justify_center()
+            .flex_none()
+            .w(px(26.0))
+            .h(px(22.0))
+            .rounded_sm()
+            .text_sm()
+            .text_color(rgb(theme::colors().text_muted))
+            .tooltip(crate::app_shell::tooltip::text(self.texts.get(label_key)))
+            .child(glyph)
+    }
+
     pub(super) fn render_toolbar(&self, pane_id: u32, cx: &mut Context<Self>) -> impl IntoElement {
-        let button = |name: &'static str, glyph: &'static str, label_key: &str| {
-            div()
-                .id(id_of("button", pane_id, name))
-                .flex()
-                .items_center()
-                .justify_center()
-                .flex_none()
-                .w(px(26.0))
-                .h(px(22.0))
-                .rounded_sm()
-                .text_sm()
-                .text_color(rgb(theme::colors().text_muted))
-                .tooltip(crate::app_shell::tooltip::text(self.texts.get(label_key)))
-                .child(glyph)
-        };
+        let button = |name, glyph, label_key| self.toolbar_button(pane_id, name, glyph, label_key);
         let enabled = |button: Stateful<gpui::Div>| {
             button.hover(|style| {
                 style
@@ -94,11 +102,18 @@ impl Workspace {
                     move |this, _, window, cx| this.split(pane_id, Axis::Vertical, window, cx),
                 )),
             )
-            // Reserved for the browser pane (PLAN §3.7): there, and off.
-            .child(button("browser", "◎", "workspace.browser").opacity(0.35))
+            .child(browser_button(
+                button("browser", "◎", BROWSER_LABEL),
+                pane_id,
+                cx,
+            ))
     }
 
     fn render_content(&self, pane: &Pane, cx: &mut Context<Self>) -> AnyElement {
+        #[cfg(all(feature = "webview-spike", target_os = "macos"))]
+        if let Some(page) = self.render_browser_content(pane.id) {
+            return page;
+        }
         let content = div().flex().flex_col().flex_1().min_h_0();
         let Some(session_id) = pane.active_session() else {
             return content
@@ -167,4 +182,32 @@ impl Workspace {
                 )
             })
     }
+}
+
+/// What the browser button says: reserved, or what it does with the spike.
+#[cfg(not(all(feature = "webview-spike", target_os = "macos")))]
+const BROWSER_LABEL: &str = "workspace.browser";
+#[cfg(all(feature = "webview-spike", target_os = "macos"))]
+const BROWSER_LABEL: &str = "workspace.browser_open";
+
+/// Reserved for the browser pane (PLAN §3.7): there, and off, unless the
+/// spike is built in.
+#[cfg(not(all(feature = "webview-spike", target_os = "macos")))]
+fn browser_button(
+    button: Stateful<gpui::Div>,
+    _: u32,
+    _: &mut Context<Workspace>,
+) -> Stateful<gpui::Div> {
+    button.opacity(0.35)
+}
+
+#[cfg(all(feature = "webview-spike", target_os = "macos"))]
+fn browser_button(
+    button: Stateful<gpui::Div>,
+    pane_id: u32,
+    cx: &mut Context<Workspace>,
+) -> Stateful<gpui::Div> {
+    button
+        .hover(|style| style.bg(rgb(theme::colors().surface_active)))
+        .on_click(cx.listener(move |this, _, window, cx| this.open_browser(pane_id, window, cx)))
 }

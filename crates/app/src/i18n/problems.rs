@@ -3,7 +3,7 @@
 //! in the user's language, from `locales/*.toml`.
 
 use lithemux_core::modules::category::CategoryError;
-use lithemux_core::modules::launch::LaunchError;
+use lithemux_core::modules::launch::{ClaudePathProblem, LaunchError};
 use lithemux_core::modules::session::SessionError;
 use lithemux_core::modules::workspace::WorkspaceError;
 
@@ -69,12 +69,26 @@ impl From<&SidebarError> for Message {
     }
 }
 
+/// Why `claude_path` cannot run, with what to fix, and that an empty path
+/// means the `claude` of the PATH. The card and Settings say the same.
+pub(crate) fn claude_path_message(value: &str, problem: ClaudePathProblem) -> Message {
+    let key = match problem {
+        ClaudePathProblem::Quoted => "error.claude_path_quoted",
+        ClaudePathProblem::NotAbsolute => "error.claude_path_not_absolute",
+        ClaudePathProblem::Missing => "error.claude_path_missing",
+        ClaudePathProblem::Directory => "error.claude_path_folder",
+        ClaudePathProblem::NotExecutable => "error.claude_path_not_executable",
+    };
+    Message::with(key, "path", value)
+}
+
 impl From<&Failure> for Message {
     fn from(failure: &Failure) -> Self {
         match failure {
             Failure::ClaudeNotFound(detail) => {
                 Message::with("error.claude_not_found", "detail", detail)
             }
+            Failure::ClaudePathUnusable { value, problem } => claude_path_message(value, *problem),
             Failure::MissingFolder(path) => Message::with("error.missing_folder", "path", path),
             Failure::HookMissing(path) => Message::with("error.hook_missing", "path", path),
             Failure::CouldNotStart(program) => {

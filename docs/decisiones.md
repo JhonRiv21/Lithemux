@@ -83,7 +83,7 @@ Decisiones tomadas durante la ejecución, con fecha y porqué. Las aprueba la se
 2. `$SHELL -lic 'command -v claude'`, con stdin en `/dev/null` y timeout de 3 s; la última línea que sea ruta absoluta y ejecutable.
 3. `$SHELL -lc` como respaldo, con advertencia en `hook.log` y en la salida de `open`.
 
-En 2 y 3 se descartan los candidatos bajo `$TMPDIR`, `/tmp`, `/private/tmp`, `/var/folders`, `/private/var/folders` o cuya ruta contenga `shims`. `claude_path` no pasa por ese filtro: es una elección explícita del usuario. Si `claude_path` está definido pero no es ejecutable, se sigue con el paso 2 y se advierte.
+En 2 y 3 se descartan los candidatos bajo `$TMPDIR`, `/tmp`, `/private/tmp`, `/var/folders`, `/private/var/folders` o cuya ruta contenga `shims`. `claude_path` no pasa por ese filtro: es una elección explícita del usuario. Si `claude_path` está definido pero no es ejecutable, se sigue con el paso 2 y se advierte. *Reemplazado por D-63 (22-nov-2026): un `claude_path` que no sirve ya no cae al paso 2; el lanzamiento falla y lo dice.*
 
 **Consecuencia.** Quien instale `claude` con un gestor de versiones basado en `shims` (asdf, mise) tendrá que fijar `claude_path`.
 
@@ -1141,3 +1141,129 @@ Borrar desde la barra lateral no cambia: pide confirmación, cierra el programa 
 - **Las bases revisadas,** solo leyendo: la de Jhon (versión 5, 3 sesiones) y `home-b3` de la planificadora (versión 5, 5 sesiones). Ninguna tiene conversaciones compartidas.
 - **El repositorio** traduce el rechazo del índice a `SessionError::ConversationTaken`. El de memoria cumple el mismo contrato (`one_session_per_conversation_contract`).
 - **Las shells,** sin conversación, no tienen límite.
+
+## D-63 · Un `claude_path` que no sirve detiene el lanzamiento
+
+*2026-11-22, inicio del bloque 3C (arrastrado del 3B). Reemplaza la última frase de la decisión del paso 1 de D-05.*
+
+- **Antes:** si `claude_path` no era ejecutable, el lanzador anotaba una advertencia y seguía con el `claude` del PATH. En la app esa advertencia no se veía: se lanzaba un binario que el usuario no eligió.
+- **Ahora:** si `claude_path` está definido, es el único candidato. Si no es una ruta absoluta (la misma validación de `config set` y de Ajustes, `checked_value`) o no es ejecutable, `resolve_claude` falla con `LaunchError::ClaudePathUnusable(<valor tal como está guardado>)` y no consulta ningún shell.
+  - Un valor guardado con comillas JSON (`"/ruta/claude"`) no es la ruta que cita: los ajustes se guardan sin comillas.
+- **Dónde se ve:**
+  - en la tarjeta y en el panel, el texto `error.claude_path_unusable`, en los dos idiomas;
+  - en `app.log`, la línea «could not start <sesión>: the claude_path setting is …»;
+  - en `doctor`, la línea `FAIL claude`.
+- **Tests vistos fallar antes del arreglo:**
+  - `a_claude_path_that_is_not_executable_is_an_error_and_no_other_claude_is_looked_for`;
+  - `a_claude_path_stored_with_quotes_is_an_error_not_a_fallback`;
+  - `doctor_reports_an_unusable_claude_path_and_chooses_nothing`;
+  - `session_host_claude_path_test`, en dos variantes. Usa el shell falso que sí encuentra un `claude` en su PATH, y antes del arreglo la sesión quedaba `Running` con ese otro binario.
+- **Regla H-011** del lint de hallazgos.
+- **Ronda de correcciones del 3C: el motivo.**
+  - El error lleva el motivo: `ClaudePathUnusable { value, problem }`, donde `problem` es uno de:
+    - `Quoted`: tiene comillas;
+    - `NotAbsolute`: no empieza en `/`;
+    - `Missing`: no hay nada en esa ruta;
+    - `Directory`: es una carpeta;
+    - `NotExecutable`: el archivo no se puede ejecutar.
+  - Lo decide `claude_path_problem` (dominio de `launch`, puro). Lo que hay en disco llega por `ShellProbe::path_kind`.
+  - Antes, `"/bin/sh"` con comillas se describía como «no es un ejecutable», aunque `/bin/sh` sí lo es.
+  - Cada motivo tiene su texto, en los dos idiomas. Dice qué arreglar y que una ruta vacía usa el `claude` del PATH.
+  - **Ajustes** muestra el valor tal como está guardado, aunque no sirva, con el mismo texto debajo, en el color de aviso. Antes, `Preferences::from_stored` lo trataba como vacío y el campo aparecía en blanco. `claude_path` es el único ajuste que se muestra así: los demás siguen cayendo a su valor por defecto.
+
+
+## D-64 · Spike del navegador: `wry`, un crate aparte y una excepción de `unsafe`
+
+*2026-11-22, bloque 3C (§3.7). Excepción de `unsafe` aprobada por la planificadora solo para el spike.*
+
+- **Acceso a la ventana.** gpui (rev d01b134) implementa `raw_window_handle::HasWindowHandle` para `Window`. Devuelve un `AppKitWindowHandle` con el NSView de gpui, que es subvista del contentView de la ventana. Es la vía documentada; no hizo falta nada privado de gpui.
+- **`wry` =0.57.2** (Tauri, MIT/Apache-2.0) crea el `WKWebView` como subvista de ese NSView (`build_as_child`).
+  - Trae lo necesario sin `unsafe` en nuestro código: `set_bounds`, `set_visible`, `focus`, `focus_parent`, un script de inicio y un manejador de mensajes.
+  - Se fijó la 0.57.2 (23-oct-2026) porque la 0.57.3 tenía 12 días, menos de las dos semanas pedidas.
+  - Sus dependencias en macOS son `cookie`/`time`, `dirs`, `dpi`, `http` (solo tipos), `url` y la familia `objc2`; ningún cliente HTTP ni TLS.
+  - Cargo.lock suma 47 paquetes, la mayoría de Windows y Android, que no se compilan en macOS. Ninguna versión existente cambió.
+  - Compila con las Command Line Tools: no hace falta Xcode completo.
+- **El único `unsafe`.** `wry` no deja apagar el aviso de sitios fraudulentos (Safe Browsing) ni elegir el almacén de datos, pero acepta una `WKWebViewConfiguration` propia. En `objc2-web-kit` 0.3.2 todos sus métodos son `unsafe fn`. Por eso:
+  - el crate aparte `crates/webview-spike` tiene `unsafe_code = "deny"`;
+  - un único archivo, `src/configuration.rs` (unas 15 líneas sin lógica, con su comentario `// SAFETY:`), lo permite;
+  - H-002 se amplió con esa ruta exacta;
+  - el test de lints exige al crate la misma tabla del workspace, con `unsafe_code` como única diferencia;
+  - `app`, `cli` y `hook` siguen en `forbid`.
+- **Fuera del release.** El feature `webview-spike` de la app está apagado por defecto. El crate es miembro del workspace, así que Clippy y los tests lo revisan, pero solo entra en el binario con `--features webview-spike`.
+  - Comprobado con `otool -L`: el `lithemux-app` de release normal no enlaza WebKit; el del spike sí.
+- **Forma en la app** (`crates/app/src/browser_spike/`):
+  - la pestaña del navegador es una pseudo-pestaña por panel, que no se guarda en la disposición;
+  - un `canvas` de gpui mide en cada cuadro el área de contenido del panel y coloca la página allí, en píxeles lógicos;
+  - la página se oculta cuando su pestaña no está elegida o algo de gpui se dibuja encima: la paleta, el menú contextual o el arrastre de una pestaña;
+  - el panel deja de mostrar la página cuando pasa a mostrar otra sesión (barra lateral, pestañas, `cmd+1…9`, mover, terminal nueva), y `cmd+w` cierra la página si es la pestaña elegida.
+- **Teclado.** AppKit tiene su propio foco (*first responder*), aparte del de gpui. Por eso:
+  - mientras algo tapa la página, el foco nativo vuelve a la vista de gpui, y al destaparse regresa a la página si la tenía. Sin esto, con la página enfocada no se podía escribir en la paleta;
+  - mientras una página está elegida, gpui deja su foco en el área de trabajo y no en una terminal, para que los atajos de la terminal no se queden con las teclas;
+  - un clic en la página avisa a la app por el manejador de mensajes de WebKit, sin red, y su panel pasa a ser el enfocado.
+- **Si es GO,** mantener el `unsafe` en la versión final lo decide Jhon al planificar la pestaña completa. **Si es NO-GO,** se borran el crate, el módulo, el feature, las dependencias y la ampliación de H-002.
+
+## D-65 · Lo que guarda la página, en memoria
+
+*2026-11-22, bloque 3C (§3.7).*
+
+- **Decisión:** el spike usa `WKWebsiteDataStore.nonPersistentDataStore`. Cookies, sesiones, `localStorage` y caché viven en la memoria de los procesos de WebKit y desaparecen al cerrar la pestaña o la app.
+- **Por qué:**
+  - **Nada fuera de lo nuestro.** El almacén persistente de WebKit para un binario sin bundle se guarda en `~/Library/WebKit/<identificador>` y en `~/Library/Caches`, rutas que lithemux no elige ni puede llevar a su `LITHEMUX_HOME`. Uno con identificador propio (`dataStoreForIdentifier`, macOS 14+) también vive allí.
+  - **Lo que se abre es efímero:** servidores locales de desarrollo, documentación, el puerto que detecta la §2.2. Perder la sesión al cerrar es aceptable.
+  - **Cero rastro:** el reporte de cero red de la app se completa con que no queda nada del usuario en disco.
+- **Comprobado** tras las corridas del spike (con `about:blank` y con localhost, con y sin el aviso de sitios fraudulentos): no hay nada de la app en `~/Library/WebKit`, `~/Library/Caches`, `~/Library/HTTPStorages` ni `~/Library/Containers`.
+- **Costo:** quien inicie sesión en una página la pierde al cerrar la pestaña. Si la pestaña completa necesita recordar sesiones, se replantea al planificarla. La opción candidata es `dataStoreForIdentifier`, con la advertencia de la ruta.
+
+## D-66 · Veredicto del spike del navegador: sin NO-GO, GO pendiente de tres pruebas
+
+*2026-11-22, cierre del bloque 3C (§3.7). Lo medido está en `docs/fases/F3-reporte.md`, Bloque 3C.*
+
+- **Cumplen:**
+  - 2: oculta y vuelve sin recargar;
+  - 3: con la salida de ocultar la página mientras algo de gpui va encima;
+  - 5: cero red, con el aviso de sitios fraudulentos apagado;
+  - 6: el costo está medido y se explica por qué WebKit no entra en el medidor;
+  - 7: `cargo-deny` y Command Line Tools;
+  - 8, en su parte de CPU en reposo.
+- **Pendientes, sin ningún fallo visto:**
+  - el cambio de escala del criterio 1: no hay una segunda pantalla;
+  - el criterio 4 y la latencia del criterio 8, que pasaron a la planificadora y a Jhon tras el incidente de las 20:36, con los pasos del Bloque 3C de `F3-prueba-manual.md`.
+- **Mientras tanto:** el código queda tras el feature `webview-spike`, apagado por defecto y fuera del release; la pestaña completa no se implementa.
+- **Si los tres pasan, es GO:** la pestaña completa se planifica como bloque aparte. Al planificarla, Jhon decide:
+  - si se mantiene el `unsafe` de `configuration.rs`, que es lo que apaga el aviso de sitios fraudulentos; sin él, ese servicio del sistema habla con Apple al navegar;
+  - si los procesos de WebKit deben terminar al cerrar la última página; hoy siguen vivos hasta que sale la app.
+- **Si alguno falla sin arreglo dentro de los 2 días del spike, es NO-GO:** se borra lo que lista D-64 y la §3.7 se queda con abrir el navegador por defecto.
+
+**Límites para el bloque de la pestaña completa** (ronda de correcciones del 3C, de la auditoría; no se arreglan en el spike):
+- **Cerrar la última pestaña de sesión** de un panel de una división se lleva el panel, y su página con él, sin aviso: la página no cuenta en `pane.tabs`.
+- **Los tooltips de gpui** que caen sobre la página quedan debajo de ella.
+- **`set_bounds` de `wry` redondea el tamaño** a puntos enteros: hasta 0,5 pt de desfase con el área del panel.
+- **`webview-spike` es miembro del workspace**, así que `cargo build --release` compila `wry` aunque no lo enlace.
+- **`pane_browser.rs` mezcla** la vista, las acciones y los temporizadores de medición. Además, varios campos y métodos de `Workspace` pasaron a `pub(crate)` para el spike.
+
+## D-67 · Los ids de panel no se repiten y las páginas siguen a la disposición en cada cuadro
+
+*2026-11-22, ronda de correcciones del 3C. De la auditoría: «página fantasma».*
+
+- **El bug:** borrar la única sesión de un panel de una división (`lithemux rm`, o desde la tarjeta) quita el panel por `follow_the_sessions` → `Layout::keep_sessions`. Ese camino no pasaba por el seguimiento de las páginas, así que el WKWebView seguía visible con su último marco, encima del otro panel, y se quedaba con sus clics.
+  - Además, `Layout::next_id` daba `max + 1`: el panel siguiente recibía el id del que se fue y heredaba su página.
+- **Arreglo, en dos partes:**
+  - **`Layout` recuerda el último id que dio** (`last_id`, con `serde(default)`), y `next_id` nunca da uno menor ni igual.
+    - Una disposición guardada antes de esto se abre igual: arranca desde los ids que tiene.
+  - **Las páginas siguen a la disposición en un solo lugar**, `Browsers::follow_the_layout(&Layout)`. La llaman:
+    - `follow_the_sessions`;
+    - el `render` de `Workspace`, en cada cuadro.
+
+    Así, ninguna forma de cambiar la disposición deja una página atrás. Una página solo recibe `show` cuando cambia lo que debe mostrar, para no llamar a AppKit en cada cuadro.
+- **Pruebas desde la especificación** («una página nunca queda visible fuera de un panel vivo»): `browser_spike/test/browsers_test.rs`, con una página falsa que recuerda si se ve y si existe, y `workspace/domain/test/pane_ids_test.rs`.
+- **Sin regla H-012.** El bug es una omisión: un camino que no llamaba al seguimiento. El lint de hallazgos encuentra patrones que están, no llamadas que faltan, y una regla por nombres de método sería fácil de esquivar sin querer. Lo cubren la estructura (el seguimiento en cada cuadro), los ids que no se repiten y las pruebas.
+
+## D-68 · Un proceso de «open elsewhere» que se vio terminar queda terminado
+
+*2026-11-22, ronda de correcciones del 3C. De la auditoría: «pid reutilizado».*
+
+- **El bug:** la tarjeta y el panel decidían si seguía vivo el proceso que tenía la sesión abierta en otro lado con `is_alive(pid)`, en cada dibujo. Horas después de que ese proceso terminara, macOS puede dar su pid a otro, y la tarjeta volvía a decir «open elsewhere (pid N)».
+- **Arreglo:** en cada refresco (3 s), `Live::see_the_holders_go` anota por sesión los procesos que vio terminar (`ended_holders`, en `app_shell/elsewhere.rs`, puro). Uno anotado no vuelve, aunque su pid reaparezca. Un proceso nuevo para la misma sesión, con otro pid, empieza de cero.
+- **Por qué así y no con la hora de inicio del proceso:** sirve igual, no necesita leer más del kernel y responde en el mismo tiempo de antes (unos 3 s).
+- **Límite:** si el proceso termina y su pid se reutiliza dentro de los mismos 3 s, no se distingue. Es muy improbable.
+

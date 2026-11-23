@@ -381,8 +381,8 @@ fn manifest_table(manifest: &str, table: &str) -> Vec<String> {
         .collect()
 }
 
-// docs/decisiones.md D-27: cargo cannot inherit the workspace lints and
-// override one, so `core` repeats them. This keeps the copy honest: the
+// docs/decisiones.md D-27 and D-64: cargo cannot inherit the workspace
+// lints and override one, so `core` and `webview-spike` repeat them. This keeps the copy honest: the
 // same lints as the workspace, and `unsafe_code` the only difference.
 #[test]
 fn core_has_the_lints_of_the_workspace_except_for_unsafe_code() {
@@ -399,6 +399,18 @@ fn core_has_the_lints_of_the_workspace_except_for_unsafe_code() {
     );
     assert_eq!(
         manifest_table(&core_manifest, "lints.rust"),
+        ["unsafe_code = \"deny\""]
+    );
+    // D-64: the browser spike's crate has the same exception, for its one
+    // file of WebKit configuration.
+    let spike_manifest =
+        fs::read_to_string(workspace().join("crates/webview-spike/Cargo.toml")).unwrap();
+    assert_eq!(
+        manifest_table(&spike_manifest, "lints.clippy"),
+        manifest_table(&workspace_manifest, "workspace.lints.clippy")
+    );
+    assert_eq!(
+        manifest_table(&spike_manifest, "lints.rust"),
         ["unsafe_code = \"deny\""]
     );
     for other in ["cli", "hook", "app"] {

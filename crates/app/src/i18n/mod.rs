@@ -13,4 +13,5 @@ mod test;
 
 pub use language::Language;
 pub use message::Message;
+pub(crate) use problems::claude_path_message;
 pub use texts::Texts;
