@@ -2,7 +2,7 @@ use rusqlite::{Connection, TransactionBehavior};
 
 use crate::platform::store::error::StoreError;
 
-pub const SCHEMA_VERSION: i64 = 5;
+pub const SCHEMA_VERSION: i64 = 6;
 
 const MIGRATION_1: &str = "
 CREATE TABLE categories(
@@ -101,6 +101,42 @@ const MIGRATION_5: &str = "
 ALTER TABLE categories ADD COLUMN notify INTEGER NOT NULL DEFAULT 1;
 ";
 
+// One conversation, one session: two `claude` resuming the same one lose
+// messages, and two imports at once could both add it (block 3B).
+const MIGRATION_6: &str = "
+CREATE UNIQUE INDEX one_session_per_conversation ON sessions(claude_session_id)
+  WHERE claude_session_id IS NOT NULL;
+";
+
+/// The sessions that share a conversation, as `<conversation>: <cat>/<slug>, …`.
+fn shared_conversations(conn: &Connection) -> Result<Vec<String>, StoreError> {
+    let mut statement = conn.prepare(
+        "SELECT s.claude_session_id, group_concat(c.slug || '/' || s.slug, ', ')
+         FROM sessions s JOIN categories c ON c.id = s.category_id
+         WHERE s.claude_session_id IS NOT NULL
+         GROUP BY s.claude_session_id HAVING count(*) > 1
+         ORDER BY s.claude_session_id",
+    )?;
+    let rows = statement.query_map([], |row| {
+        Ok(format!(
+            "{}: {}",
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?
+        ))
+    })?;
+    Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
+fn migrate_to_6(tx: &Connection) -> Result<(), StoreError> {
+    let shared = shared_conversations(tx)?;
+    if !shared.is_empty() {
+        return Err(StoreError::SharedConversations(shared));
+    }
+    tx.execute_batch(MIGRATION_6)?;
+    tx.pragma_update(None, "user_version", 6)?;
+    Ok(())
+}
+
 pub fn user_version(conn: &Connection) -> Result<i64, StoreError> {
     Ok(conn.pragma_query_value(None, "user_version", |row| row.get(0))?)
 }
@@ -131,6 +167,9 @@ pub fn migrate(conn: &mut Connection) -> Result<(), StoreError> {
     if checked_version(&tx)? < 5 {
         tx.execute_batch(MIGRATION_5)?;
         tx.pragma_update(None, "user_version", 5)?;
+    }
+    if checked_version(&tx)? < 6 {
+        migrate_to_6(&tx)?;
     }
     tx.commit()?;
     Ok(())

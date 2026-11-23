@@ -1,7 +1,7 @@
 use lithemux_core::modules::hook_event::FileHookLog;
 use lithemux_core::modules::launch::{
-    ClaudeProjectsTranscriptLocator, LaunchEnvironment, LaunchPorts, LoginShellProbe,
-    SiblingHookBinary, TerminalSessionRunner, open_session,
+    ClaudeProjectsTranscriptLocator, CommandLineConversations, LaunchEnvironment, LaunchPorts,
+    LoginShellProbe, SiblingHookBinary, TerminalSessionRunner, open_session,
 };
 use lithemux_core::modules::session::SessionRef;
 use lithemux_core::platform::paths::home::Home;
@@ -27,6 +27,7 @@ pub fn open(target: &str) -> anyhow::Result<u8> {
         hook_binary: &SiblingHookBinary,
         transcripts: &ClaudeProjectsTranscriptLocator::from_env(),
         locks: &wiring.locks(),
+        conversations: &CommandLineConversations,
     };
     let code = open_session(
         &ports,

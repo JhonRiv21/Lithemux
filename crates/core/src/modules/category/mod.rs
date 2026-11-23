@@ -12,6 +12,7 @@ pub use application::find_category::{find_category_by_id, get_category, list_cat
 pub use application::locate_directory::locate_directory;
 pub use application::remove_category::remove_category;
 pub use domain::category::{Category, NewCategory};
+pub use domain::latin_fold::fold_latin;
 pub use domain::slug::Slug;
 pub use domain::slug_policy::{free_slug, slug_from_name};
 pub use error::{CategoryError, InvalidSlug};

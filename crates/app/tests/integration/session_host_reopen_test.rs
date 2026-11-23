@@ -1,8 +1,9 @@
 use lithemux_app::session_host::{Opened, Phase};
 use lithemux_core::modules::session::Profile;
 
-use crate::hosted_world::{HostedWorld, attend_until, run, target};
+use crate::hosted_world::{HostedWorld, attend_until, core_fake, run, target};
 use crate::processes::wait_until_gone;
+use crate::sandbox::fake_claude_elsewhere;
 use crate::support::SIZE;
 
 /// Lets the host work until the session runs or cannot, and returns every
@@ -136,4 +137,33 @@ fn closing_again_a_session_that_waited_to_reopen_leaves_it_closed() {
         host.phase(&id).is_none()
     });
     assert_eq!(world.fake_claude_runs().len(), 1);
+}
+
+// PLAN §3.4 riesgo real: a session that still runs in cmux is not resumed a
+// second time by the app: it is open elsewhere, with the pid of that one
+#[test]
+fn a_session_whose_conversation_runs_in_cmux_is_open_elsewhere() {
+    let world = HostedWorld::new();
+    let session = world.add_session("en-cmux", Profile::Claude);
+    let conversation = session.claude_session_id.clone().unwrap();
+    let cmux = tempfile::tempdir().unwrap();
+    let mut in_cmux = fake_claude_elsewhere(
+        &core_fake("fake-claude"),
+        cmux.path(),
+        &["--resume", &conversation],
+    );
+    let (mut host, _changes) = world.start();
+
+    host.open(&target("en-cmux"), SIZE).unwrap();
+    let seen = phases_until_settled(&mut host, &session.id);
+
+    in_cmux.kill().unwrap();
+    in_cmux.wait().unwrap();
+    assert_eq!(
+        seen.last(),
+        Some(&Some(Phase::OpenElsewhere {
+            pid: Some(in_cmux.id())
+        }))
+    );
+    assert!(world.fake_claude_runs().is_empty());
 }

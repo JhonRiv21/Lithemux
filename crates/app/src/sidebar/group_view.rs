@@ -26,14 +26,31 @@ fn category_frame(category_id: &str) -> Stateful<Div> {
 }
 
 impl Sidebar {
-    /// The whole list: the pinned sessions, then every category.
+    /// The whole list: the pinned sessions, then every category. Each card
+    /// is a child of the list itself, so the list can scroll to one; with
+    /// the list comes the place of the card of `in_focus`, if shown.
     pub(super) fn render_list(
         &self,
         tree: &Tree,
         in_focus: Option<&str>,
         cx: &mut Context<Self>,
-    ) -> Stateful<Div> {
-        let mut list = div()
+    ) -> (Stateful<Div>, Option<usize>) {
+        let mut items: Vec<(Option<&str>, AnyElement)> = Vec::new();
+        if !tree.pinned.is_empty() {
+            items.push((None, self.section_title(self.texts.get("sidebar.pinned"))));
+            for card in &tree.pinned {
+                let painted = self.render_card(card, in_focus, false, cx);
+                items.push((Some(card.session_id.as_str()), painted));
+            }
+        }
+        if tree.groups.is_empty() {
+            items.push((None, self.hint(self.texts.get("sidebar.empty"))));
+        }
+        for group in &tree.groups {
+            items.extend(self.group_items(group, in_focus, cx));
+        }
+        let at = in_focus.and_then(|id| items.iter().position(|(card, _)| *card == Some(id)));
+        let list = div()
             .id("sidebar-list")
             .flex()
             .flex_col()
@@ -41,20 +58,10 @@ impl Sidebar {
             .min_h_0()
             .gap_1()
             .p_2()
-            .overflow_y_scroll();
-        if !tree.pinned.is_empty() {
-            list = list.child(self.section_title(self.texts.get("sidebar.pinned")));
-            for card in &tree.pinned {
-                list = list.child(self.render_card(card, in_focus, false, cx));
-            }
-        }
-        if tree.groups.is_empty() {
-            list = list.child(self.hint(self.texts.get("sidebar.empty")));
-        }
-        for group in &tree.groups {
-            list = list.child(self.render_group(group, in_focus, cx));
-        }
-        list
+            .overflow_y_scroll()
+            .track_scroll(&self.scroll)
+            .children(items.into_iter().map(|(_, item)| item));
+        (list, at)
     }
 
     pub(super) fn section_title(&self, title: String) -> AnyElement {
@@ -77,37 +84,37 @@ impl Sidebar {
             .into_any_element()
     }
 
-    pub(super) fn render_group(
+    /// A category's header and, unless it is folded, its cards, each with
+    /// the session it shows.
+    fn group_items<'a>(
         &self,
-        group: &Group,
+        group: &'a Group,
         in_focus: Option<&str>,
         cx: &mut Context<Self>,
-    ) -> AnyElement {
-        let mut column = div()
-            .flex()
-            .flex_col()
-            .gap_1()
-            .child(self.render_category(group, cx));
+    ) -> Vec<(Option<&'a str>, AnyElement)> {
+        let mut items = vec![(None, self.render_category(group, cx))];
         if let Some(form) = &self.form
             && form.is_for_new_session_in(&group.category_id)
         {
-            column = column.child(self.render_form(form, cx));
+            items.push((None, self.render_form(form, cx)));
         }
         if group.collapsed {
-            return column.into_any_element();
+            return items;
         }
         // The coordinator heads the category and the rest hang from it.
         if let Some(coordinator) = &group.header {
-            column = column.child(self.render_card(coordinator, in_focus, false, cx));
+            let painted = self.render_card(coordinator, in_focus, false, cx);
+            items.push((Some(coordinator.session_id.as_str()), painted));
         }
         let hangs = group.header.is_some();
         for card in &group.cards {
-            column = column.child(self.render_card(card, in_focus, hangs, cx));
+            let painted = self.render_card(card, in_focus, hangs, cx);
+            items.push((Some(card.session_id.as_str()), painted));
         }
         if group.header.is_none() && group.cards.is_empty() {
-            column = column.child(self.hint(self.texts.get("sidebar.empty_category")));
+            items.push((None, self.hint(self.texts.get("sidebar.empty_category"))));
         }
-        column.into_any_element()
+        items
     }
 
     fn render_category(&self, group: &Group, cx: &mut Context<Self>) -> AnyElement {
@@ -133,8 +140,8 @@ impl Sidebar {
             }))
             .on_mouse_down(
                 MouseButton::Right,
-                cx.listener(move |this, event: &MouseDownEvent, _, cx| {
-                    this.open_menu(menu.clone(), event.position, cx);
+                cx.listener(move |this, event: &MouseDownEvent, window, cx| {
+                    this.open_menu(menu.clone(), event.position, window, cx);
                 }),
             )
             .on_drag(drag, |drag, _, _, cx| cx.new(|_| drag.clone()))

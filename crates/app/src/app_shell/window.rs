@@ -12,12 +12,15 @@ use lithemux_core::platform::process::local_page::open_folder;
 
 use super::live::Live;
 use super::menus::{
-    About, Minimize, OpenDataFolder, OpenSettings, Quit, Zoom, bind_keys as bind_menu_keys,
-    set_menus,
+    About, ImportFromCmux, Minimize, OpenDataFolder, OpenSettings, Quit, Zoom,
+    bind_keys as bind_menu_keys, set_menus,
 };
 use super::quit_signals::quit_on_signals;
+use super::session_keys::bind_keys as bind_session_keys;
 use super::title_bar::title_bar;
 use crate::edit_actions;
+use crate::import_window::ImportWindow;
+use crate::palette::Palette;
 use crate::settings_window::SettingsWindow;
 use crate::sidebar::Sidebar;
 use crate::status_bar::StatusBar;
@@ -25,10 +28,12 @@ use crate::theme;
 use crate::workspace::{Workspace, bind_keys};
 
 pub struct MainWindow {
-    live: Entity<Live>,
+    pub(super) live: Entity<Live>,
     pub sidebar: Entity<Sidebar>,
     pub workspace: Entity<Workspace>,
     status_bar: Entity<StatusBar>,
+    /// Open while the user looks for a session (cmd+p).
+    pub(super) palette: Option<Entity<Palette>>,
 }
 
 impl MainWindow {
@@ -52,13 +57,15 @@ impl MainWindow {
             sidebar,
             workspace,
             status_bar,
+            palette: None,
         }
     }
 }
 
 impl Render for MainWindow {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        div()
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let root = self.handle_session_keys(div(), cx);
+        root.relative()
             .flex()
             .flex_col()
             .size_full()
@@ -79,6 +86,17 @@ impl Render for MainWindow {
                     ),
             )
             .child(self.status_bar.clone())
+            .children(self.palette.clone().map(|palette| {
+                // Over everything, near the top, centered.
+                div()
+                    .absolute()
+                    .top(px(72.0))
+                    .left_0()
+                    .right_0()
+                    .flex()
+                    .justify_center()
+                    .child(palette)
+            }))
     }
 }
 
@@ -104,6 +122,7 @@ fn window_options(width: f32, height: f32, cx: &App) -> WindowOptions {
 pub fn bind_app_keys(cx: &mut App) {
     bind_keys(cx);
     bind_menu_keys(cx);
+    bind_session_keys(cx);
     edit_actions::bind_keys(cx);
 }
 
@@ -124,6 +143,28 @@ fn show_settings(
     let live = live.clone();
     let opened = cx.open_window(window_options(680.0, 620.0, cx), |window, cx| {
         cx.new(|cx| SettingsWindow::new(live, window, cx))
+    });
+    *open.borrow_mut() = opened.ok();
+}
+
+/// The one import window: shown, or brought to the front if it is open.
+/// Opened again, it reads cmux's file again.
+fn show_import(
+    live: &Entity<Live>,
+    open: &Rc<RefCell<Option<WindowHandle<ImportWindow>>>>,
+    cx: &mut App,
+) {
+    let existing = *open.borrow();
+    if let Some(handle) = existing
+        && handle
+            .update(cx, |_, window, _| window.activate_window())
+            .is_ok()
+    {
+        return;
+    }
+    let live = live.clone();
+    let opened = cx.open_window(window_options(760.0, 640.0, cx), |window, cx| {
+        cx.new(|cx| ImportWindow::new(live, window, cx))
     });
     *open.borrow_mut() = opened.ok();
 }
@@ -173,6 +214,11 @@ fn handle_the_menu_bar(live: &Entity<Live>, main: WindowHandle<MainWindow>, cx: 
         let live = live.clone();
         move |_: &About, cx| show_about(&live, cx)
     });
+    let import = Rc::new(RefCell::new(None));
+    cx.on_action({
+        let live = live.clone();
+        move |_: &ImportFromCmux, cx| show_import(&live, &import, cx)
+    });
     cx.on_action({
         let live = live.clone();
         move |_: &OpenDataFolder, cx| {
@@ -182,7 +228,7 @@ fn handle_the_menu_bar(live: &Entity<Live>, main: WindowHandle<MainWindow>, cx: 
             }
         }
     });
-    // Closing the main window ends the app; closing the settings does not.
+    // Closing the main window ends the app; closing the others does not.
     cx.on_window_closed(move |cx, closed| {
         if closed == main.window_id() {
             cx.quit();

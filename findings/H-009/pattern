@@ -1,0 +1,1 @@
+unchecked_transaction[[:space:]]*\(|\.transaction[[:space:]]*\([[:space:]]*\)|TransactionBehavior::Deferred|"[[:space:]]*[Bb][Ee][Gg][Ii][Nn]([[:space:]]+[Dd][Ee][Ff][Ee][Rr][Rr][Ee][Dd])?[[:space:]]*;?[[:space:]]*"

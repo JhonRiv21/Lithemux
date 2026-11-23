@@ -3,13 +3,16 @@
 //! and `quit_signals` ends it in order.
 
 mod claude_update;
+pub mod elsewhere;
 mod headless;
 pub mod live;
 mod menus;
+mod palette_flow;
 mod preferences;
 mod quit_signals;
 mod refresh;
 mod run;
+mod session_keys;
 mod shown_memory;
 pub mod title_bar;
 pub mod tooltip;

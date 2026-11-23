@@ -4,6 +4,8 @@ mod app_interop_test;
 mod categories_and_sessions_test;
 mod concurrent_start_test;
 mod config_test;
+mod elsewhere;
+mod import_cmux_test;
 mod inherited_session_test;
 mod lingering_shell_test;
 mod on_a_terminal_test;

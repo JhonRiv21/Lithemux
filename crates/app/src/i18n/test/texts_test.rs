@@ -58,7 +58,19 @@ fn values_take_their_place_in_the_text() {
     let english = Texts::of(Language::English);
     assert_eq!(
         english.with("status.open_elsewhere_pid", &[("pid", "42")]),
-        "open in another terminal (pid 42)"
+        "open elsewhere (pid 42)"
+    );
+}
+
+// ronda 3B punto 11: cmux, a terminal or anything else: the card does not
+// guess which
+#[test]
+fn a_session_open_elsewhere_does_not_say_where() {
+    let spanish = Texts::of(Language::Spanish);
+    assert_eq!(spanish.get("status.open_elsewhere"), "abierta en otro lado");
+    assert_eq!(
+        spanish.with("status.open_elsewhere_pid", &[("pid", "7")]),
+        "abierta en otro lado (pid 7)"
     );
 }
 

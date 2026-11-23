@@ -79,3 +79,54 @@ fn a_taken_slug_gets_the_next_free_number() {
         "terminal-3"
     );
 }
+
+// docs/decisiones.md D-07 + ronda 3B bug 1: the number that tells two
+// slugs apart never takes a slug past 48 characters
+#[test]
+fn a_numbered_slug_stays_within_forty_eight_characters() {
+    use crate::modules::category::domain::slug_policy::free_slug;
+    let base = "a".repeat(48);
+    let second_too = format!("{}-2", "a".repeat(46));
+    let taken = |slug: &str| slug == base || slug == second_too;
+
+    let second = free_slug(&base, |slug| slug == base);
+    let third = free_slug(&base, taken);
+
+    assert_eq!(second, format!("{}-2", "a".repeat(46)));
+    assert_eq!(third, format!("{}-3", "a".repeat(46)));
+    assert!(is_valid_slug(&second) && is_valid_slug(&third));
+}
+
+// ronda 3B bug 1: cut where a hyphen was, no slug ends in «--2»
+#[test]
+fn a_cut_base_does_not_leave_a_hyphen_before_the_number() {
+    use crate::modules::category::domain::slug_policy::free_slug;
+    let base = format!("{}-b", "a".repeat(45));
+
+    let numbered = free_slug(&base, |slug| slug == base);
+
+    assert!(is_valid_slug(&numbered), "{numbered}");
+    assert!(!numbered.contains("--"), "{numbered}");
+}
+
+// ronda 3B bug 2: Spanish letters keep their letter, without the accent
+#[test]
+fn accented_letters_give_their_plain_letter_in_a_slug() {
+    use crate::modules::category::domain::slug_policy::slug_from_name;
+    assert_eq!(slug_from_name("Migración").as_deref(), Some("migracion"));
+    assert_eq!(slug_from_name("Auditoría").as_deref(), Some("auditoria"));
+    assert_eq!(
+        slug_from_name("Ñandú Pingüino").as_deref(),
+        Some("nandu-pinguino")
+    );
+    // The same, written as a letter followed by its accent (NFD, as macOS
+    // gives file names).
+    assert_eq!(
+        slug_from_name("Migracio\u{301}n").as_deref(),
+        Some("migracion")
+    );
+    assert_eq!(
+        slug_from_name("N\u{303}andu\u{301}").as_deref(),
+        Some("nandu")
+    );
+}

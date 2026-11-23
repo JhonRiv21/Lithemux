@@ -4,8 +4,9 @@ use std::path::PathBuf;
 
 use lithemux_core::modules::category::{FsBoardStore, SqliteCategoryRepository};
 use lithemux_core::modules::launch::{
-    ClaudeProjectsTranscriptLocator, FlockSessionLocks, LaunchEnvironment, LaunchPorts,
-    LoginShellProbe, TerminalSessionRunner, hooks_settings_json, open_session,
+    ClaudeProjectsTranscriptLocator, CommandLineConversations, FlockSessionLocks,
+    LaunchEnvironment, LaunchPorts, LoginShellProbe, TerminalSessionRunner, hooks_settings_json,
+    open_session,
 };
 use lithemux_core::modules::session::{
     Kind, SessionRef, SqliteSessionRepository, find_session_by_id,
@@ -59,6 +60,7 @@ fn open_runs_the_fixed_claude_with_the_planned_arguments_and_environment() {
         hook_binary: &HookBinaryAt(hook.clone()),
         transcripts: &ClaudeProjectsTranscriptLocator::in_config_dir(temp.dir.path().join("cfg")),
         locks: &FlockSessionLocks::new(&temp.home),
+        conversations: &CommandLineConversations,
     };
     let environment = LaunchEnvironment {
         shell: PathBuf::from(fake_shell()),

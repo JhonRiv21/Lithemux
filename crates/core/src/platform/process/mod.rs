@@ -1,4 +1,5 @@
 pub mod capture;
+pub mod command_lines;
 pub mod detached;
 pub mod done_sound;
 pub mod listening_ports;

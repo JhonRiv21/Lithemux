@@ -6,11 +6,18 @@
 //! again only every `REMAP_EVERY`. Reading the memory of a known process
 //! costs microseconds, and is all that each measure does for the processes
 //! of the trees.
+//!
+//! The same map can keep the command lines that carry some arguments
+//! (`watching`): who runs what is then known without listing the processes
+//! once more.
 
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
+
+use super::command_lines::{CommandLine, kept_from, with_command_lines};
+use super::liveness::is_alive;
 
 /// How often the trees are mapped again. A process started meanwhile is
 /// counted from the next map on.
@@ -41,6 +48,8 @@ pub struct MemoryMeter {
     system: Option<System>,
     trees: HashMap<u32, Vec<u32>>,
     mapped_at: Option<Instant>,
+    watched: &'static [&'static str],
+    commands: Vec<CommandLine>,
 }
 
 impl Default for MemoryMeter {
@@ -51,11 +60,25 @@ impl Default for MemoryMeter {
 
 impl MemoryMeter {
     pub fn new() -> Self {
+        Self::watching(&[])
+    }
+
+    /// A meter that also keeps, from each map, the command lines that have
+    /// one of `flags`.
+    pub fn watching(flags: &'static [&'static str]) -> Self {
         MemoryMeter {
             system: System::new().ok(),
             trees: HashMap::new(),
             mapped_at: None,
+            watched: flags,
+            commands: Vec::new(),
         }
+    }
+
+    /// The watched command lines of the last map whose process still ran at
+    /// the last measure.
+    pub fn commands(&self) -> &[CommandLine] {
+        &self.commands
     }
 
     /// For each of `roots` that still runs, the resident memory of its whole
@@ -83,6 +106,10 @@ impl MemoryMeter {
             true,
             ProcessRefreshKind::nothing().with_memory(),
         );
+        // Of the watched ones only whether they still run matters: the
+        // kernel answers that for each, in microseconds, without reading
+        // their memory.
+        self.commands.retain(|command| is_alive(command.pid));
         let memory_of = |pid: &u32| {
             let process = system.process(Pid::from_u32(*pid));
             process.map_or(0, sysinfo::Process::memory)
@@ -103,11 +130,13 @@ impl MemoryMeter {
         let Some(system) = self.system.as_mut() else {
             return;
         };
-        system.refresh_processes_specifics(
-            ProcessesToUpdate::All,
-            true,
-            ProcessRefreshKind::nothing(),
-        );
+        let kind = if self.watched.is_empty() {
+            ProcessRefreshKind::nothing()
+        } else {
+            with_command_lines(ProcessRefreshKind::nothing())
+        };
+        system.refresh_processes_specifics(ProcessesToUpdate::All, true, kind);
+        self.commands = kept_from(system, self.watched);
         let parents: Vec<(u32, u32)> = system
             .processes()
             .iter()

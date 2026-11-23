@@ -1,3 +1,4 @@
+pub mod command_line_conversations;
 pub mod flock_session_locks;
 pub mod login_shell_probe;
 pub mod process_hook_probe;

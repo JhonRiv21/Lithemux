@@ -14,8 +14,8 @@ ended = "ended"
 new = "not started"
 running = "running"
 not_running = "not running"
-open_elsewhere = "open in another terminal"
-open_elsewhere_pid = "open in another terminal (pid {pid})"
+open_elsewhere = "open elsewhere"
+open_elsewhere_pid = "open elsewhere (pid {pid})"
 failed = "could not start: {reason}"
 
 [sidebar]
@@ -129,6 +129,11 @@ version_check_hours_hint = "How often lithemux asks the installed claude for its
 claude_path_hint = "Optional. Empty uses the claude of your shell, with its automatic updates."
 
 [menu_bar]
+go_to_session = "Go to Session…"
+next_session = "Next Session"
+previous_session = "Previous Session"
+session_menu = "Session Menu"
+import_cmux = "Import from cmux…"
 settings = "Settings…"
 about = "About lithemux"
 quit = "Quit lithemux"
@@ -162,3 +167,24 @@ resume_idle_one = "Resume 1 idle session"
 resume_idle_other = "Resume {count} idle sessions"
 busy_on_old_one = "1 busy session is still on the previous Claude Code version"
 busy_on_old_other = "{count} busy sessions are still on the previous Claude Code version"
+
+[palette]
+placeholder = "Go to a session: name, category or role"
+nothing = "No session matches"
+
+[import]
+title = "Import from cmux"
+intro = "Each Claude workspace of cmux becomes a hibernated session of lithemux, and opening it resumes its conversation. cmux's files are only read."
+summary = "Left out: {already} already in lithemux, {without_id} without a conversation id, {not_claude} without Claude."
+nothing = "cmux has no Claude session left to import."
+no_conversation = "no saved conversation"
+pinned = "pinned"
+choose = "Choose a category"
+new_category = "New: {name}"
+import_one = "Import 1 session"
+import_other = "Import {count} sessions"
+needs_category = "Choose a category for each marked session"
+imported_one = "Imported 1 session. It is hibernated: opening it resumes its conversation."
+imported_other = "Imported {count} sessions. They are hibernated: opening one resumes its conversation."
+failed = "Could not import: {detail}"
+close = "Close"

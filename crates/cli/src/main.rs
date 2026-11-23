@@ -8,7 +8,7 @@ use std::process::ExitCode;
 
 use clap::Parser;
 
-use crate::args::{CatCommand, Cli, CliCommand, ConfigCommand};
+use crate::args::{CatCommand, Cli, CliCommand, ConfigCommand, ImportCommand};
 
 fn main() -> ExitCode {
     match run(Cli::parse()) {
@@ -37,6 +37,9 @@ fn run(cli: Cli) -> anyhow::Result<u8> {
             ConfigCommand::Get { key } => commands::config::get(&key)?,
             ConfigCommand::Set { key, value } => commands::config::set(&key, &value)?,
             ConfigCommand::Unset { key } => commands::config::unset(&key)?,
+        },
+        CliCommand::Import { command } => match command {
+            ImportCommand::Cmux(args) => commands::import::cmux(args)?,
         },
         CliCommand::Open { target } => return commands::launch::open(&target),
         CliCommand::Doctor => return commands::doctor::run(),

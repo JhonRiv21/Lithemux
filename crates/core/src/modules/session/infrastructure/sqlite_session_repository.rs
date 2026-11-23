@@ -1,11 +1,10 @@
-use rusqlite::types::Type;
-use rusqlite::{OptionalExtension, Params, Row, params};
+use rusqlite::{OptionalExtension, Params, params};
 
 use crate::modules::session::domain::kind::Kind;
-use crate::modules::session::domain::profile::Profile;
 use crate::modules::session::domain::session::Session;
 use crate::modules::session::domain::state::State;
 use crate::modules::session::error::SessionError;
+use crate::modules::session::infrastructure::session_row::{from_row, takes_a_conversation};
 use crate::modules::session::ports::session_repository::SessionRepository;
 use crate::platform::store::connection::Db;
 use crate::platform::store::error::StoreError;
@@ -61,7 +60,7 @@ impl SqliteSessionRepository<'_> {
 
 impl SessionRepository for SqliteSessionRepository<'_> {
     fn insert(&self, session: &Session) -> Result<(), SessionError> {
-        self.execute(
+        let inserted = self.execute(
             &format!(
                 "INSERT INTO sessions({COLUMNS}) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, \
                  ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)"
@@ -88,7 +87,15 @@ impl SessionRepository for SqliteSessionRepository<'_> {
                 session.unread,
                 session.notice
             ],
-        )
+        );
+        match inserted {
+            Err(SessionError::Store(StoreError::Sqlite(error))) if takes_a_conversation(&error) => {
+                Err(SessionError::ConversationTaken(
+                    session.claude_session_id.clone().unwrap_or_default(),
+                ))
+            }
+            other => other,
+        }
     }
 
     fn next_sort(&self, category_id: &str) -> Result<i64, SessionError> {
@@ -256,40 +263,4 @@ impl SessionRepository for SqliteSessionRepository<'_> {
     fn delete(&self, id: &str) -> Result<(), SessionError> {
         self.execute("DELETE FROM sessions WHERE id = ?1", [id])
     }
-}
-
-fn from_row(row: &Row<'_>) -> rusqlite::Result<Session> {
-    Ok(Session {
-        id: row.get(0)?,
-        category_id: row.get(1)?,
-        slug: row.get(2)?,
-        role: row.get(3)?,
-        kind: parsed(row, 4, Kind::parse)?,
-        profile: parsed(row, 5, Profile::parse)?,
-        cwd: row.get(6)?,
-        claude_session_id: row.get(7)?,
-        model: row.get(8)?,
-        keep_alive: row.get(9)?,
-        state: parsed(row, 10, State::parse)?,
-        claude_version: row.get(11)?,
-        last_activity_at: row.get(12)?,
-        created_at: row.get::<_, Option<i64>>(13)?.unwrap_or(0),
-        sort: row.get::<_, Option<i64>>(14)?.unwrap_or(0),
-        title: row.get(15)?,
-        pin_sort: row.get(16)?,
-        preview: row.get(17)?,
-        unread: row.get(18)?,
-        notice: row.get(19)?,
-    })
-}
-
-fn parsed<T>(row: &Row<'_>, index: usize, parse: fn(&str) -> Option<T>) -> rusqlite::Result<T> {
-    let text: String = row.get(index)?;
-    parse(&text).ok_or_else(|| {
-        rusqlite::Error::FromSqlConversionFailure(
-            index,
-            Type::Text,
-            format!("unexpected value \"{text}\"").into(),
-        )
-    })
 }

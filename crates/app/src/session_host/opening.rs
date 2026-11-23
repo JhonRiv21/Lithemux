@@ -10,9 +10,9 @@ use std::thread;
 
 use lithemux_core::modules::category::SqliteCategoryRepository;
 use lithemux_core::modules::launch::{
-    ClaudeProjectsTranscriptLocator, FlockSessionLocks, HookBinary, LaunchEnvironment, LaunchError,
-    LaunchNotices, LaunchPorts, LoginShellProbe, PreparedLaunch, installed_claude_version,
-    prepare_launch,
+    ClaudeProjectsTranscriptLocator, CommandLineConversations, FlockSessionLocks, HookBinary,
+    LaunchEnvironment, LaunchError, LaunchNotices, LaunchPorts, LoginShellProbe, PreparedLaunch,
+    installed_claude_version, prepare_launch,
 };
 use lithemux_core::modules::session::{SessionRef, SqliteSessionRepository};
 use lithemux_core::modules::settings::SqliteSettingsRepository;
@@ -89,6 +89,7 @@ fn prepare(
         hook_binary: &FixedHookBinary(config.hook_binary.clone()),
         transcripts: &transcripts,
         locks: &FlockSessionLocks::new(&config.home),
+        conversations: &CommandLineConversations,
     };
     let environment = LaunchEnvironment {
         shell: config.shell.clone(),

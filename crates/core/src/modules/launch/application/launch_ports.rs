@@ -1,4 +1,5 @@
 use crate::modules::category::CategoryRepository;
+use crate::modules::launch::ports::conversation_processes::ConversationProcesses;
 use crate::modules::launch::ports::hook_binary::HookBinary;
 use crate::modules::launch::ports::launch_notices::LaunchNotices;
 use crate::modules::launch::ports::session_locks::SessionLocks;
@@ -18,4 +19,6 @@ pub struct LaunchPorts<'a> {
     pub hook_binary: &'a dyn HookBinary,
     pub transcripts: &'a dyn TranscriptLocator,
     pub locks: &'a dyn SessionLocks,
+    /// Who else runs a conversation, lock or not.
+    pub conversations: &'a dyn ConversationProcesses,
 }

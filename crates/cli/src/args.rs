@@ -48,6 +48,40 @@ pub enum CliCommand {
     },
     /// Check the installation
     Doctor,
+    /// Bring in the sessions of another app
+    Import {
+        #[command(subcommand)]
+        command: ImportCommand,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum ImportCommand {
+    /// Propose a session for each Claude workspace of cmux; with --apply,
+    /// make them (cmux's files are only read)
+    Cmux(ImportCmuxArgs),
+}
+
+#[derive(Args)]
+pub struct ImportCmuxArgs {
+    /// Make the sessions marked to import; without it nothing is written
+    #[arg(long)]
+    pub apply: bool,
+    /// Category, by slug, only for the sessions left without one (those of the
+    /// home folder); the others keep the one proposed
+    #[arg(long)]
+    pub into: Option<String>,
+    /// Numbers of the sessions to leave out (`--skip 2,5`)
+    #[arg(long, value_delimiter = ',')]
+    pub skip: Vec<usize>,
+    /// Numbers of sessions to take in anyway, such as those without a saved conversation
+    #[arg(long, value_delimiter = ',')]
+    pub include: Vec<usize>,
+    /// Read this file instead of cmux's own
+    #[arg(long)]
+    pub from: Option<PathBuf>,
+    #[arg(long)]
+    pub json: bool,
 }
 
 #[derive(Subcommand)]

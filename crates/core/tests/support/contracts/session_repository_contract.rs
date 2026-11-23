@@ -1,5 +1,7 @@
 use lithemux_core::modules::category::{Category, CategoryRepository};
-use lithemux_core::modules::session::{Kind, Profile, Session, SessionRepository, State};
+use lithemux_core::modules::session::{
+    Kind, Profile, Session, SessionError, SessionRepository, State,
+};
 
 fn category(id: &str, slug: &str) -> Category {
     Category {
@@ -211,4 +213,32 @@ pub fn session_repository_contract(
     assert!(sessions.list_in("c1").unwrap().is_empty());
     assert_eq!(sessions.find_by_id("s2").unwrap(), None);
     assert_eq!(sessions.list_in("c2").unwrap().len(), 1);
+}
+
+/// One conversation, one session: two sessions resuming the same
+/// conversation lose messages (migration 6).
+pub fn one_session_per_conversation_contract(
+    categories: &dyn CategoryRepository,
+    sessions: &dyn SessionRepository,
+) {
+    categories.insert(&category("k1", "kept")).unwrap();
+    let first = session("t1", "k1", "first", Kind::Member, 1);
+    sessions.insert(&first).unwrap();
+    let mut twin = session("t2", "k1", "twin", Kind::Member, 2);
+    twin.claude_session_id = first.claude_session_id.clone();
+
+    let refused = sessions.insert(&twin);
+
+    assert!(
+        matches!(refused, Err(SessionError::ConversationTaken(ref id)) if Some(id) == first.claude_session_id.as_ref()),
+        "{refused:?}"
+    );
+    assert_eq!(sessions.list_in("k1").unwrap(), vec![first]);
+    // Shells have no conversation: any number of them.
+    for (id, slug) in [("t3", "shell-a"), ("t4", "shell-b")] {
+        let mut shell = session(id, "k1", slug, Kind::Member, 3);
+        shell.profile = Profile::Shell;
+        shell.claude_session_id = None;
+        sessions.insert(&shell).unwrap();
+    }
 }

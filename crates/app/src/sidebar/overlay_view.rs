@@ -3,11 +3,13 @@
 
 use std::path::Path;
 
-use gpui::{AnyElement, Context, Div, anchored, deferred, div, prelude::*, px, rgb};
+use gpui::{
+    AnyElement, Context, Div, KeyDownEvent, Window, anchored, deferred, div, prelude::*, px, rgb,
+};
 
 use super::card_view::id_of;
 use super::form::Form;
-use super::menu::{MenuCommand, MenuItem};
+use super::menu::{MenuCommand, MenuItem, highlight_after};
 use super::view::Sidebar;
 use crate::theme;
 
@@ -111,10 +113,41 @@ impl Sidebar {
             )
     }
 
+    /// Esc closes the menu; ↑ and ↓ go through it and Enter runs the entry.
+    fn on_menu_key(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(menu) = self.menu.as_mut() else {
+            return;
+        };
+        let keystroke = &event.keystroke;
+        if keystroke.modifiers.modified() {
+            return;
+        }
+        match keystroke.key.as_str() {
+            "escape" => self.close_menu(window, cx),
+            "up" | "down" => {
+                let by = if keystroke.key == "up" { -1 } else { 1 };
+                menu.highlighted = highlight_after(menu.highlighted, menu.items.len(), by);
+                cx.notify();
+            }
+            "enter" => {
+                let chosen = menu
+                    .highlighted
+                    .and_then(|at| menu.items.get(at))
+                    .map(|item| item.command.clone());
+                if let Some(command) = chosen {
+                    self.run(command, window, cx);
+                }
+            }
+            _ => return,
+        }
+        cx.stop_propagation();
+    }
+
     fn render_menu_entry(
         &self,
         index: usize,
         item: &MenuItem,
+        is_highlighted: bool,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let command = item.command.clone();
@@ -137,6 +170,11 @@ impl Sidebar {
                     .bg(rgb(theme::colors().accent))
                     .text_color(rgb(theme::colors().on_accent))
             })
+            .when(is_highlighted, |entry| {
+                entry
+                    .bg(rgb(theme::colors().accent))
+                    .text_color(rgb(theme::colors().on_accent))
+            })
             .on_click(cx.listener(move |this, _, window, cx| {
                 this.run(command.clone(), window, cx);
             }))
@@ -148,7 +186,8 @@ impl Sidebar {
         let menu = self.menu.as_ref()?;
         let mut entries = Vec::new();
         for (index, item) in menu.items.iter().enumerate() {
-            entries.push(self.render_menu_entry(index, item, cx));
+            let is_highlighted = menu.highlighted == Some(index);
+            entries.push(self.render_menu_entry(index, item, is_highlighted, cx));
         }
         let list = div()
             .flex()
@@ -161,9 +200,10 @@ impl Sidebar {
             .border_color(rgb(theme::colors().border))
             .shadow_md()
             .occlude()
-            .on_mouse_down_out(cx.listener(|this, _, _, cx| {
-                this.menu = None;
-                cx.notify();
+            .track_focus(&self.menu_focus)
+            .on_key_down(cx.listener(Self::on_menu_key))
+            .on_mouse_down_out(cx.listener(|this, _, window, cx| {
+                this.close_menu(window, cx);
             }))
             .children(entries);
         Some(

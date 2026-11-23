@@ -1,0 +1,74 @@
+{
+  "version": 1,
+  "notifications": [
+    { "body": 5, "title": { "not": "a string" }, "subtitle": ["neither"] }
+  ],
+  "windows": [
+    {
+      "frame": { "x": 0, "y": 0, "width": 1200, "height": 800 },
+      "tabManager": {
+        "selectedWorkspaceIndex": 0,
+        "workspaces": [
+          {
+            "customTitle": "Planner",
+            "processTitle": "✳ Planning the phase",
+            "currentDirectory": "/Users/someone/work/alpha",
+            "isPinned": true,
+            "panels": [
+              {
+                "id": "p1",
+                "type": "terminal",
+                "directory": "/Users/someone/work/alpha",
+                "notifications": [{ "body": "text of a conversation", "title": "t", "subtitle": "s" }],
+                "terminal": {
+                  "workingDirectory": "/Users/someone/work/alpha",
+                  "agent": {
+                    "kind": "claude",
+                    "sessionId": "11111111-1111-4111-8111-111111111111",
+                    "workingDirectory": "/Users/someone/work/alpha/api"
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "customTitle": null,
+            "processTitle": "✳ Review the API",
+            "currentDirectory": "/Users/someone",
+            "isPinned": false,
+            "panels": [
+              {
+                "id": "p2",
+                "type": "terminal",
+                "terminal": {
+                  "agent": { "kind": "claude", "sessionId": "22222222-2222-4222-8222-222222222222" }
+                }
+              }
+            ]
+          },
+          {
+            "processTitle": "zsh",
+            "currentDirectory": "/Users/someone/work/beta",
+            "panels": [{ "id": "p3", "type": "terminal", "terminal": { "workingDirectory": "/Users/someone/work/beta" } }]
+          },
+          {
+            "processTitle": "Claude Code",
+            "currentDirectory": "/Users/someone/work/beta",
+            "panels": [{ "id": "p4", "type": "terminal", "terminal": { "agent": { "kind": "claude" } } }]
+          },
+          {
+            "processTitle": "Fix the build",
+            "currentDirectory": "/Users/someone/work/beta",
+            "panels": [
+              {
+                "id": "p5",
+                "type": "terminal",
+                "terminal": { "agent": { "kind": "claude", "sessionId": "55555555-5555-4555-8555-555555555555" } }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

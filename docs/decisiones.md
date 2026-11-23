@@ -978,3 +978,166 @@ Borrar desde la barra lateral no cambia: pide confirmación, cierra el programa 
   - escribir en la terminal de la coordinadora;
   - despertar a una coordinadora hibernada. Si está hibernada, el envío falla y la sesión se lo dice al usuario.
 
+
+## D-59 · Importador de cmux
+
+*2026-11-22, bloque 3B, §3.4.*
+
+- **Módulo nuevo `core::modules::import`,** con las capas de siempre:
+  - `domain`: `CmuxPanel`, la propuesta, la política `propose`, `NamesInUse` para los slugs y `choose` para lo que elige la CLI;
+  - `application`: `propose_import` (no escribe) y `apply_import`;
+  - `ports`: `CmuxSnapshot` (solo lectura) e `ImportWriter`;
+  - `infrastructure`: `CmuxSessionFile`, `cmux_format` y `SqliteImportWriter`.
+- **Lectura del archivo de cmux** (`~/Library/Application Support/cmux/session-com.cmuxterm.app.json`):
+  - se lee entero de una vez; si no se puede interpretar, se reintenta una vez a los 250 ms, porque cmux lo reescribe a cada rato;
+  - primero se lee solo `version`: si no es 1, se rechaza con «the sessions file of cmux is version N, and only version 1 is known»;
+  - solo se declaran los campos que se usan. Las notificaciones (`body`, `title`, `subtitle`), que son texto de conversaciones, no se declaran: el parser las salta sin guardarlas.
+- **Qué se toma de cada panel:**
+  - el id de la conversación sale de `panels[].terminal.agent.sessionId`, con `agent.kind == "claude"`;
+  - la carpeta sale, en este orden, de `agent.workingDirectory`, `terminal.workingDirectory`, `panel.directory` y `workspace.currentDirectory`. En el archivo real coinciden las cuatro;
+  - el título y el pin salen del workspace.
+- **Nombre:**
+  - `customTitle`; si no hay, `processTitle`; si no hay, el nombre de la carpeta;
+  - un título en blanco cuenta como ausente;
+  - del `processTitle` se quitan los símbolos del principio, como el «✳ » que Claude pone delante de su título.
+  - **El slug** sale del nombre y no choca con los slugs de su categoría, ni entre las importadas, ni en la dirección `<categoría>-<slug>` de otra sesión.
+  - El nombre completo queda como título y también como rol.
+- **Categoría:**
+  - si la carpeta es el home del usuario, la sesión queda sin categoría y el usuario elige;
+  - si cae dentro de la raíz de una categoría, va a esa. Cuando hay varias, gana la más profunda. La comparación es por componentes: `/work/alphabet` no está dentro de `/work/alpha`;
+  - si no, va a una categoría nueva para esa carpeta, con el nombre de la carpeta. Comparten esa categoría todas las sesiones de la misma carpeta.
+  - **Ajuste a la especificación:** la carpeta que cuenta es la de trabajo del agente, así que la categoría nueva puede llamarse como una subcarpeta del proyecto (por ejemplo `api`).
+- **Qué se omite:**
+  - los paneles cuyo id de conversación ya tiene una sesión de lithemux, así que reimportar no duplica;
+  - un id repetido dentro del mismo archivo;
+  - los paneles de Claude sin `sessionId` o con uno que no es un UUID;
+  - los paneles sin Claude.
+  - La propuesta cuenta cada caso.
+- **Sin conversación guardada:** se comprueba con `TranscriptLocator`, la única lectura permitida de `~/.claude`. Esas sesiones salen marcadas como tales y desmarcadas.
+- **Aplicar:**
+  - antes de escribir se vuelve a leer la base: lo que se importó entretanto se salta;
+  - se crean los tableros de las categorías nuevas;
+  - las categorías y las sesiones se guardan en **una sola transacción**;
+  - cada sesión queda `hibernated`, con su `claude_session_id`, como miembro y fijada si el workspace lo estaba. No arranca nada, y la primera apertura usa `--resume` porque el transcript existe.
+- **CLI:** `lithemux import cmux` muestra la propuesta y no escribe nada. Las opciones:
+  - `--apply` aplica;
+  - `--into <categoría>`: adónde van las sesiones sin categoría;
+  - `--skip 2,5`: deja fuera esas sesiones, por número;
+  - `--include 3`: incluye una desmarcada, por ejemplo una sin conversación guardada;
+  - `--from <archivo>`: lee otro archivo;
+  - `--json`.
+  - Los números son la posición en el archivo de cmux, contando desde 1, así que no cambian entre una corrida y la siguiente.
+  - Si una sesión elegida queda sin categoría, la importación entera se rechaza y dice cuál.
+- **App:** «File → Import from cmux…» abre una ventana con:
+  - una casilla por sesión;
+  - un selector de categoría por sesión, con las existentes, las nuevas de la propuesta y una nueva para su propia carpeta;
+  - el botón «Import N sessions», que no se activa mientras una sesión marcada no tenga categoría.
+  - Estado en `import_window/state.rs`, acciones en `actions.rs` y vista en `view.rs` y `rows_view.rs`.
+- **Solo lectura sobre cmux:** la guarda `crates/core/tests/cmux_read_only_guard.rs` comprueba dos cosas:
+  - el lugar del archivo de cmux solo aparece en `cmux_session_file.rs`;
+  - ese archivo no nombra nada que cambie archivos (`write`, `create`, `OpenOptions`, `options`, `remove_*`, `rename`, `copy`, `*link`, `set_permissions`, `set_len`).
+  - Una prueba de integración comprueba además que, tras proponer y aplicar, el archivo tiene los mismos bytes y la misma fecha, y que no apareció nada a su lado.
+- **El archivo real no entra al repo:** las pruebas usan los archivos sintéticos de `crates/core/tests/fixtures/cmux/`.
+
+- **Ronda de correcciones del 3B:**
+  - **Slugs:**
+    - `free_slug` recorta la base para que el número quepa (`…-2` nunca pasa de 48);
+    - antes de guardar, todo slug importado se valida con `Slug::parse`;
+    - `slug_from_name` quita las tildes latinas, tanto escritas con su letra (NFC) como detrás de ella (NFD): «Migración» da `migracion`, no `migraci-n`. Vale para toda la app; los slugs ya guardados no cambian nunca.
+  - **Una categoría con raíz en el home, o más arriba, no cuenta como contenedora:** contendría todo. Así, `lithemux cat add trabajo --root ~` (como sugería la prueba manual) ya no se traga las carpetas de los proyectos. Esto explica el punto 10: `--into` ya aplicaba solo a las sesiones sin categoría, y era esa categoría del home la que cambiaba la propuesta.
+  - **Una propuesta vieja no duplica categorías:** al aplicar, una `New { root_dir }` se resuelve primero contra las categorías que ya tienen esa raíz.
+  - **Al aplicar** se relee lo que hay y se guarda todo dentro de una transacción `IMMEDIATE` (port `ImportStore`, antes `ImportWriter`). Las escrituras pasan por los repositorios de siempre, sobre la misma conexión.
+  - **Los tableros se crean después del commit.** Si uno falla, la importación queda hecha: la CLI lo avisa por stderr y la app lo anota en `app.log`.
+  - **Lectura del archivo:**
+    - tope de 20 MB, medido con `metadata().len()` antes de leer;
+    - sin `version`: «has no version»;
+    - una `version` que no es entera: error de formato, sin reintento;
+    - solo un JSON cortado o mal escrito se reintenta;
+    - un `null` donde va una lista se lee como lista vacía.
+  - **La ruta de cmux ya no sale del lector:** se quitó `CmuxSessionFile::path()`.
+  - **La ventana de importación** lee y aplica fuera del hilo de la interfaz (`background_spawn`), cada vez con su propia conexión a la base. El botón queda gris mientras trabaja.
+  - **La guarda de solo lectura lee el código como tokens,** sin comentarios. Así:
+    - ve una ruta armada con `.join` en varias líneas, o `data_dir().join("cmux")`;
+    - marca cualquier nombre que empiece por `write` o `set_`, además de `persist`, `Command`, `append` y `truncate`.
+    - Las 8 variantes que mandó la planificadora se probaron contra la guarda anterior, y no vio ninguna.
+
+## D-60 · «Abierta en otro lado» también por la línea de comandos de los procesos
+
+*2026-11-22, bloque 3B, §3.4 (riesgo real) y pendiente de la Fase 2.*
+
+- **El problema:** el lock de lithemux solo protege contra lanzamientos de lithemux. Un `claude --resume <uuid>` que lanzó cmux no tiene lock, y reanudarlo desde lithemux pondría dos `claude` sobre la misma conversación.
+- **La comprobación al abrir:** `prepare_launch` primero toma el lock y después pregunta al port nuevo `ConversationProcesses` si un proceso vivo tiene esa conversación en su línea de comandos.
+  - Si lo tiene, falla con `AlreadyOpen { pid }` y suelta el lock.
+  - Vale para cualquier apertura: la CLI, la app y el despertar al mostrar una pestaña.
+- **Qué cuenta como esa conversación:**
+  - en la línea de comandos aparece `--resume <uuid>`, `-r <uuid>` o `--session-id <uuid>`, o la forma `--flag=<uuid>`;
+  - no cuenta el uuid suelto, ni dentro de un `zsh -c "…"`;
+  - un `--fork-session` también cuenta: es preferible avisar de más que perder mensajes.
+- **La lectura de los procesos:**
+  - `platform::process::command_lines` lee las líneas de comandos con `sysinfo`, que ya estaba en el proyecto, y solo guarda las que tienen alguna de esas opciones;
+  - al abrir una sesión hace un barrido propio, de algunos milisegundos y fuera del hilo de la interfaz.
+- **La tarjeta lo muestra sola, sin barridos extra:**
+  - el `MemoryMeter` de la §3.3 ya listaba todos los procesos cada 30 s para mapear los árboles. Ahora, en ese mismo barrido, también guarda esas líneas de comandos;
+  - a cada medida, cada 3 s, descarta las de procesos que terminaron;
+  - el refresco que ya existía marca «abierta en otro lado (pid N)» cada sesión cuya conversación corre en otro proceso mientras la app no la tiene.
+  - Así se resuelve el pendiente de la Fase 2: una sesión abierta con `lithemux open` en otra terminal aparece como abierta en otro lado sin que el usuario pulse Abrir.
+  - **Límite:** tarda hasta 30 s en verse, lo que tarda el siguiente barrido. La comprobación al abrir no espera: es inmediata.
+- **Lo que la app tiene abierto, o está abriendo o cerrando, nunca se marca:** en esos casos manda la fase del host (`app_shell/elsewhere.rs`).
+- **Se descartó** leer variables de entorno o archivos de cmux, o identificar el ejecutable: la línea de comandos es lo que cmux y lithemux escriben de forma documentada, con los flags de `claude --help`.
+
+- **Ronda de correcciones del 3B:**
+  - **Solo cuenta la línea de comandos de `claude`:** el programa (`argv[0]`) se llama `claude`, o es un intérprete (`node`, `bun`, `deno`, `sh`, `bash`, `zsh`, `dash`) que corre un script llamado `claude`. Así se descarta, por ejemplo, el `-r` de `grep -r <uuid>`. En la máquina de Jhon, los 24 `claude` de cmux tienen `claude` como `argv[0]`.
+  - **Un flag sin valor no toma el siguiente flag como id:** `--resume --fork-session X` no nombra ninguna conversación.
+  - **«Abierta en otro lado» ya no se queda pegado:**
+    - si el host la marcó así al intentar abrirla, la tarjeta lo mantiene mientras ese pid viva o el barrido siga viendo la conversación;
+    - cuando ninguna de las dos cosas se cumple, vuelve al estado de la base;
+    - la vida del pid se comprueba en el momento, para no esperar 30 s al barrido.
+  - **El texto ya no dice dónde:** «open elsewhere (pid N)» / «abierta en otro lado (pid N)». Puede ser cmux, una terminal u otra cosa.
+  - **El medidor ya no lee la memoria de los procesos vigilados:** cada 3 s solo comprueba que sigan vivos (`is_alive`). La memoria de las sesiones propias sigue igual.
+  - **Las pruebas** lanzan el `claude` falso con un enlace llamado `claude` (`CLAUDE_PROGRAM`), como lo lanza cmux.
+- **Límites conocidos, que esta comprobación no ve:**
+  - `claude --continue` (o `-c`): retoma la última conversación de la carpeta sin decir cuál;
+  - `claude --resume <nombre>`: el valor es un nombre, no el id;
+  - `/clear` o `/resume` dentro de la sesión: cambia de conversación mientras la línea de comandos sigue nombrando la de antes;
+  - un `claude` lanzado con otro nombre de programa.
+  - En esos casos el lock de lithemux sigue protegiendo lo que abre lithemux, pero no lo que abrió otro.
+
+## D-61 · Paleta y teclado
+
+*2026-11-22, bloque 3B, §3.5.*
+
+- **cmd+p abre la paleta:**
+  - busca entre todas las sesiones por nombre, slug, categoría (nombre o slug) y rol, sin distinguir mayúsculas ni tildes;
+  - ↑/↓ mueven la selección y dan la vuelta en los extremos;
+  - Enter, o un clic, salta a la sesión igual que un clic en su tarjeta: la muestra y la despierta si hibernaba;
+  - Esc, o un clic afuera, la cierra y devuelve el foco a la terminal.
+  - Muestra como mucho 50 resultados, con la categoría y el estado de cada uno.
+- **El orden** lo decide una función pura (`palette/ranking.rs`):
+  - **exacta:** un campo igual a lo buscado;
+  - **prefijo:** un campo que empieza por lo buscado, o que tiene una palabra que empieza por eso. Lo de la palabra se agregó para que «api» encuentre «Revisar la api» antes que «Capitán»;
+  - **aproximada:** las letras de la búsqueda aparecen en orden, sin contar los espacios, también a lo largo de «categoría + nombre». Así, «sel rev» encuentra «Revisión» de Selektal;
+  - el desempate es por actividad reciente, y después por título.
+  - El texto se pliega una sola vez al abrir la paleta: la primera versión, que lo plegaba en cada tecla, tardaba 24 ms por búsqueda con 1.000 sesiones en debug.
+- **Atajos nuevos** (`app_shell/session_keys.rs`). Son letras o flechas, que no dependen de la distribución del teclado (D-38):
+  - `cmd+p`: la paleta;
+  - `cmd+alt+↓` / `cmd+alt+↑`: la sesión siguiente o anterior en el orden de la barra lateral. Una categoría plegada se salta, y al llegar a un extremo da la vuelta;
+  - `cmd+shift+m`: el menú de la sesión a la vista. Se abre arriba en la barra lateral, porque la tarjeta puede no estar a la vista.
+  - Los cuatro están también en el menú View.
+- **El menú contextual toma el foco al abrirse,** ya sea con clic derecho o con el teclado:
+  - Esc lo cierra y devuelve el foco a lo que está a la vista;
+  - ↑/↓ recorren las entradas y Enter ejecuta la marcada.
+  - Así se resuelve el pendiente de la Fase 2: antes, Esc llegaba a la terminal.
+- **Ronda de correcciones del 3B:**
+  - **La paleta** se desplaza para que la fila seleccionada quede siempre a la vista (`ScrollHandle`). Pliega las tildes con la misma función de `core` que hace los slugs, así que también quita las escritas detrás de su letra (NFD).
+  - **La barra lateral** se desplaza hasta la sesión que gana el foco, venga del teclado, de la paleta o de un clic. Para eso cada tarjeta pasó a ser hija directa de la lista; antes, cada categoría era una columna anidada.
+  - **El criterio de la prueba de rendimiento:** 100 sesiones, como dice el plan, en menos de un cuadro (16 ms), en debug y con las demás pruebas corriendo a la vez. Medido: alrededor de 1 ms (9 ms con 1.000 sesiones). El margen es holgado a propósito: la prueba falla ante un cambio de orden de magnitud, no porque la máquina esté ocupada.
+
+## D-62 · Una conversación, una sesión (migración 6)
+
+*2026-11-22, ronda de correcciones del bloque 3B.*
+
+- **La migración 6** crea el índice único parcial `one_session_per_conversation` sobre `sessions(claude_session_id) WHERE claude_session_id IS NOT NULL`. Dos sesiones sobre la misma conversación pierden mensajes, y dos importaciones a la vez podían agregarla dos veces.
+- **Una base que ya tiene sesiones compartiendo conversación** no se migra. El error las nombra (`<conversación>: <cat>/<sesión>, …`) y pide dejar una sola de cada grupo; la base queda en la versión 5, intacta.
+- **Las bases revisadas,** solo leyendo: la de Jhon (versión 5, 3 sesiones) y `home-b3` de la planificadora (versión 5, 5 sesiones). Ninguna tiene conversaciones compartidas.
+- **El repositorio** traduce el rechazo del índice a `SessionError::ConversationTaken`. El de memoria cumple el mismo contrato (`one_session_per_conversation_contract`).
+- **Las shells,** sin conversación, no tienen límite.

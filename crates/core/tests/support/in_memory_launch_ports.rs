@@ -4,8 +4,8 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use lithemux_core::modules::launch::{
-    HeldSessionLock, HookBinary, LaunchError, LaunchPlan, SessionLocks, SessionRunner,
-    TranscriptLocator,
+    ConversationProcesses, HeldSessionLock, HookBinary, LaunchError, LaunchPlan, SessionLocks,
+    SessionRunner, TranscriptLocator,
 };
 
 pub const HOOK_PATH: &str = "/opt/lithemux/bin/lithemux-hook";
@@ -39,6 +39,18 @@ impl TranscriptLocator for InMemoryTranscripts {
             .borrow()
             .iter()
             .any(|id| id == claude_session_id)
+    }
+}
+
+// Same contract as CommandLineConversations: who runs each conversation.
+#[derive(Default)]
+pub struct InMemoryConversations {
+    pub running: RefCell<HashMap<String, u32>>,
+}
+
+impl ConversationProcesses for InMemoryConversations {
+    fn holder_of(&self, claude_session_id: &str) -> Option<u32> {
+        self.running.borrow().get(claude_session_id).copied()
     }
 }
 

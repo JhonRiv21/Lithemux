@@ -17,7 +17,8 @@ const VERSION_TIMEOUT: Duration = Duration::from_secs(2);
 ///
 /// The lock comes first. Whether to resume depends on the transcript, and
 /// that answer is only safe while nobody else can start the session. It
-/// fails with `LaunchError::AlreadyOpen` when someone else has it.
+/// fails with `LaunchError::AlreadyOpen` when someone else has it, or when
+/// a process started without lithemux runs its conversation.
 pub fn prepare_launch(
     ports: &LaunchPorts<'_>,
     environment: &LaunchEnvironment,
@@ -30,6 +31,14 @@ pub fn prepare_launch(
         return Ok(PreparedLaunch::new(category, session, plan, None));
     }
     let lock = ports.locks.acquire(&session.id)?;
+    // A `claude` started elsewhere, by cmux for one, holds no lock of ours.
+    if let Some(pid) = session
+        .claude_session_id
+        .as_deref()
+        .and_then(|id| ports.conversations.holder_of(id))
+    {
+        return Err(LaunchError::AlreadyOpen { pid: Some(pid) });
+    }
     let plan = plan_launch(ports, environment, &category, &session)?;
     // Best effort: a missing version never blocks or delays the launch.
     let version = ports

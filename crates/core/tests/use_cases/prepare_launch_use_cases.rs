@@ -7,7 +7,7 @@ use lithemux_core::modules::session::{Kind, Profile, Session, SessionRef, create
 
 use crate::support::fake_shell_probe::FakeShellProbe;
 use crate::support::in_memory_launch_ports::{
-    FixedHookBinary, HOOK_PATH, InMemoryLocks, InMemoryTranscripts,
+    FixedHookBinary, HOOK_PATH, InMemoryConversations, InMemoryLocks, InMemoryTranscripts,
 };
 use crate::support::in_memory_store::{InMemoryBoards, InMemoryStore};
 use crate::support::recording_ports::RecordingNotices;
@@ -21,6 +21,7 @@ struct World {
     notices: RecordingNotices,
     transcripts: InMemoryTranscripts,
     locks: InMemoryLocks,
+    conversations: InMemoryConversations,
     executor: Session,
 }
 
@@ -38,6 +39,7 @@ impl World {
             notices: RecordingNotices::default(),
             transcripts: InMemoryTranscripts::default(),
             locks: InMemoryLocks::default(),
+            conversations: InMemoryConversations::default(),
             executor,
         }
     }
@@ -52,6 +54,7 @@ impl World {
             hook_binary: &FixedHookBinary,
             transcripts: &self.transcripts,
             locks: &self.locks,
+            conversations: &self.conversations,
         }
     }
 }
@@ -135,4 +138,39 @@ fn a_shell_session_is_prepared_without_a_lock() {
     assert!(!prepared.holds_a_lock());
     assert_eq!(world.locks.holder(&terminal.id), None);
     assert_eq!(prepared.plan().program, PathBuf::from("/fake/zsh"));
+}
+
+// PLAN §3.4: a conversation that runs outside lithemux (cmux, a terminal)
+// holds no lock of ours, and is still not opened a second time
+#[test]
+fn a_conversation_that_runs_in_another_process_is_not_opened_again() {
+    let world = World::new();
+    let conversation = world.executor.claude_session_id.clone().unwrap();
+    world
+        .conversations
+        .running
+        .borrow_mut()
+        .insert(conversation, 4321);
+
+    let prepared = prepare_launch(&world.ports(), &environment(), &target());
+
+    assert!(matches!(
+        prepared,
+        Err(LaunchError::AlreadyOpen { pid: Some(4321) })
+    ));
+    // The lock taken to look is given back.
+    assert_eq!(world.locks.holder(&world.executor.id), None);
+}
+
+// PLAN §3.4: another conversation running elsewhere is no obstacle
+#[test]
+fn a_conversation_of_another_session_running_elsewhere_does_not_matter() {
+    let world = World::new();
+    world
+        .conversations
+        .running
+        .borrow_mut()
+        .insert("another-conversation".to_string(), 4321);
+
+    assert!(prepare_launch(&world.ports(), &environment(), &target()).is_ok());
 }

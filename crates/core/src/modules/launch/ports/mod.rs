@@ -1,3 +1,4 @@
+pub mod conversation_processes;
 pub mod hook_binary;
 pub mod hook_probe;
 pub mod launch_notices;

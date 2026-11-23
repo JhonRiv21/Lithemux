@@ -4,6 +4,8 @@
 mod support;
 
 mod board_store_test;
+mod cmux_import_test;
+mod conversation_processes_test;
 mod directories_test;
 mod fake_claude_test;
 mod hook_log_test;

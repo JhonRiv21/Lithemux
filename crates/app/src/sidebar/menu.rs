@@ -102,3 +102,18 @@ pub fn category_menu(group: &Group) -> Vec<MenuItem> {
         item("menu.delete", MenuCommand::DeleteCategory(id())),
     ]
 }
+
+/// The entry the keyboard highlights after ↑ (-1) or ↓ (1), going round. The
+/// first ↓ highlights the first entry and the first ↑ the last.
+pub fn highlight_after(current: Option<usize>, count: usize, by: isize) -> Option<usize> {
+    if count == 0 {
+        return None;
+    }
+    let count = count as isize;
+    let next = match current {
+        Some(at) => (at as isize + by).rem_euclid(count),
+        None if by < 0 => count - 1,
+        None => 0,
+    };
+    Some(next as usize)
+}

@@ -13,8 +13,8 @@ ended = "terminada"
 new = "sin iniciar"
 running = "en marcha"
 not_running = "detenida"
-open_elsewhere = "abierta en otra terminal"
-open_elsewhere_pid = "abierta en otra terminal (pid {pid})"
+open_elsewhere = "abierta en otro lado"
+open_elsewhere_pid = "abierta en otro lado (pid {pid})"
 failed = "no se pudo iniciar: {reason}"
 
 [sidebar]
@@ -128,6 +128,11 @@ version_check_hours_hint = "Cada cuánto lithemux pregunta su versión al claude
 claude_path_hint = "Opcional. Vacío usa el claude de tu shell, con sus actualizaciones automáticas."
 
 [menu_bar]
+go_to_session = "Ir a una sesión…"
+next_session = "Sesión siguiente"
+previous_session = "Sesión anterior"
+session_menu = "Menú de la sesión"
+import_cmux = "Importar desde cmux…"
 settings = "Ajustes…"
 about = "Acerca de lithemux"
 quit = "Salir de lithemux"
@@ -161,3 +166,24 @@ resume_idle_one = "Reanudar 1 sesión en reposo"
 resume_idle_other = "Reanudar {count} sesiones en reposo"
 busy_on_old_one = "1 sesión ocupada sigue en la versión anterior de Claude Code"
 busy_on_old_other = "{count} sesiones ocupadas siguen en la versión anterior de Claude Code"
+
+[palette]
+placeholder = "Ir a una sesión: nombre, categoría o rol"
+nothing = "Ninguna sesión coincide"
+
+[import]
+title = "Importar desde cmux"
+intro = "Cada espacio de cmux con Claude pasa a ser una sesión hibernada de lithemux, y al abrirla reanuda su conversación. De cmux solo se leen los archivos."
+summary = "Quedan fuera: {already} que ya están en lithemux, {without_id} sin id de conversación y {not_claude} sin Claude."
+nothing = "En cmux no queda ninguna sesión de Claude por importar."
+no_conversation = "sin conversación guardada"
+pinned = "fijada"
+choose = "Elige una categoría"
+new_category = "Nueva: {name}"
+import_one = "Importar 1 sesión"
+import_other = "Importar {count} sesiones"
+needs_category = "Elige una categoría para cada sesión marcada"
+imported_one = "Se importó 1 sesión. Está hibernada: al abrirla reanuda su conversación."
+imported_other = "Se importaron {count} sesiones. Están hibernadas: al abrir una reanuda su conversación."
+failed = "No se pudo importar: {detail}"
+close = "Cerrar"

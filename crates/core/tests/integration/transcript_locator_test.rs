@@ -9,7 +9,9 @@ use lithemux_core::modules::launch::{
 use lithemux_core::modules::session::Kind;
 
 use crate::support::fake_shell_probe::FakeShellProbe;
-use crate::support::in_memory_launch_ports::{FixedHookBinary, HOOK_PATH, InMemoryLocks};
+use crate::support::in_memory_launch_ports::{
+    FixedHookBinary, HOOK_PATH, InMemoryConversations, InMemoryLocks,
+};
 use crate::support::in_memory_store::{InMemoryBoards, InMemoryStore};
 use crate::support::recording_ports::RecordingNotices;
 use crate::support::sample_data::{add_category, add_session};
@@ -80,6 +82,7 @@ fn the_launcher_resumes_only_when_the_transcript_exists_on_disk() {
         hook_binary: &FixedHookBinary,
         transcripts: &locator,
         locks: &InMemoryLocks::default(),
+        conversations: &InMemoryConversations::default(),
     };
     let environment = LaunchEnvironment {
         shell: PathBuf::from("/fake/zsh"),

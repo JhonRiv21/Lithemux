@@ -59,8 +59,8 @@ impl Sidebar {
             }))
             .on_mouse_down(
                 MouseButton::Right,
-                cx.listener(move |this, event: &MouseDownEvent, _, cx| {
-                    this.open_menu(menu.clone(), event.position, cx);
+                cx.listener(move |this, event: &MouseDownEvent, window, cx| {
+                    this.open_menu(menu.clone(), event.position, window, cx);
                 }),
             )
             .on_drag(drag, |drag, _, _, cx| cx.new(|_| drag.clone()))

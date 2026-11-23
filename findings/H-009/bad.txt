@@ -1,0 +1,6 @@
+        let transaction = self.db.conn().unchecked_transaction()?;
+        let tx = conn.transaction()?;
+        let tx = conn.transaction_with_behavior(TransactionBehavior::Deferred)?;
+        conn.execute_batch("BEGIN")?;
+        conn.execute_batch("begin deferred;")?;
+        let tx = conn.unchecked_transaction ()?;

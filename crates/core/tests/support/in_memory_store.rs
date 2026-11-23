@@ -104,6 +104,15 @@ impl CategoryRepository for InMemoryStore {
 
 impl SessionRepository for InMemoryStore {
     fn insert(&self, session: &Session) -> Result<(), SessionError> {
+        if let Some(conversation) = &session.claude_session_id {
+            let sessions = self.sessions.borrow();
+            if sessions
+                .iter()
+                .any(|other| other.claude_session_id.as_ref() == Some(conversation))
+            {
+                return Err(SessionError::ConversationTaken(conversation.clone()));
+            }
+        }
         self.sessions.borrow_mut().push(session.clone());
         Ok(())
     }

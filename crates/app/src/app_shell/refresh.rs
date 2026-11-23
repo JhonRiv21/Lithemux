@@ -6,9 +6,11 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use gpui::{AppContext, Context, Task};
+use lithemux_core::modules::launch::CONVERSATION_FLAGS;
 use lithemux_core::platform::process::listening_ports::listening_ports;
 use lithemux_core::platform::process::memory_use::MemoryMeter;
 
+use super::elsewhere::{conversations_held, open_elsewhere};
 use super::live::{Live, REFRESH_EVERY};
 use super::shown_memory::ShownMemory;
 
@@ -37,7 +39,8 @@ impl Live {
     /// the ports of what runs, looked for away from the interface thread.
     pub(super) fn keep_refreshing(cx: &mut Context<Self>) -> Task<()> {
         // Kept between cycles: it maps the process trees only now and then.
-        let meter = Arc::new(Mutex::new(MemoryMeter::new()));
+        // Its sweep also keeps who runs each conversation (PLAN §3.4).
+        let meter = Arc::new(Mutex::new(MemoryMeter::watching(&CONVERSATION_FLAGS)));
         let mut shown = ShownMemory::default();
         cx.spawn(async move |live, cx| {
             loop {
@@ -53,21 +56,26 @@ impl Live {
                 let pids: Vec<u32> = running.iter().map(|(_, pid)| *pid).collect();
                 // Both read the kernel's tables; neither on this thread.
                 let meter = Arc::clone(&meter);
-                let (found, used) = cx
+                let (found, used, held) = cx
                     .background_spawn(async move {
-                        let used = meter
+                        let (used, held) = meter
                             .lock()
-                            .map(|mut meter| meter.measure(&pids, Instant::now()))
+                            .map(|mut meter| {
+                                let used = meter.measure(&pids, Instant::now());
+                                (used, conversations_held(meter.commands()))
+                            })
                             .unwrap_or_default();
-                        (listening_ports(&pids), used)
+                        (listening_ports(&pids), used, held)
                     })
                     .await;
                 let memory = shown.record(&memory_by_session(&running, &used), Instant::now());
                 let ports = ports_by_session(running, &found);
                 let updated = live.update(cx, |live, cx| {
-                    if live.ports != ports || live.memory != memory {
+                    let elsewhere = open_elsewhere(live.sessions(), &held, &|id| live.is_live(id));
+                    if live.ports != ports || live.memory != memory || live.elsewhere != elsewhere {
                         live.ports = ports;
                         live.memory = memory;
+                        live.elsewhere = elsewhere;
                         cx.notify();
                     }
                 });

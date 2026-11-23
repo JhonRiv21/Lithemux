@@ -1,77 +1,18 @@
-use std::cell::Cell;
 use std::path::PathBuf;
 
 use lithemux_core::modules::category::get_category;
 use lithemux_core::modules::launch::{
-    LaunchEnvironment, LaunchError, LaunchPorts, SessionLocks, ShellMode, TranscriptLocator,
-    hooks_settings_json, open_session, plan_launch,
+    LaunchError, SessionLocks, ShellMode, hooks_settings_json, open_session, plan_launch,
 };
 use lithemux_core::modules::session::{
-    Kind, Profile, Session, SessionRef, create_session, find_session_by_id, record_claude_version,
+    Kind, Profile, SessionRef, create_session, find_session_by_id, record_claude_version,
 };
 
 use crate::support::fake_shell_probe::FakeShellProbe;
-use crate::support::in_memory_launch_ports::{
-    FixedHookBinary, HOOK_PATH, InMemoryLocks, InMemoryTranscripts, RecordingRunner,
-};
-use crate::support::in_memory_store::{InMemoryBoards, InMemoryStore};
-use crate::support::recording_ports::RecordingNotices;
-use crate::support::sample_data::{NOW, add_category, add_session, new_session};
+use crate::support::in_memory_launch_ports::{HOOK_PATH, RecordingRunner};
+use crate::support::sample_data::{NOW, new_session};
 
-const CLAUDE: &str = "/Users/x/.local/bin/claude";
-
-struct World {
-    store: InMemoryStore,
-    probe: FakeShellProbe,
-    notices: RecordingNotices,
-    transcripts: InMemoryTranscripts,
-    locks: InMemoryLocks,
-    executor: Session,
-}
-
-impl World {
-    fn new() -> Self {
-        let store = InMemoryStore::new();
-        add_category(&store, &InMemoryBoards::default(), "demo");
-        let executor = add_session(&store, &store, "demo/ejecutora", Kind::Member);
-        World {
-            store,
-            probe: FakeShellProbe::new()
-                .executable(CLAUDE)
-                .executable(HOOK_PATH)
-                .answers(ShellMode::LoginInteractive, "command -v claude", CLAUDE)
-                .version(CLAUDE, "2.1.330 (Claude Code)"),
-            notices: RecordingNotices::default(),
-            transcripts: InMemoryTranscripts::default(),
-            locks: InMemoryLocks::default(),
-            executor,
-        }
-    }
-
-    fn ports(&self) -> LaunchPorts<'_> {
-        LaunchPorts {
-            categories: &self.store,
-            sessions: &self.store,
-            settings: &self.store,
-            shell: &self.probe,
-            notices: &self.notices,
-            hook_binary: &FixedHookBinary,
-            transcripts: &self.transcripts,
-            locks: &self.locks,
-        }
-    }
-}
-
-fn environment() -> LaunchEnvironment {
-    LaunchEnvironment {
-        shell: PathBuf::from("/fake/zsh"),
-        lithemux_home: None,
-    }
-}
-
-fn target() -> SessionRef {
-    SessionRef::parse("demo/ejecutora").unwrap()
-}
+use crate::launch_world::{CLAUDE, World, environment, target};
 
 // PLAN §0.3: new or resume, decided by the transcript
 #[test]
@@ -121,77 +62,6 @@ fn open_returns_the_exit_code_of_the_session() {
         7
     );
     assert_eq!(runner.plans.borrow().len(), 1);
-}
-
-// PLAN §0.3: the lock lasts as long as the process; docs/decisiones.md: pid inside
-#[test]
-fn the_session_is_locked_while_it_runs_and_free_afterwards() {
-    let world = World::new();
-    let id = world.executor.id.clone();
-    let check = || assert_eq!(world.locks.holder(&id), Some(4242));
-    let mut runner = RecordingRunner::exiting_with(0);
-    runner.while_running = Some(&check);
-
-    open_session(&world.ports(), &runner, &environment(), &target()).unwrap();
-
-    assert_eq!(world.locks.holder(&id), None);
-}
-
-// PLAN §0.3: opening the same session twice fails
-#[test]
-fn a_session_that_is_already_open_cannot_be_opened_again() {
-    let world = World::new();
-    let runner = RecordingRunner::exiting_with(0);
-    let mut held = world.locks.acquire(&world.executor.id).unwrap();
-    held.record_pid(999);
-
-    let second = open_session(&world.ports(), &runner, &environment(), &target());
-
-    assert!(matches!(
-        second,
-        Err(LaunchError::AlreadyOpen { pid: Some(999) })
-    ));
-    assert_eq!(
-        second.unwrap_err().to_string(),
-        "the session is already open (pid 999)"
-    );
-    assert!(runner.plans.borrow().is_empty());
-}
-
-/// Notes whether the session was locked when the transcript was looked up.
-struct TranscriptsSeenUnderLock<'a> {
-    locks: &'a InMemoryLocks,
-    session_id: &'a str,
-    locked_when_asked: Cell<Option<bool>>,
-}
-
-impl TranscriptLocator for TranscriptsSeenUnderLock<'_> {
-    fn exists(&self, _: &str) -> bool {
-        self.locked_when_asked
-            .set(Some(self.locks.holder(self.session_id).is_some()));
-        false
-    }
-}
-
-// PLAN §2.0 bug 5: whether to resume is decided with the lock already held,
-// so two launches cannot both conclude that the conversation is new
-#[test]
-fn the_transcript_is_looked_up_with_the_session_already_locked() {
-    let world = World::new();
-    let runner = RecordingRunner::exiting_with(0);
-    let transcripts = TranscriptsSeenUnderLock {
-        locks: &world.locks,
-        session_id: &world.executor.id,
-        locked_when_asked: Cell::new(None),
-    };
-    let ports = LaunchPorts {
-        transcripts: &transcripts,
-        ..world.ports()
-    };
-
-    open_session(&ports, &runner, &environment(), &target()).unwrap();
-
-    assert_eq!(transcripts.locked_when_asked.get(), Some(true));
 }
 
 // PLAN §2.0 bug 9: without the hook the session would run with no state and

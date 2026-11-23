@@ -38,7 +38,7 @@ fn old_database(temp: &TempHome, version: i64, schema: &[&str], data: &[&str]) {
 }
 
 fn assert_up_to_date_with_its_data(db: &Db) {
-    assert_eq!(db.schema_version().unwrap(), 5);
+    assert_eq!(db.schema_version().unwrap(), 6);
     let sessions = SqliteSessionRepository::new(db);
     let planner = sessions.find_by_id("s1").unwrap().unwrap();
     assert_eq!(planner.kind, Kind::Coordinator);
@@ -190,4 +190,62 @@ fn migrating_twice_is_migrating_once() {
     drop(Db::open(&temp.home).unwrap());
     let db = Db::open(&temp.home).unwrap();
     assert_up_to_date_with_its_data(&db);
+}
+
+/// A database at version 5 whose sessions share conversations, which
+/// version 6 no longer allows.
+const SHARED_CONVERSATIONS: &str = "
+DROP INDEX IF EXISTS one_session_per_conversation;
+INSERT INTO categories(id, slug, name, root_dir, sort, created_at)
+  VALUES ('c1', 'demo', 'Demo', '/work/demo', 1, 10);
+INSERT INTO sessions(id, category_id, slug, role, kind, profile, claude_session_id, created_at, sort)
+  VALUES ('s1', 'c1', 'first', 'r', 'member', 'claude', 'conv-shared', 1, 1),
+         ('s2', 'c1', 'second', 'r', 'member', 'claude', 'conv-shared', 2, 2),
+         ('s3', 'c1', 'alone', 'r', 'member', 'claude', 'conv-alone', 3, 3),
+         ('s4', 'c1', 'shell-a', 'r', 'member', 'shell', NULL, 4, 4),
+         ('s5', 'c1', 'shell-b', 'r', 'member', 'shell', NULL, 5, 5);
+PRAGMA user_version = 5;
+";
+
+// ronda 3B bug 5: migration 6 makes a conversation belong to one session;
+// a database that breaks it is not touched, and the message says which
+#[test]
+fn a_database_whose_sessions_share_a_conversation_is_not_migrated_and_says_which() {
+    let temp = TempHome::new();
+    temp.db()
+        .conn()
+        .execute_batch(SHARED_CONVERSATIONS)
+        .unwrap();
+
+    let refused = Db::open(&temp.home);
+
+    let message = refused
+        .err()
+        .map(|error| error.to_string())
+        .unwrap_or_default();
+    assert!(message.contains("conv-shared"), "{message}");
+    assert!(
+        message.contains("demo/first") && message.contains("demo/second"),
+        "{message}"
+    );
+    assert!(!message.contains("conv-alone"), "{message}");
+    let left = Connection::open(temp.home.db_path()).unwrap();
+    let version: i64 = left
+        .pragma_query_value(None, "user_version", |row| row.get(0))
+        .unwrap();
+    assert_eq!(version, 5);
+}
+
+// ronda 3B bug 5: shells, without a conversation, are not affected
+#[test]
+fn a_database_whose_shells_have_no_conversation_is_migrated() {
+    let temp = TempHome::new();
+    temp.db()
+        .conn()
+        .execute_batch(&SHARED_CONVERSATIONS.replace("'conv-shared', 2, 2", "'conv-other', 2, 2"))
+        .unwrap();
+
+    let db = Db::open(&temp.home).unwrap();
+
+    assert_eq!(db.schema_version().unwrap(), 6);
 }

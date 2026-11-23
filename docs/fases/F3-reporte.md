@@ -273,3 +273,229 @@ Corrida después del último cambio:
   - que `SendMessage` no pida permiso.
 - Lo demás está en `docs/fases/F3-prueba-manual.md`, pasos 1 a 4.
 
+
+## Bloque 3B · Importador de cmux, paleta y teclado (§3.4, §3.5)
+
+*2026-11-22. Decisiones D-59, D-60 y D-61.*
+
+### Qué se hizo
+
+- **Importador de cmux** (D-59):
+  - módulo nuevo `core::modules::import`, con su dominio puro, los casos de uso `propose_import` y `apply_import`, y los ports `CmuxSnapshot` (solo lectura) e `ImportWriter` (una transacción);
+  - CLI: `lithemux import cmux [--apply] [--into <cat>] [--skip n,…] [--include n,…] [--from <archivo>] [--json]`;
+  - app: «File → Import from cmux…» abre una ventana con casillas, un selector de categoría por sesión y el botón Import.
+- **«Abierta en otro lado» por la línea de comandos** (D-60):
+  - al abrir cualquier sesión, si un proceso vivo tiene su conversación en el argv (`--resume`, `-r` o `--session-id`), no se lanza y se informa el pid;
+  - la tarjeta lo muestra sola. Usa el barrido que el medidor de memoria ya hacía cada 30 s, sin barridos extra.
+  - Esto cierra el pendiente de la Fase 2: «una sesión abierta desde la terminal aparece en reposo hasta que pulsas Abrir».
+- **Paleta y teclado** (D-61):
+  - `cmd+p` abre la paleta, con orden exacto > prefijo > aproximado y desempate por actividad reciente;
+  - `cmd+alt+↓/↑` va a la sesión siguiente o anterior;
+  - `cmd+shift+m` abre el menú de la sesión a la vista;
+  - el menú contextual toma el foco: Esc lo cierra, y ↑/↓/Enter lo recorren. Esto cierra el otro pendiente de la Fase 2.
+
+### Contra el archivo real de cmux
+
+Corrí solo el modo que no escribe (`import cmux --json`), con un `LITHEMUX_HOME` desechable para no abrir siquiera la base de Jhon. Conté el resultado con `jq`, sin mirar títulos ni rutas:
+
+| | |
+|---|---|
+| Sesiones de Claude propuestas | 24 |
+| Marcadas para importar | 22 |
+| Sin conversación guardada (desmarcadas) | 2 |
+| Sin categoría (carpeta home: el usuario elige) | 23 |
+| A una categoría nueva | 1 (una categoría nueva) |
+| Fijadas | 4 |
+| Ya en lithemux / sin id de conversación / sin Claude | 0 / 0 / 0 |
+
+Para importar de verdad hace falta `--into <categoría>`, o elegir la categoría en la ventana, porque 23 de las 24 sesiones trabajan en el home.
+
+### Pruebas que vi fallar antes del arreglo
+
+- **Política de la propuesta:** 10 de 11 fallaron contra una versión vacía. La del home pasaba sin querer, sobre una lista vacía.
+- **Ranking de la paleta:** 6 de 7 fallaron contra una versión que devolvía el orden original. La de rendimiento falló después, con la primera implementación real (24 ms por búsqueda con 1.000 sesiones); se arregló plegando el texto una sola vez.
+- **Prueba de caso de uso de `prepare_launch`** (`a_conversation_that_runs_in_another_process_is_not_opened_again`): falló con la comprobación desactivada.
+- **Integración del importador:**
+  - `an_import_that_fails_halfway_stores_nothing` falló sin la transacción. El primer intento de romperla dejó viva una transacción con otro nombre y no probó nada; lo repetí bien;
+  - `a_file_caught_half_written_is_read_again_a_moment_later` falló sin el reintento.
+- **Guarda de solo lectura sobre cmux:** falló al agregar un `std::fs::write` en el lector.
+- **Medidor con líneas de comandos:** falló con la suite completa en paralelo, por dos motivos reales:
+  - `sysinfo` no siempre descarta al instante un proceso que acaba de terminar: ahora se pregunta al kernel con `is_alive`;
+  - un subshell del script falso muestra un momento la misma línea de comandos que su padre.
+  - En la vida real eso es inofensivo: cualquiera de los dos pids es «abierta en otro lado». Las pruebas lo contemplan, y los ayudantes esperan 300 ms después de que el falso escribe su pid.
+- **CLI del importador:** 3 fallaron en la primera corrida:
+  - esperaba la categoría `alpha`, cuando por especificación se llama como la carpeta de trabajo (`api`);
+  - otra prueba corría a la vez un «cmux» con la misma conversación, y la comprobación, que mira toda la máquina, la rechazó con razón. Ahora cada prueba usa su propio id.
+- **Las escribí después del código y no las vi fallar:**
+  - `conversation_in`;
+  - `choose`;
+  - `elsewhere`;
+  - el orden del teclado y `highlight_after`;
+  - el estado de la paleta;
+  - el estado de la ventana de importación;
+  - la prueba del host con «cmux» vivo;
+  - las dos pruebas del barrido real de procesos.
+
+### Comprobado en la app real
+
+Con un HOME falso que tiene el archivo sintético de cmux, un `LITHEMUX_HOME` desechable y el `claude` falso:
+
+- `cmd+p` abre la paleta, que filtra al escribir; ↑/↓ y Enter saltan a la sesión, y Esc la cierra.
+- `cmd+alt+↓` recorre las sesiones y da la vuelta al llegar al final.
+- `cmd+shift+m` abre el menú de la sesión; ↓ marca una entrada, y Esc lo cierra y devuelve el foco a la terminal.
+- La ventana de importación:
+  - marca y desmarca;
+  - con una sesión del home marcada y sin categoría, el botón no se activa y lo dice;
+  - el selector ofrece las categorías existentes, las nuevas y una nueva para la carpeta propia;
+  - importó 3 sesiones, hibernadas y en las categorías elegidas, y al abrirla otra vez dice que no queda nada.
+- Con un `claude` falso lanzado aparte con `--resume <uuid>` de una sesión importada, la tarjeta pasó sola a «open in another terminal (pid N)», con el pid de ese proceso, en el siguiente barrido.
+- **Un detalle de mis herramientas,** no de la app: las pulsaciones sintéticas con texto unicode no llegan al campo; las teclas reales sí.
+
+### Medidas
+
+`scripts/accept-phase2`, build release:
+
+| | CPU en reposo | Footprint | Pico |
+|---|---|---|---|
+| Final de la ronda del 3A | 0,37–0,40 % | 109–111 MB | 146–147 MB |
+| 3B, corrida 1 | 0,47 % | 130 MB | 167 MB |
+| 3B, corrida 2 | 0,45 % | 113 MB | 149 MB |
+| 3B sin guardar líneas de comandos (solo para medir) | 0,33 % | 107 MB | 148 MB |
+
+Guardar las líneas de comandos en el barrido cuesta unos 6 MB y una décima de punto de CPU: `sysinfo` guarda el argv de todos los procesos, no solo el de los que interesan. Todo sigue por debajo del 1 % y de los 200 MB. La primera corrida, con 130 MB, no se repitió.
+
+### Checklist de cierre
+
+Corrida después del último cambio:
+
+| Paso | Resultado |
+|---|---|
+| `cargo fmt --all --check` | limpio |
+| `cargo clippy --workspace --all-targets` | 0 errores, 0 avisos (con `-D warnings`) |
+| `cargo test --workspace` | 747 pasan, 0 fallan |
+| `cargo build --release` | compila |
+| `cargo deny check` | advisories, bans, licenses y sources ok |
+| `scripts/lint-findings` | 8 reglas, sin hallazgos (751 archivos) |
+| Tamaños (código de `src/`) | ningún archivo de más de 300 líneas ni función de más de 50 |
+| `unsafe` nuevo | ninguno |
+| `.githooks/pre-commit` | pasa sobre el stage (104 archivos) |
+| `scripts/accept-phase2` | CPU 0,45–0,47 %, 0 programas vivos al salir |
+
+### Pendiente y límites
+
+- **Hasta 30 s** tarda la tarjeta en mostrar una sesión abierta fuera de la app: espera al siguiente barrido. Al abrir, la comprobación es inmediata.
+- **La tarjeta dice «open in another terminal»** también cuando quien la tiene es cmux. El texto viene de la Fase 2; si se prefiere «abierta en otro lado», es un cambio de una línea en los locales.
+- **El menú de una sesión abierto con el teclado** aparece arriba en la barra lateral, no junto a la tarjeta, porque la vista no guarda dónde quedó dibujada cada tarjeta.
+- **Archivos de prueba que ya pasaban de 300 líneas:** `launch_use_cases.rs` sumó 4 (el campo del port nuevo en su `World`); mis pruebas nuevas van en archivos aparte.
+
+### Lo que necesita a Jhon y a la planificadora
+
+- La importación real en un home temporal (`docs/fases/F3-prueba-manual.md`, bloque 3B, paso 1).
+- Que la comprobación «abierta en otro lado» reconozca el `claude` real que lanzó cmux (paso 3).
+- Los atajos con el teclado Latin American (paso 5).
+
+## Ronda de correcciones del bloque 3B
+
+*2026-11-22. Junta la auditoría independiente y la prueba con clics de la planificadora. Decisiones: ampliaciones de D-59, D-60 y D-61, y D-62 nueva. Hallazgo nuevo: H-009.*
+
+### Correcciones
+
+| # | Qué | Cómo |
+|---|---|---|
+| 1 | Slug de 50 caracteres que no se podía abrir | `free_slug` recorta la base para que quepa el número, sin dejar `--`; el import valida cada slug con `Slug::parse` antes de guardar |
+| 2 | Tildes en los slugs (`migraci-n`) | `fold_latin` en `category::domain`: quita las tildes latinas en NFC y en NFD. Vale para toda la app; los slugs ya guardados no cambian |
+| 3 | Propuesta vieja que duplicaba la categoría | al aplicar, `New { root_dir }` se resuelve primero contra las categorías existentes con esa raíz |
+| 4 | «Abierta en otro lado» pegado | la fase del host se muestra mientras su pid vive o el barrido ve la conversación; si no, vuelve el estado de la base. El test que fijaba el bug se rehízo |
+| 5 | Importación concurrente | relectura y escritura dentro de una transacción `IMMEDIATE` (port `ImportStore`); migración 6 con el índice único parcial; una base con duplicados no se migra y los nombra (D-62). `home-b3` y la base de Jhon, leídas en solo lectura: 0 duplicados |
+| 6 | La ventana leía y aplicaba en el hilo de la interfaz | `background_spawn`, cada vez con su propia conexión; botón gris mientras trabaja |
+| 7 | Detección por argv | solo cuenta `claude` (`argv[0]`, o `argv[1]` tras un intérprete); un flag sin valor no toma el siguiente. Los falsos negativos (`--continue`, `--resume <nombre>`, `/clear`, `/resume`) quedan documentados en D-60 |
+| 8 | Robustez de la lectura | tope de 20 MB por `metadata().len()`; «has no version»; versión no entera es un error de formato, sin reintento; `null` se lee como lista vacía |
+| 9 | Tableros huérfanos | se crean después del commit; si uno falla, se avisa (CLI) o se anota en `app.log` (app) y se sigue |
+| 10 | `--into` sobre una sesión que ya tenía categoría | no era `--into`: la prueba manual sugería una categoría con raíz `~`, que contenía todas las carpetas. Ahora una categoría con raíz en el home, o más arriba, no cuenta como contenedora. La ayuda de `--into` y la prueba manual dicen que vale solo para las que quedaron sin categoría |
+| 11 | «open in another terminal» para cmux | «open elsewhere (pid N)» / «abierta en otro lado (pid N)» |
+| 12 | La barra lateral no seguía a cmd+alt+↑/↓ | cada tarjeta es hija directa de la lista; la lista se desplaza a la sesión que gana el foco (`ScrollHandle::scroll_to_item`). Verificado con 37 sesiones |
+| 13 | `CmuxSessionFile::path()` público | quitado |
+| 14 | Paleta | se desplaza con la selección (`ScrollHandle`); pliega con `fold_latin`, NFD incluido. Verificado bajando 20 filas |
+| 15 | La guarda de cmux se esquivaba | lee tokens sin comentarios ni doc comments; ruta por `"cmux"` o `cmuxterm`; marca `write*`, `set_*`, `persist`, `Command`, `append`, `truncate`… Las 8 variantes de la planificadora están en sus ejemplos |
+| 16 | Tests | tableros en disco en la prueba de la transacción; largo máximo; propuesta vieja; `-r` en otro programa; archivo sin `version`; la prueba de rendimiento pasó a 100 sesiones con un cuadro (16 ms) de límite, en debug y en paralelo (medido: ~1 ms; criterio en D-61) |
+| 17 | `launch_use_cases.rs` de 320 líneas | partido en `launch_world.rs` (72), `launch_use_cases.rs` (186) y `launch_lock_use_cases.rs` (80) |
+| 18 | `measure` leía la memoria de los procesos vigilados | solo `is_alive` para ellos |
+
+**Además:**
+
+- **H-009:** toda transacción de SQLite en `src/` es `IMMEDIATE`. Sale del bug 5; la versión anterior del almacén de importación la habría violado.
+- **`sqlite_session_repository.rs`** pasaba de 300 líneas con el mapeo del índice nuevo: el paso de fila a `Session` va ahora en `session_row.rs`.
+- **Las pruebas con «cmux» vivo** lanzan el falso por un enlace llamado `claude`, porque solo cuenta ese nombre. El nombre sale de `CLAUDE_PROGRAM`, la misma constante que usa la detección.
+- **`elsewhere_test` ya no arma líneas de comandos:** la guarda de programas reales tomaba `CommandLine` por `Command`. Prueba `open_elsewhere` con el mapa ya armado; el parseo del argv se prueba en `core`.
+
+### Pruebas que vi fallar antes del arreglo
+
+- **Slugs:**
+  - largo con el número;
+  - recorte sin `--`;
+  - tildes NFC y NFD.
+  - La primera versión de una de estas pruebas tenía un predicado que daba por ocupado todo slug de 48, y el bucle no terminaba. Lo corregí.
+- **Propuesta:** la categoría con raíz en el home.
+- **Integración del importador:**
+  - la propuesta vieja;
+  - la transacción con los tableros: falló creando el tablero antes del commit;
+  - archivo sin `version`;
+  - versión no entera;
+  - listas `null`;
+  - archivo de más de 20 MB.
+- **Migración 6** (con el `SCHEMA_VERSION` nuevo en las pruebas):
+  - las cinco pruebas de migraciones;
+  - las dos nuevas;
+  - los dos contratos de «una conversación, una sesión» (SQLite y en memoria).
+- **Detección por argv:** `-r` en otro programa y flag sin valor. Las tres pruebas con procesos reales fallaron hasta que el falso se lanzó como `claude`.
+- **`elsewhere`:** «termina cuando el otro proceso ya no está».
+- **Textos:** «open elsewhere» y «abierta en otro lado».
+- **Paleta:** tildes en NFD.
+- **Guarda de cmux:** las 8 variantes de la planificadora, corridas contra la versión anterior de la guarda (que tomé del stage): no vio ninguna.
+- **H-009:** marca un archivo de prueba con `unchecked_transaction()`.
+
+**No las vi fallar:**
+
+- la prueba de dos importaciones a la vez (con o sin `IMMEDIATE`, SQLite rechaza la segunda escritura, así que no logré provocar el duplicado);
+- los dos nombres largos en la propuesta (pasaron porque `free_slug` ya estaba arreglado);
+- el desplazamiento de la barra lateral y de la paleta: es código de vista, verificado en la app real;
+- el cambio de `measure` (rendimiento, sin prueba de comportamiento).
+
+### Medidas
+
+`scripts/accept-phase2`, build release, después del último cambio:
+
+| | CPU en reposo | Footprint | Pico |
+|---|---|---|---|
+| Bloque 3B | 0,45–0,47 % | 113–130 MB | 149–167 MB |
+| Esta ronda | 0,40 %, 0,38 % | 126 MB, 110 MB | 166 MB, 149 MB |
+
+En ambas rondas, la primera corrida da un footprint alto y la segunda, normal; no lo aislé.
+
+### Checklist de cierre
+
+Corrida después del último cambio:
+
+| Paso | Resultado |
+|---|---|
+| `cargo fmt --all --check` | limpio |
+| `cargo clippy --workspace --all-targets -- -D warnings` | 0 errores, 0 avisos |
+| `cargo test --workspace` | 769 pasan, 0 fallan |
+| `cargo build --release` | compila |
+| `cargo deny check` | advisories, bans, licenses y sources ok |
+| `scripts/lint-findings` | 9 reglas, sin hallazgos |
+| Tamaños (código de `src/`) | ningún archivo de más de 300 líneas ni función de más de 50 |
+| `unsafe` nuevo | ninguno |
+| `.githooks/pre-commit` | pasa sobre el stage |
+| `scripts/accept-phase2` | CPU 0,38–0,40 %, 0 programas vivos al salir |
+
+### Pendiente y límites
+
+- **La detección por argv no ve** `--continue`, `--resume <nombre>`, ni un `/clear` o `/resume` dentro de la sesión (D-60).
+- **La tarjeta tarda hasta 30 s** en mostrar algo abierto fuera de la app; deja de mostrarlo en unos 3 s cuando ese proceso termina.
+- **El menú de sesión abierto con el teclado** sigue apareciendo arriba en la barra lateral.
+
+### Lo que necesita a Jhon y a la planificadora
+
+- Repetir con el archivo real los pasos 1 a 3 del bloque 3B, en especial `cat add trabajo --root ~` + `--into trabajo`: la sesión de `memory` debe quedar en su categoría nueva.
+- La migración 6 sobre la base real: la abre la app nueva. Ya comprobé, solo leyendo, que no tiene conversaciones compartidas.

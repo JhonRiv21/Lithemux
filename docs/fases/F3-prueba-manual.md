@@ -94,3 +94,111 @@ scripts/accept-phase2
 La CPU en reposo debe quedar por debajo del 1 %. En mis corridas, al cerrar la ronda de correcciones, dio 0,37–0,40 % en la ventana estándar y 0,30–0,38 % desde los 40 s (ver el reporte).
 
 - [ ] PASA  - [ ] FALLA
+
+## Bloque 3B
+
+**Antes de empezar:** compila con `cargo build --release`. Para el importador, usa un home de lithemux temporal, para no tocar el tuyo:
+
+```sh
+export LITHEMUX_HOME=$(mktemp -d)/lithemux
+```
+
+### 1. Importar desde cmux, por la CLI
+
+1. `lithemux import cmux`: muestra la propuesta y dice «Nothing was written». Cada sesión tiene:
+   - un número;
+   - «yes» o «no»;
+   - su nombre;
+   - su categoría, o «(no category: use --into)»;
+   - su carpeta;
+   - y, si corresponde, «pinned» o «no saved conversation».
+2. Comprueba que **nada cambió**: `lithemux status` sigue vacío, y el archivo de cmux conserva su fecha:
+
+   ```sh
+   stat -f %m ~/Library/Application\ Support/cmux/session-com.cmuxterm.app.json
+   ```
+
+   Ojo: cmux lo reescribe solo, así que compara con cmux cerrado.
+3. Crea una categoría para las del home y aplica:
+
+   ```sh
+   lithemux cat add trabajo --name Trabajo --root ~
+   lithemux import cmux --apply --into trabajo
+   ```
+
+   Debe decir cuántas sesiones y categorías importó.
+
+   `--into` vale **solo** para las sesiones que quedaron sin categoría (las del home). Las demás conservan la que les propuso: una carpeta de un proyecto recibe su propia categoría nueva, aunque `trabajo` tenga su raíz en el home. Las categorías con raíz en el home, o más arriba, no cuentan como contenedoras.
+4. `lithemux status`: las sesiones aparecen `hibernated`, con su nombre de cmux. Las que estaban fijadas en cmux salen fijadas en la app.
+   - Un nombre con tildes da un slug sin ellas: «Migración» da `migracion` (antes daba `migraci-n`).
+   - Ningún slug pasa de 48 caracteres, aunque el nombre sea larguísimo, y todas se pueden abrir.
+5. `lithemux import cmux` otra vez: «0 Claude sessions to import (N already in lithemux…)». Reimportar no duplica nada.
+6. Con **cmux cerrado**, `lithemux open <cat>/<sesión>` de una importada: Claude retoma la conversación de cmux. Pregúntale algo de antes.
+
+- [ ] PASA  - [ ] FALLA
+
+### 2. Importar desde cmux, en la app
+
+Con otro `LITHEMUX_HOME` temporal y la app abierta sobre él:
+
+1. «File → Import from cmux…» abre la ventana. Arriba dice cuántas sesiones quedan fuera y por qué.
+2. Las sesiones sin conversación guardada salen desmarcadas. Las del home dicen «Choose a category».
+3. Marca una del home sin elegirle categoría: el botón «Import N sessions» queda gris y abajo dice «Choose a category for each marked session».
+4. Clic en «Choose a category»: aparecen las categorías existentes, las nuevas propuestas («New: …») y una nueva para su propia carpeta. Elige una y el botón se activa.
+5. Import: abajo dice cuántas importó, la lista queda vacía y la barra lateral muestra las sesiones hibernadas.
+
+- [ ] PASA  - [ ] FALLA
+
+### 3. Una sesión que sigue viva en cmux
+
+1. Con cmux abierto y una de sus sesiones de Claude corriendo, importa esa sesión (paso 1 o 2).
+2. Espera hasta 30 s sin tocar nada: la tarjeta de esa sesión pasa sola a «open elsewhere (pid N)» («abierta en otro lado» en español). N es el `claude` de cmux; compruébalo con `ps -p N -o command`.
+3. Clic en la tarjeta: **no** arranca un segundo `claude`, y sigue diciendo que está abierta en otro lado.
+4. `lithemux open <cat>/<sesión>` en una terminal: «the session is already open (pid N)».
+5. Cierra esa sesión en cmux. En unos segundos la tarjeta vuelve sola a «hibernated», aunque le hayas hecho clic en el paso 3. Ahora un clic la abre y retoma la conversación.
+6. `grep -r <uuid de esa sesión> ~/algún-directorio` corriendo un rato en una terminal **no** la marca como abierta en otro lado: solo cuenta un programa llamado `claude`.
+
+- [ ] PASA  - [ ] FALLA
+
+### 4. Una sesión abierta en otra terminal
+
+1. `lithemux open <cat>/<sesión>` en una terminal, con la app abierta.
+2. Sin pulsar nada en la app, en menos de 30 s la tarjeta dice «open elsewhere (pid N)». Antes decía «en reposo».
+3. Cierra esa terminal: en unos segundos la tarjeta deja de decirlo.
+
+- [ ] PASA  - [ ] FALLA
+
+### 5. Paleta y atajos (con tu teclado Latin American)
+
+| Atajo | Qué hace |
+|---|---|
+| `cmd+p` | Abre la paleta: escribe parte del nombre, del slug, de la categoría o del rol; ↑/↓ eligen, Enter salta, Esc cierra |
+| `cmd+alt+↓` | Sesión siguiente, en el orden de la barra lateral (salta las categorías plegadas) |
+| `cmd+alt+↑` | Sesión anterior |
+| `cmd+shift+m` | Menú de la sesión a la vista (se abre arriba en la barra lateral); ↑/↓ y Enter lo usan, Esc lo cierra |
+| Esc, con un menú contextual abierto | Lo cierra y el foco vuelve a la terminal; la terminal **no** recibe el Esc |
+
+Los mismos atajos están en el menú View.
+
+1. Prueba cada atajo de la tabla.
+2. En la paleta, «revision» encuentra «Revisión»: no importan mayúsculas ni tildes. Una búsqueda exacta sale antes que una que solo empieza igual, y esa antes que una aproximada.
+3. Enter sobre una sesión hibernada la despierta y la muestra.
+4. Clic derecho en una tarjeta y Esc: el menú se cierra, y Claude no recibe un Esc (no interrumpe lo que hacía).
+5. **Con 100 sesiones** (o las que tengas), la paleta abre y filtra sin retraso visible al escribir. Las pruebas miden 100 sesiones en debug en alrededor de 1 ms por búsqueda; el límite es un cuadro (16 ms).
+6. **Con más sesiones de las que caben** (las 22 importadas, por ejemplo):
+   - `cmd+alt+↓` repetido: la barra lateral se desplaza para que la sesión elegida quede siempre a la vista;
+   - en la paleta, ↓ más allá de unas 15 filas: la lista se desplaza con la selección.
+7. Mientras importa, la ventana «Import from cmux» no se congela: el botón queda gris hasta que termina.
+
+- [ ] PASA  - [ ] FALLA
+
+### 6. CPU en reposo
+
+```sh
+cd ~/Personal/lithemux
+scripts/accept-phase2
+```
+
+Debe quedar por debajo del 1 %. En mis corridas del 3B dio 0,45–0,47 %. Guardar las líneas de comandos le suma alrededor de una décima de punto (ver el reporte).
+
+- [ ] PASA  - [ ] FALLA

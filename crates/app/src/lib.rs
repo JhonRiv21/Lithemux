@@ -1,8 +1,10 @@
 pub mod app_shell;
 pub mod edit_actions;
 pub mod i18n;
+pub mod import_window;
 pub mod launch_arguments;
 pub mod notifications;
+pub mod palette;
 pub mod session_host;
 pub mod settings_window;
 pub mod sidebar;

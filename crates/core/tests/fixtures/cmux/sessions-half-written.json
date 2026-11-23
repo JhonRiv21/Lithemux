@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "notifications": [
+    { "body": 5, "title": { "not": "a string" }, "subtitle": ["neither"] }
+  ],
+  "windows": [
+    {
+      "frame": { "x": 0, "y": 0, "width": 1200, "height": 800 },
+      "tabManager": {
+        "selectedWorkspaceIndex": 0,
+        "workspaces": [
+          {
+            "customTitle": "Planner",
+            "processTitle": "✳ Planning the phase",
+            "currentDirectory": "/Users/someone/work/alpha",
+            "isPinned": true,
+            "panels": [
+              {
+                "id": "p1",
+                "type": "terminal",
+                "directory": "/Users/someone/work/alpha",
+                "notifications": [{ "body": "text of a 

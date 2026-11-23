@@ -13,8 +13,10 @@ use lithemux_core::modules::launch::Update;
 use lithemux_core::modules::session::{Session, SessionRef, SqliteSessionRepository, mark_read};
 use lithemux_core::modules::settings::Preferences;
 use lithemux_core::platform::paths::home::Home;
+use lithemux_core::platform::process::liveness::is_alive;
 use lithemux_core::platform::store::connection::Db;
 
+use super::elsewhere::shown_phase;
 use crate::i18n::{Language, Texts};
 use crate::notifications::policy::SoundGate;
 use crate::session_host::{HostError, Phase, SessionHost};
@@ -49,6 +51,8 @@ pub struct Live {
     pub(super) ports: HashMap<String, Vec<u16>>,
     /// The memory of each session that runs here (PLAN §3.3).
     pub(crate) memory: HashMap<String, u64>,
+    /// The sessions whose conversation another process runs, with it.
+    pub(super) elsewhere: HashMap<String, u32>,
     /// The last thing that went wrong, for the sidebar to show.
     pub notice: Option<String>,
     _refresh: Task<()>,
@@ -89,6 +93,7 @@ impl Live {
             sessions: Vec::new(),
             ports: HashMap::new(),
             memory: HashMap::new(),
+            elsewhere: HashMap::new(),
             notice: None,
             _refresh: refresh,
         };
@@ -124,6 +129,10 @@ impl Live {
 
     pub fn db(&self) -> &Db {
         &self.db
+    }
+
+    pub fn home(&self) -> &Home {
+        &self.home
     }
 
     fn actions(&self) -> SidebarActions<'_> {
@@ -173,11 +182,26 @@ impl Live {
         build(&Board {
             categories: &self.categories,
             sessions: &self.sessions,
-            phases: &|id| self.host.phase(id).cloned(),
+            phases: &|id| self.shown_phase(id),
             ports: &self.ports,
             memory: &self.memory,
             home: self.user_home.as_deref(),
         })
+    }
+
+    /// Where a session stands for the user: what the host has of it, or
+    /// that another process runs it.
+    pub fn shown_phase(&self, session_id: &str) -> Option<Phase> {
+        let host = self.host.phase(session_id);
+        let holder_runs = match host {
+            Some(Phase::OpenElsewhere { pid: Some(pid) }) => is_alive(*pid),
+            _ => false,
+        };
+        shown_phase(host, self.elsewhere.get(session_id).copied(), holder_runs)
+    }
+
+    pub fn sessions(&self) -> &[Session] {
+        &self.sessions
     }
 
     pub fn categories(&self) -> &[Category] {

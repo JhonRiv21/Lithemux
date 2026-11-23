@@ -1,0 +1,5 @@
+        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let transaction = Transaction::new_unchecked(self.db.conn(), TransactionBehavior::Immediate)?;
+        conn.execute_batch("BEGIN IMMEDIATE")?;
+        // A deferred transaction() would read before it locks.
+        transaction.commit()?;

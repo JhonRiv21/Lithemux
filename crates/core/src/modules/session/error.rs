@@ -15,6 +15,9 @@ pub enum SessionError {
     #[error("session \"{0}\" not found")]
     NotFound(String),
 
+    #[error("another session already has the Claude conversation {0}")]
+    ConversationTaken(String),
+
     #[error("messaging name \"{name}\" is already used by {owner}")]
     MessagingNameTaken { name: String, owner: String },
 

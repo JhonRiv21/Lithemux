@@ -4,6 +4,7 @@
 
 use gpui::{App, KeyBinding, Menu, MenuItem, OsAction, actions};
 
+use super::session_keys::{GoToSession, NextSession, PreviousSession, SessionMenu};
 use crate::edit_actions::{Copy, Paste};
 use crate::i18n::Texts;
 use crate::workspace::shortcuts::{
@@ -13,7 +14,15 @@ use crate::workspace::shortcuts::{
 
 actions!(
     lithemux,
-    [Quit, OpenSettings, About, OpenDataFolder, Minimize, Zoom]
+    [
+        Quit,
+        OpenSettings,
+        About,
+        OpenDataFolder,
+        Minimize,
+        Zoom,
+        ImportFromCmux
+    ]
 );
 
 pub fn bind_keys(cx: &mut App) {
@@ -33,6 +42,8 @@ pub fn set_menus(cx: &mut App, texts: &Texts) {
         Menu::new("lithemux").items(app_items(&text)),
         Menu::new(text("file")).items(vec![
             MenuItem::action(text("new_terminal"), NewTerminal),
+            MenuItem::separator(),
+            MenuItem::action(text("import_cmux"), ImportFromCmux),
             MenuItem::separator(),
             MenuItem::action(text("close_tab"), CloseTab),
             MenuItem::action(text("close_pane"), ClosePane),
@@ -65,6 +76,11 @@ fn app_items(text: &dyn Fn(&str) -> String) -> Vec<MenuItem> {
 
 fn view_items(text: &dyn Fn(&str) -> String) -> Vec<MenuItem> {
     vec![
+        MenuItem::action(text("go_to_session"), GoToSession),
+        MenuItem::action(text("next_session"), NextSession),
+        MenuItem::action(text("previous_session"), PreviousSession),
+        MenuItem::action(text("session_menu"), SessionMenu),
+        MenuItem::separator(),
         MenuItem::action(text("split_right"), SplitRight),
         MenuItem::action(text("split_down"), SplitDown),
         MenuItem::separator(),
